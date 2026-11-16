@@ -275247,9 +275247,10 @@ async function getRelease(ecosystem, name, version2) {
   );
   const times = doc.urls.map((u) => Date.parse(u.upload_time_iso_8601)).filter(Number.isFinite);
   const urls = doc.info.project_urls ?? {};
-  const repo = Object.entries(urls).find(
-    ([k, v]) => /source|repo|code|github/i.test(k) || /github\.com/.test(v)
-  )?.[1] ?? null;
+  const repo = pickPypiRepo({
+    ...urls,
+    ...doc.info.home_page ? { "home page": doc.info.home_page } : {}
+  });
   return {
     ecosystem,
     name,
@@ -275312,6 +275313,25 @@ function releaseGate(release, malicious, minAgeDays, now = /* @__PURE__ */ new D
   if (release.deprecated) reasons.push(`version is deprecated: ${release.deprecated}`);
   if (malicious.malicious) reasons.push(`listed as malicious: ${malicious.ids.join(", ")}`);
   return { allowed: reasons.length === 0, reasons, ageDays };
+}
+var NON_REPO = /^(sponsors|orgs|organizations|features|marketplace|apps|about|topics|collections|login|settings)$/i;
+function pickPypiRepo(urls) {
+  const isRepo = (v) => {
+    try {
+      const u = new URL(v);
+      if (!/(^|\.)(github\.com|gitlab\.com|codeberg\.org|bitbucket\.org)$/.test(u.hostname))
+        return false;
+      const [owner, repo] = u.pathname.split("/").filter(Boolean);
+      return !!owner && !!repo && !NON_REPO.test(owner);
+    } catch {
+      return false;
+    }
+  };
+  const entries = Object.entries(urls).filter(([k]) => !/fund|sponsor|donat|tidelift/i.test(k));
+  const byKey = entries.find(
+    ([k, v]) => /^(source( code)?|repository|repo|code|github)$/i.test(k.trim()) && isRepo(v)
+  );
+  return byKey?.[1] ?? entries.find(([, v]) => isRepo(v))?.[1] ?? null;
 }
 
 // src/review/patch.ts

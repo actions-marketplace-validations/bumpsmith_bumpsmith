@@ -214,3 +214,23 @@ describe("monorepo directories", () => {
     expect(branchName("npm", "@scope/x", "2.0.0")).toBe("bumpsmith/npm/scope-x-2.0.0");
   });
 });
+
+describe("PyPI source repository", () => {
+  it("prefers the Source link and ignores Funding/sponsor pages", async () => {
+    const { pickPypiRepo } = await import("../../src/registry/registry.ts");
+    expect(
+      pickPypiRepo({
+        Changelog: "https://docs.pydantic.dev/latest/changelog/",
+        Funding: "https://github.com/sponsors/samuelcolvin",
+        Homepage: "https://github.com/pydantic/pydantic",
+        Source: "https://github.com/pydantic/pydantic",
+      }),
+    ).toBe("https://github.com/pydantic/pydantic");
+    expect(
+      pickPypiRepo({ Funding: "https://github.com/sponsors/x", Docs: "https://x.readthedocs.io" }),
+    ).toBeNull();
+    expect(pickPypiRepo({ Homepage: "https://gitlab.com/group/project" })).toBe(
+      "https://gitlab.com/group/project",
+    );
+  });
+});

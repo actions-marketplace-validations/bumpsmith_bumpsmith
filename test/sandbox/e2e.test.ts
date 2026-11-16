@@ -183,5 +183,91 @@ describe.skipIf(!enabled)(
       },
       20 * 60_000,
     );
+
+    it(
+      "fixes a Python project: pydantic 1 -> 2 (BaseSettings moved to pydantic-settings)",
+      async () => {
+        const pyFixture = join(import.meta.dirname, "..", "fixtures", "pydantic-settings");
+        const provider = new FakeProvider({
+          structured: (req) =>
+            req.role === "extractor"
+              ? {
+                  changes: [
+                    {
+                      kind: "removed",
+                      symbols: ["BaseSettings"],
+                      before: "from pydantic import BaseSettings",
+                      after: "from pydantic_settings import BaseSettings",
+                      instruction:
+                        'Install "pydantic-settings" and import BaseSettings from pydantic_settings.',
+                      evidence: [
+                        { url: "x", quote: "`BaseSettings` has moved to `pydantic-settings`" },
+                      ],
+                      detected_by: ["migration_guide"],
+                      confidence: "high",
+                      deadline: null,
+                    },
+                  ],
+                  codemods: [],
+                  min_runtime: [],
+                }
+              : {
+                  criteria: [
+                    "scope",
+                    "nothing_suspicious",
+                    "tests_not_weakened",
+                    "plan_matches_diff",
+                    "changes_addressed",
+                  ].map((id) => ({ id, pass: true, reason: "ok" })),
+                  verdict: "approve",
+                  summary: "Moved BaseSettings import; added pydantic-settings.",
+                  unverified: [],
+                },
+          agent: async (req) => {
+            await tool(req.tools, "edit_file").run({
+              path: "app/config.py",
+              old_text: "from pydantic import BaseSettings",
+              new_text: "from pydantic_settings import BaseSettings",
+            });
+            await tool(req.tools, "edit_file").run({
+              path: "requirements.txt",
+              old_text: "pytest==8.3.4",
+              new_text: "pytest==8.3.4\npydantic-settings==2.7.1",
+              reason: "pydantic 2 moved BaseSettings to pydantic-settings",
+            });
+            const install = await tool(req.tools, "run_check").run({ name: "install" });
+            const test = await tool(req.tools, "run_check").run({ name: "test" });
+            return `Moved the import and added pydantic-settings.\n${install.slice(0, 100)}\n${test.slice(0, 200)}`;
+          },
+        });
+        const job = await runJob(
+          {
+            repo: pyFixture,
+            packageName: "pydantic",
+            to: "2.10.6",
+            from: "1.10.18",
+            ecosystem: "pypi",
+          },
+          {
+            provider,
+            runsDir: join(import.meta.dirname, "..", "..", "runs", "test"),
+            refreshChangeRecord: true,
+          },
+        );
+        expect(job.error).toBeUndefined();
+        expect(job.baseline?.every((c) => c.passed)).toBe(true);
+        expect(job.after_bump?.some((c) => !c.passed)).toBe(true);
+        expect(job.verdict?.passed).toBe(true);
+        expect(job.state).toBe("ready");
+        const patch = await readFile(
+          join(import.meta.dirname, "..", "..", "runs", "test", job.id, "patch.diff"),
+          "utf8",
+        );
+        expect(patch).toContain("+pydantic==2.10.6");
+        expect(patch).toContain("+pydantic-settings==2.7.1");
+        expect(patch).toContain("+from pydantic_settings import BaseSettings");
+      },
+      20 * 60_000,
+    );
   },
 );
