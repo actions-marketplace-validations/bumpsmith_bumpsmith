@@ -105,7 +105,11 @@ export async function ensureMirrorCerts(dir = CERT_DIR): Promise<string> {
   const { existsSync } = await import("node:fs");
   const { writeFile, rm } = await import("node:fs/promises");
   if (existsSync(join(dir, "mirror.crt")) && existsSync(join(dir, "ca.crt"))) return dir;
-  await mkdir(dir, { recursive: true, mode: 0o700 });
+  // Readable by the mirror container's own (different) user on Linux hosts. The leaf key
+  // is only good for the registry hostnames, and its CA's private key is destroyed below.
+  await mkdir(dir, { recursive: true, mode: 0o755 });
+  const { chmod: chmodDir } = await import("node:fs/promises");
+  await chmodDir(dir, 0o755);
   const cfg = join(dir, "leaf.cnf");
   await writeFile(
     cfg,
@@ -177,6 +181,8 @@ export async function ensureMirrorCerts(dir = CERT_DIR): Promise<string> {
   // Readable by the mirror container's unprivileged user.
   const { chmod } = await import("node:fs/promises");
   await chmod(join(dir, "mirror.key"), 0o644);
+  await chmod(join(dir, "mirror.crt"), 0o644);
+  await chmod(join(dir, "ca.crt"), 0o644);
   return dir;
 }
 
@@ -254,6 +260,19 @@ async function ensureInfraOnce(): Promise<void> {
     tag,
   ]);
   await runOk("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
+  // Fail fast (with the reason) if the mirror does not come up, instead of letting
+  // installs hang on an unreachable registry.
+  for (let i = 0; i < 20; i++) {
+    const logs = await run("docker", ["logs", MIRROR_NAME]);
+    if (logs.stdout.includes('"event":"listening"')) return;
+    const st = await run("docker", ["inspect", "-f", "{{.State.Running}}", MIRROR_NAME]);
+    if (st.stdout.trim() !== "true")
+      throw new Error(
+        `registry mirror failed to start: ${(logs.stdout + logs.stderr).slice(-800)}`,
+      );
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("registry mirror did not become ready in 10 seconds");
 }
 
 export class DockerSandbox implements Sandbox {

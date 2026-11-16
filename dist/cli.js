@@ -274443,7 +274443,9 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
   const { existsSync: existsSync8 } = await import("node:fs");
   const { writeFile: writeFile8, rm: rm3 } = await import("node:fs/promises");
   if (existsSync8(join7(dir, "mirror.crt")) && existsSync8(join7(dir, "ca.crt"))) return dir;
-  await mkdir6(dir, { recursive: true, mode: 448 });
+  await mkdir6(dir, { recursive: true, mode: 493 });
+  const { chmod: chmodDir } = await import("node:fs/promises");
+  await chmodDir(dir, 493);
   const cfg = join7(dir, "leaf.cnf");
   await writeFile8(
     cfg,
@@ -274514,6 +274516,8 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
     await rm3(join7(dir, f), { force: true });
   const { chmod } = await import("node:fs/promises");
   await chmod(join7(dir, "mirror.key"), 420);
+  await chmod(join7(dir, "mirror.crt"), 420);
+  await chmod(join7(dir, "ca.crt"), 420);
   return dir;
 }
 var infraReady = null;
@@ -274578,6 +274582,17 @@ async function ensureInfraOnce() {
     tag
   ]);
   await runOk("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
+  for (let i = 0; i < 20; i++) {
+    const logs = await run("docker", ["logs", MIRROR_NAME]);
+    if (logs.stdout.includes('"event":"listening"')) return;
+    const st = await run("docker", ["inspect", "-f", "{{.State.Running}}", MIRROR_NAME]);
+    if (st.stdout.trim() !== "true")
+      throw new Error(
+        `registry mirror failed to start: ${(logs.stdout + logs.stderr).slice(-800)}`
+      );
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("registry mirror did not become ready in 10 seconds");
 }
 var DockerSandbox = class _DockerSandbox {
   constructor(id, container, volume) {

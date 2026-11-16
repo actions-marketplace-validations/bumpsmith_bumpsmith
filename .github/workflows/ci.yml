@@ -30,6 +30,7 @@ jobs:
       - name: Bundles are up to date
         run: pnpm build && git diff --exit-code -- dist/
       - name: Sandbox isolation and attack tests
+        timeout-minutes: 15
         run: BUMPSMITH_DOCKER_TESTS=1 pnpm exec vitest run test/sandbox
       - name: Software bill of materials for Bumpsmith itself
         run: pnpm dlx @cyclonedx/cyclonedx-npm@7.0.1 --output-file bumpsmith-sbom.cdx.json --omit dev
