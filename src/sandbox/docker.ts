@@ -273,7 +273,9 @@ async function ensureInfraOnce(): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
   }
   const logs = await run("docker", ["logs", "--tail", "40", MIRROR_NAME]);
-  const restarts = (await run("docker", ["inspect", "-f", "{{.RestartCount}}", MIRROR_NAME])).stdout.trim();
+  const restarts = (
+    await run("docker", ["inspect", "-f", "{{.RestartCount}}", MIRROR_NAME])
+  ).stdout.trim();
   throw new Error(
     `registry mirror did not become ready in 10 seconds (restarts: ${restarts}): ${(logs.stdout + logs.stderr).slice(-1500)}`,
   );
