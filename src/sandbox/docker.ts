@@ -10,6 +10,7 @@ import {
   EXPORT_EXCLUDES,
   type ExecOptions,
   type ExecResult,
+  hostTarCreateArgs,
   type Sandbox,
 } from "./sandbox.ts";
 
@@ -392,9 +393,8 @@ export class DockerSandbox implements Sandbox {
 
   /** Copy a host directory into /workspace (excluding .git and dependency folders). */
   async copyIn(hostDir: string): Promise<void> {
-    const excludes = EXPORT_EXCLUDES.flatMap((e) => [`--exclude=./${e}`]);
     await new Promise<void>((resolve, reject) => {
-      const tar = spawn("tar", ["--no-mac-metadata", "-cf", "-", ...excludes, "-C", hostDir, "."], {
+      const tar = spawn("tar", hostTarCreateArgs(hostDir), {
         env: { ...process.env, COPYFILE_DISABLE: "1" },
         stdio: ["ignore", "pipe", "pipe"],
       });

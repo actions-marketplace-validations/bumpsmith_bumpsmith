@@ -60,3 +60,13 @@ export const EXPORT_EXCLUDES = [
   // Bumpsmith's own output (CLI runs, scans) lives inside the repository being upgraded.
   ".bumpsmith",
 ];
+
+/**
+ * Arguments for creating a tar archive of a host directory that leave out EXPORT_EXCLUDES
+ * at any depth. Works with both bsdtar (macOS) and GNU tar (Linux CI runners): plain
+ * names (no leading "./") are matched against any path component by both.
+ */
+export function hostTarCreateArgs(dir: string): string[] {
+  const macOnly = process.platform === "darwin" ? ["--no-mac-metadata"] : [];
+  return [...macOnly, "-cf", "-", ...EXPORT_EXCLUDES.map((e) => `--exclude=${e}`), "-C", dir, "."];
+}

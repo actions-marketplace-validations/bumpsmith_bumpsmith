@@ -274034,14 +274034,17 @@ var EXPORT_EXCLUDES = [
   // Bumpsmith's own output (CLI runs, scans) lives inside the repository being upgraded.
   ".bumpsmith"
 ];
+function hostTarCreateArgs(dir) {
+  const macOnly = process.platform === "darwin" ? ["--no-mac-metadata"] : [];
+  return [...macOnly, "-cf", "-", ...EXPORT_EXCLUDES.map((e) => `--exclude=${e}`), "-C", dir, "."];
+}
 
 // src/review/patch.ts
 async function snapshot(src, dest) {
   await rm(dest, { recursive: true, force: true });
   await mkdir5(dest, { recursive: true });
-  const excludes = EXPORT_EXCLUDES.flatMap((e) => [`--exclude=./${e}`, `--exclude=*/${e}`]);
   await new Promise((resolve4, reject) => {
-    const pack = spawn2("tar", ["--no-mac-metadata", "-cf", "-", ...excludes, "-C", src, "."], {
+    const pack = spawn2("tar", hostTarCreateArgs(src), {
       env: { ...process.env, COPYFILE_DISABLE: "1" },
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -274703,9 +274706,8 @@ var DockerSandbox = class _DockerSandbox {
   }
   /** Copy a host directory into /workspace (excluding .git and dependency folders). */
   async copyIn(hostDir) {
-    const excludes = EXPORT_EXCLUDES.flatMap((e) => [`--exclude=./${e}`]);
     await new Promise((resolve4, reject) => {
-      const tar = spawn3("tar", ["--no-mac-metadata", "-cf", "-", ...excludes, "-C", hostDir, "."], {
+      const tar = spawn3("tar", hostTarCreateArgs(hostDir), {
         env: { ...process.env, COPYFILE_DISABLE: "1" },
         stdio: ["ignore", "pipe", "pipe"]
       });

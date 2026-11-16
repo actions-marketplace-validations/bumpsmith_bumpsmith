@@ -1,15 +1,14 @@
 import { spawn } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
-import { EXPORT_EXCLUDES } from "../sandbox/sandbox.ts";
+import { hostTarCreateArgs } from "../sandbox/sandbox.ts";
 import { run } from "../util/proc.ts";
 
 /** Copy a host tree without .git and dependency folders (used for the "before" side of the diff). */
 export async function snapshot(src: string, dest: string): Promise<void> {
   await rm(dest, { recursive: true, force: true });
   await mkdir(dest, { recursive: true });
-  const excludes = EXPORT_EXCLUDES.flatMap((e) => [`--exclude=./${e}`, `--exclude=*/${e}`]);
   await new Promise<void>((resolve, reject) => {
-    const pack = spawn("tar", ["--no-mac-metadata", "-cf", "-", ...excludes, "-C", src, "."], {
+    const pack = spawn("tar", hostTarCreateArgs(src), {
       env: { ...process.env, COPYFILE_DISABLE: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     });
