@@ -63,6 +63,101 @@ function isMajor(from: string, to: string): boolean {
   return b.major > a.major || (a.major === 0 && b.major === 0 && b.minor > a.minor);
 }
 
+/**
+ * Held-out targets: libraries that do NOT appear in the dev set (NPM_TARGETS /
+ * bench/tasks-npm.json). Bumpsmith has never been tuned on upgrades of these.
+ */
+export const NPM_HELDOUT_TARGETS = [
+  "lru-cache",
+  "@types/node",
+  "eslint-plugin-react-hooks",
+  "typescript-eslint",
+  "@typescript-eslint/eslint-plugin",
+  "camelcase",
+  "find-up",
+  "globby",
+  "pretty-bytes",
+  "boxen",
+  "conf",
+  "meow",
+  "log-symbols",
+  "strip-ansi",
+  "wrap-ansi",
+  "string-width",
+  "file-type",
+  "got-scraping",
+  "ky",
+  "node-cron",
+  "dayjs",
+  "luxon",
+  "bcrypt",
+  "jsonwebtoken",
+  "helmet",
+  "cors",
+  "multer",
+  "socket.io",
+  "axios",
+  "nodemailer",
+  "@aws-sdk/client-s3",
+  "firebase-admin",
+  "prisma",
+  "drizzle-orm",
+  "@tanstack/react-query",
+  "tailwindcss",
+  "vite",
+  "webpack",
+  "prettier",
+  "ts-node",
+  "tsx",
+  "esbuild",
+  "rollup",
+  "@vitejs/plugin-react",
+  "storybook",
+  "cypress",
+  "playwright",
+  "supertest",
+  "nock",
+  "sinon",
+];
+
+export const PYPI_HELDOUT_TARGETS = [
+  "pydantic",
+  "sqlalchemy",
+  "httpx",
+  "openai",
+  "numpy",
+  "pandas",
+  "flask",
+  "werkzeug",
+  "pytest",
+  "click",
+  "marshmallow",
+  "django",
+  "celery",
+  "black",
+  "ruff",
+  "mypy",
+  "requests",
+  "aiohttp",
+  "fastapi",
+  "starlette",
+  "jinja2",
+  "pyyaml",
+  "redis",
+  "psycopg",
+  "alembic",
+  "typer",
+  "rich",
+  "structlog",
+  "tenacity",
+  "pytest-asyncio",
+  "anthropic",
+  "langchain",
+  "boto3",
+  "protobuf",
+  "grpcio",
+];
+
 /** Popular libraries with breaking majors; one targeted search each finds majors far more often. */
 export const NPM_TARGETS = [
   "zod",
@@ -159,15 +254,21 @@ export async function mine(opts: {
   log?: (m: string) => void;
   /** Called after each new task so progress survives interruptions. */
   onTask?: (tasks: BenchTask[]) => Promise<void>;
+  /** Repositories never to use (e.g. the dev set, so the held-out set shares nothing with it). */
+  excludeRepos?: Set<string>;
+  /** GitHub search date filter on merge time, e.g. ">=2026-05-01". */
+  merged?: string;
+  /** Tasks per library, to spread the set across many libraries. */
+  perTarget?: number;
 }): Promise<BenchTask[]> {
   const log = opts.log ?? (() => {});
   const targets = opts.targets ?? (opts.ecosystem === "npm" ? NPM_TARGETS : PYPI_TARGETS);
   const tasks: BenchTask[] = [];
-  const seenRepos = new Set<string>();
+  const seenRepos = new Set<string>(opts.excludeRepos ?? []);
   for (const target of targets) {
     if (tasks.length >= opts.want) break;
     const q = encodeURIComponent(
-      `is:pr is:merged author:app/dependabot in:title "bump ${target} from"`,
+      `is:pr is:merged author:app/dependabot in:title "bump ${target} from"${opts.merged ? ` merged:${opts.merged}` : ""}`,
     );
     // Search API allows ~30 requests/minute when authenticated; stay well under it.
     await pause(2500);
@@ -185,7 +286,7 @@ export async function mine(opts: {
     }
     let found = 0;
     for (const item of items) {
-      if (tasks.length >= opts.want || found >= 2) break; // spread tasks across libraries
+      if (tasks.length >= opts.want || found >= (opts.perTarget ?? 2)) break; // spread tasks across libraries
       const t = parseTitle(item.title);
       if (!t || t.dir || t.pkg.toLowerCase() !== target.toLowerCase() || !isMajor(t.from, t.to))
         continue;

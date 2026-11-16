@@ -422,11 +422,13 @@ export class DockerSandbox implements Sandbox {
     if (!opts.guardManifest) return this.exec(argv, opts);
     const bak = "/tmp/bumpsmith-package.json.bak";
     const saved =
-      (await this.exec(["cp", "-p", "package.json", bak], { timeoutSec: 10 })).exitCode === 0;
+      (await this.exec(["cp", "-p", "package.json", bak], { timeoutSec: 10, cwd: opts.cwd }))
+        .exitCode === 0;
     try {
       return await this.exec(argv, opts);
     } finally {
-      if (saved) await this.exec(["cp", "-p", bak, "package.json"], { timeoutSec: 10 });
+      if (saved)
+        await this.exec(["cp", "-p", bak, "package.json"], { timeoutSec: 10, cwd: opts.cwd });
     }
   }
 

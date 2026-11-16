@@ -104,5 +104,84 @@ describe.skipIf(!enabled)(
       },
       20 * 60_000,
     );
+
+    it(
+      "works on a package in a monorepo sub-directory (Dependabot 'in /packages/app')",
+      async () => {
+        const { cp, mkdtemp, writeFile } = await import("node:fs/promises");
+        const { tmpdir } = await import("node:os");
+        const repo = await mkdtemp(join(tmpdir(), "bumpsmith-mono-"));
+        await writeFile(join(repo, "package.json"), '{ "name": "mono-root", "private": true }\n');
+        await cp(fixture, join(repo, "packages", "app"), {
+          recursive: true,
+          filter: (f) => !/node_modules|dist/.test(f),
+        });
+        const provider = new FakeProvider({
+          structured: (req) =>
+            req.role === "extractor"
+              ? {
+                  changes: [
+                    {
+                      kind: "removed",
+                      symbols: ["nanoid/async"],
+                      before: "",
+                      after: "",
+                      instruction: "Use the synchronous API from 'nanoid'.",
+                      evidence: [
+                        {
+                          url: "x",
+                          quote: "Removed async API since Web Crypto API has only sync version.",
+                        },
+                      ],
+                      detected_by: ["changelog"],
+                      confidence: "high",
+                      deadline: null,
+                    },
+                  ],
+                  codemods: [],
+                  min_runtime: [],
+                }
+              : {
+                  criteria: [
+                    "scope",
+                    "nothing_suspicious",
+                    "tests_not_weakened",
+                    "plan_matches_diff",
+                    "changes_addressed",
+                  ].map((id) => ({ id, pass: true, reason: "ok" })),
+                  verdict: "approve",
+                  summary: "Import change in packages/app.",
+                  unverified: [],
+                },
+          agent: async (req) => {
+            await tool(req.tools, "edit_file").run({
+              path: "packages/app/src/ids.ts",
+              old_text: 'from "nanoid/async"',
+              new_text: 'from "nanoid"',
+            });
+            return "Switched the import.";
+          },
+        });
+        const job = await runJob(
+          { repo, packageName: "nanoid", to: "5.0.9", from: "4.0.2", dir: "/packages/app/" },
+          {
+            provider,
+            runsDir: join(import.meta.dirname, "..", "..", "runs", "test"),
+            refreshChangeRecord: true,
+          },
+        );
+        expect(job.error).toBeUndefined();
+        expect(job.state).toBe("ready");
+        expect(job.impact?.items.every((i) => i.file.startsWith("packages/app/"))).toBe(true);
+        const patch = await readFile(
+          join(import.meta.dirname, "..", "..", "runs", "test", job.id, "patch.diff"),
+          "utf8",
+        );
+        expect(patch).toContain("a/packages/app/package.json");
+        expect(patch).toContain("a/packages/app/src/ids.ts");
+        expect(patch).not.toMatch(/^diff --git a\/package\.json/m); // the root manifest is untouched
+      },
+      20 * 60_000,
+    );
   },
 );

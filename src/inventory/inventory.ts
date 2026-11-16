@@ -17,6 +17,8 @@ export interface CheckCommand {
   name: CheckName;
   /** argv form; never passed through a shell. */
   argv: string[];
+  /** Working directory inside the sandbox (monorepo sub-directory); default /workspace. */
+  cwd?: string;
 }
 
 export interface Inventory {

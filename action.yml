@@ -5,9 +5,21 @@ branding:
   icon: tool
   color: orange
 inputs:
+  provider:
+    description: >-
+      Model provider: anthropic (default), openai, gemini, openrouter, groq, together,
+      deepseek, or custom (with base-url).
+    required: false
+    default: anthropic
+  api-key:
+    description: API key for the chosen provider (store it as a secret).
+    required: false
   anthropic-api-key:
-    description: Anthropic API key (store it as a repository or organisation secret).
-    required: true
+    description: Anthropic API key (same as api-key with provider anthropic; kept for compatibility).
+    required: false
+  base-url:
+    description: Base URL for provider custom (any OpenAI-compatible endpoint, HTTPS).
+    required: false
   github-token:
     description: >-
       Token used to read the repository and open the pull request. A GitHub App token is
@@ -37,9 +49,8 @@ inputs:
     required: false
     default: "5"
   model:
-    description: Claude model ID.
+    description: Model ID (default claude-opus-5-5 for anthropic; required for other providers).
     required: false
-    default: claude-opus-5-5
 outputs:
   state:
     description: Result of the last upgrade (ready, needs_human, blocked_policy, ...).

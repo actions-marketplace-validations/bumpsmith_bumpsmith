@@ -199,3 +199,18 @@ describe("snapshot exclusions", () => {
     expect(EXPORT_EXCLUDES).toContain(".bumpsmith");
   });
 });
+
+describe("monorepo directories", () => {
+  it("normalises Dependabot directories and refuses traversal", async () => {
+    const { normaliseSubdir } = await import("../../src/pipeline.ts");
+    const { branchName } = await import("../../src/github/publish/pr-body.ts");
+    expect(normaliseSubdir("/")).toBe("");
+    expect(normaliseSubdir(undefined)).toBe("");
+    expect(normaliseSubdir("/packages/api/")).toBe("packages/api");
+    expect(() => normaliseSubdir("/packages/../../etc")).toThrow(/invalid directory/);
+    expect(branchName("npm", "zod", "4.0.1", "packages/api")).toBe(
+      "bumpsmith/npm/zod-4.0.1-in-packages-api",
+    );
+    expect(branchName("npm", "@scope/x", "2.0.0")).toBe("bumpsmith/npm/scope-x-2.0.0");
+  });
+});

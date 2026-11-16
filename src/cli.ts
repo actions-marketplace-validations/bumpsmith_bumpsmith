@@ -5,7 +5,13 @@ import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import semver from "semver";
 import { type ModeOptions, runAction } from "./action.ts";
-import { type BenchTask, mine, saveTasks } from "./bench/mine.ts";
+import {
+  type BenchTask,
+  mine,
+  NPM_HELDOUT_TARGETS,
+  PYPI_HELDOUT_TARGETS,
+  saveTasks,
+} from "./bench/mine.ts";
 import { runBench, summarise } from "./bench/run.ts";
 import { npmApiDiff, renderApiDiff } from "./change/dts-diff.ts";
 import { buildChangeRecord } from "./change/extract.ts";
@@ -20,6 +26,7 @@ import { AnthropicProvider } from "./model/anthropic.ts";
 import { ClaudeCodeProvider } from "./model/claude-code.ts";
 import { CodexProvider } from "./model/codex.ts";
 import { Ledger } from "./model/ledger.ts";
+import { compatibleProvider, PRESETS } from "./model/openai-compatible.ts";
 import type { Effort, ModelProvider } from "./model/provider.ts";
 import { runJob } from "./pipeline.ts";
 import { getRelease } from "./registry/registry.ts";
@@ -36,7 +43,7 @@ Usage (run inside your repository):
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
 
-Options: --repo <dir> (default .), --provider anthropic-api|claude-code|codex, --model, --budget <usd>
+Options: --repo <dir> (default .), --dir <sub-directory> (monorepos), --provider <name>, --model <id>, --base-url <url>, --budget <usd>
 
 Advanced:
   bumpsmith inspect <repo-dir>
@@ -54,6 +61,10 @@ Providers:
   claude-code    Your own Claude Code login (Pro/Max plan); counts against your plan's limits.
   codex          Your own Codex CLI login (ChatGPT plan); counts against your plan's limits.
   Subscription providers run the official CLI you signed in to; Bumpsmith never sees your login.
+  openai | gemini | openrouter | groq | together | deepseek   API key in OPENAI_API_KEY,
+                 GEMINI_API_KEY, OPENROUTER_API_KEY, ... ; --model is required.
+  ollama | lmstudio   local models on this machine; --model is required.
+  custom         any OpenAI-compatible endpoint: --base-url https://... (key in OPENAI_API_KEY).
 
 GitHub (--github, rescue): uses GITHUB_TOKEN, or your GitHub CLI login (gh auth token).
 
@@ -83,7 +94,8 @@ async function repoConfig(dir: string) {
   return parseConfig(null).config;
 }
 
-function provider(name: string, model?: string): ModelProvider {
+function provider(name: string, model?: string, baseURL?: string): ModelProvider {
+  if (name in PRESETS || name === "custom") return compatibleProvider(name, model ?? "", baseURL);
   if (name === "anthropic-api") return new AnthropicProvider(model);
   if (name === "claude-code") return new ClaudeCodeProvider(model);
   if (name === "codex") return new CodexProvider(model);
@@ -132,6 +144,7 @@ async function githubRun(
             to: t.to,
             from: t.from ?? undefined,
             ecosystem: t.ecosystem,
+            dir: t.dir,
           },
           { provider: prov, runsDir, budgetUsd: budget, config, log },
         ),
@@ -157,7 +170,10 @@ async function main() {
       to: { type: "string" },
       provider: { type: "string" },
       github: { type: "string" },
+      "base-url": { type: "string" },
+      dir: { type: "string" },
       apply: { type: "boolean", default: false },
+      heldout: { type: "boolean", default: false },
       model: { type: "string" },
       budget: { type: "string", default: "8" },
       rounds: { type: "string", default: "3" },
@@ -176,7 +192,8 @@ async function main() {
   });
   const [cmd, ...args] = positionals;
   const log = (m: string) => process.stderr.write(`${m}\n`);
-  const prov = () => provider(values.provider ?? defaultProvider(), values.model);
+  const prov = () =>
+    provider(values.provider ?? defaultProvider(), values.model, values["base-url"]);
   switch (cmd) {
     case "rescue": {
       if (!values.github) throw new Error("usage: bumpsmith rescue --github owner/repo");
@@ -198,7 +215,7 @@ async function main() {
       const dir = resolve(values.repo ?? ".");
       const runsDir = join(dir, ".bumpsmith", "runs");
       const job = await runJob(
-        { repo: dir, packageName: name, to: version, from: values.from },
+        { repo: dir, packageName: name, to: version, from: values.from, dir: values.dir },
         {
           provider: prov(),
           runsDir,
@@ -374,11 +391,25 @@ async function main() {
       if (args[0] === "mine") {
         const eco = values.ecosystem === "pypi" ? "pypi" : "npm";
         const out = values.out ?? `bench/tasks-${eco}.json`;
+        // Held-out: different libraries, no repository from the dev set, recent merges only.
+        const dev = values.heldout
+          ? (JSON.parse(await readFile("bench/tasks-npm.json", "utf8")) as BenchTask[])
+          : [];
         const tasks = await mine({
           ecosystem: eco,
           want: Number(values.want),
           log,
           onTask: (t) => saveTasks(out, t),
+          ...(values.heldout
+            ? {
+                targets: eco === "npm" ? NPM_HELDOUT_TARGETS : PYPI_HELDOUT_TARGETS,
+                excludeRepos: new Set(
+                  dev.map((t) => t.repo.replace("https://github.com/", "").replace(/\.git$/, "")),
+                ),
+                merged: ">=2026-03-01",
+                perTarget: 1,
+              }
+            : {}),
         });
         await saveTasks(out, tasks);
         log(`saved ${tasks.length} task(s) to ${out}`);

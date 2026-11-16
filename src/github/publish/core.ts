@@ -35,6 +35,8 @@ export interface PublishInput {
   ecosystem: "npm" | "pypi";
   packageName: string;
   toVersion: string;
+  /** Monorepo sub-directory of the package ("" = repository root). */
+  dir?: string;
   jobId: string;
   /** Name used in command hints, e.g. "bumpsmith" or an App slug. */
   commandPrefix: string;
@@ -153,7 +155,7 @@ export async function publishPatch(input: PublishInput): Promise<PublishResult> 
   if (blocks.length)
     return { state: "blocked", reason: `rule ${blocks[0]?.rule} blocked publication` };
 
-  const branch = branchName(input.ecosystem, input.packageName, input.toVersion);
+  const branch = branchName(input.ecosystem, input.packageName, input.toVersion, input.dir ?? "");
   const prior = (
     await gh.request("GET /repos/{owner}/{repo}/pulls", {
       owner,

@@ -120,12 +120,13 @@ export function prBody(opts: {
     : body;
 }
 
-export function branchName(ecosystem: string, pkg: string, version: string): string {
+export function branchName(ecosystem: string, pkg: string, version: string, dir = ""): string {
   const safe = (s: string) =>
     s
       .replace(/^@/, "")
       .replace(/[^A-Za-z0-9._-]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 80);
-  return `bumpsmith/${safe(ecosystem)}/${safe(pkg)}-${safe(version)}`;
+  const where = dir ? `-in-${safe(dir)}` : "";
+  return `bumpsmith/${safe(ecosystem)}/${safe(pkg)}-${safe(version)}${where}`;
 }

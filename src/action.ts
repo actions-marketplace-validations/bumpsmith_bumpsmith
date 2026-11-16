@@ -22,8 +22,11 @@ import {
   publishPatch,
   tokenLogin,
 } from "./github/publish/core.ts";
+import { branchName } from "./github/publish/pr-body.ts";
 import { AnthropicProvider } from "./model/anthropic.ts";
-import { type JobRecord, runJob } from "./pipeline.ts";
+import { compatibleProvider, PRESETS } from "./model/openai-compatible.ts";
+import type { ModelProvider } from "./model/provider.ts";
+import { type JobRecord, normaliseSubdir, runJob } from "./pipeline.ts";
 import { BOT_AUTHORS, parseBotPr } from "./rescue/bot-pr.ts";
 import { botPrEcosystem, exactTarget } from "./rescue/resolve.ts";
 import { maskSecrets } from "./security/secrets.ts";
@@ -85,11 +88,14 @@ export interface Target {
   to: string;
   ecosystem: "npm" | "pypi";
   rescueOf: number | null;
+  /** Monorepo sub-directory ("" = root). */
+  dir?: string;
 }
 
 /** Work out what to upgrade from the event. Returns null when there is nothing to do. */
 export interface ModeOptions {
   mode: "rescue" | "fix";
+  dir?: string;
   package?: string;
   version?: string;
   ecosystem?: "npm" | "pypi";
@@ -121,6 +127,7 @@ export async function resolveTargets(
         to: opts.version,
         ecosystem: opts.ecosystem ?? "npm",
         rescueOf: null,
+        dir: normaliseSubdir(opts.dir),
       },
     ];
   }
@@ -167,8 +174,8 @@ export async function resolveTargets(
     ).data;
     if (pr.state !== "open" || !BOT_AUTHORS.has(pr.user?.login ?? "")) continue;
     const parsed = parseBotPr(pr.title, pr.user?.login ?? "");
-    if (!parsed || (parsed.dir && parsed.dir !== "/")) {
-      notice(`#${n}: not a single-package root update; skipped`);
+    if (!parsed) {
+      notice(`#${n}: not a single-package update (grouped updates are not supported yet); skipped`);
       continue;
     }
     const to = await exactTarget(gh, owner, repo, pr.head.sha, parsed.pkg, parsed.to);
@@ -179,6 +186,7 @@ export async function resolveTargets(
       to,
       ecosystem: await botPrEcosystem(gh, owner, repo, n, pr.head.ref),
       rescueOf: n,
+      dir: normaliseSubdir(parsed.dir),
     });
   }
   return out;
@@ -235,8 +243,9 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
     })
   ).data.filter((p) => p.head.ref.startsWith("bumpsmith/"));
   for (const t of targets.slice(0, 3)) {
-    const branchSuffix = `${t.packageName.replace(/^@/, "").replace(/[^A-Za-z0-9._-]+/g, "-")}-${t.to}`;
-    const existing = open.some((p) => p.head.ref.endsWith(branchSuffix));
+    const branch = branchName(t.ecosystem, t.packageName, t.to, t.dir ?? "");
+    const branchSuffix = branch.slice(branch.lastIndexOf("/") + 1);
+    const existing = open.some((p) => p.head.ref === branch);
     if (!existing && open.length >= config.limits.open_pull_requests) {
       notice(
         `Open Bumpsmith pull request limit (${config.limits.open_pull_requests}) reached; ${t.packageName} skipped.`,
@@ -286,6 +295,7 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
         ecosystem: t.ecosystem,
         packageName: t.packageName,
         toVersion: t.to,
+        dir: t.dir ?? "",
         jobId: record.id,
         commandPrefix: "bumpsmith",
         rescueOf: t.rescueOf,
@@ -318,17 +328,26 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
 }
 
 export async function main(): Promise<void> {
-  const apiKey = input("anthropic-api-key");
+  const providerName = input("provider", "anthropic");
+  const apiKey = input("api-key") || input("anthropic-api-key");
   const token = input("github-token");
   mask(apiKey);
   mask(token);
-  if (!apiKey) throw new Error("anthropic-api-key is required");
+  if (!apiKey && !(providerName in PRESETS && PRESETS[providerName]?.local))
+    throw new Error("api-key is required (or anthropic-api-key for the default provider)");
   if (!token) throw new Error("github-token is required");
   if (token === input("default-token"))
     warning(
       "Using GITHUB_TOKEN: pull requests it opens will not trigger your CI. Use a GitHub App token for full verification: https://github.com/bumpsmith/bumpsmith#tokens",
     );
-  process.env.ANTHROPIC_API_KEY = apiKey;
+  const model = input("model", providerName === "anthropic" ? "claude-opus-5-5" : "");
+  const makeProvider = (): ModelProvider => {
+    if (providerName === "anthropic") {
+      process.env.ANTHROPIC_API_KEY = apiKey;
+      return new AnthropicProvider(model);
+    }
+    return compatibleProvider(providerName, model, input("base-url") || undefined, apiKey);
+  };
 
   const [owner, repo] = (process.env.GITHUB_REPOSITORY ?? "").split("/") as [string, string];
   if (!owner || !repo) throw new Error("GITHUB_REPOSITORY is not set");
@@ -344,7 +363,6 @@ export async function main(): Promise<void> {
   const work = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), "bumpsmith-"));
   process.env.BUMPSMITH_DATA_DIR ??= join(work, "data");
   const maxCost = Number(input("max-cost-usd", "5")) || 5;
-  const model = input("model", "claude-opus-5-5");
   let rows: ActionRow[] = [];
   try {
     rows = await runAction({
@@ -365,8 +383,9 @@ export async function main(): Promise<void> {
             to: t.to,
             from: t.from ?? undefined,
             ecosystem: t.ecosystem,
+            dir: t.dir,
           },
-          { provider: new AnthropicProvider(model), runsDir, budgetUsd: maxCost, config, log },
+          { provider: makeProvider(), runsDir, budgetUsd: maxCost, config, log },
         ),
     });
     if (!rows.length)

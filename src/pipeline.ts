@@ -30,6 +30,7 @@ import type { Sandbox, SandboxFactory } from "./sandbox/sandbox.ts";
 import type { ChangeRecord } from "./schemas/change-record.ts";
 import type { CheckName, CheckResult, Ecosystem, ImpactMap, JobState } from "./schemas/job.ts";
 import { runOk } from "./util/proc.ts";
+import { containedPath } from "./util/safe-fs.ts";
 import {
   compareWithBaseline,
   Deadline,
@@ -46,6 +47,8 @@ export interface JobInput {
   to: string;
   from?: string;
   ecosystem?: Ecosystem;
+  /** Sub-directory of the package within the repository (monorepos), e.g. "packages/api". */
+  dir?: string;
 }
 
 export interface JobOptions {
@@ -140,6 +143,14 @@ async function prepareRepo(input: JobInput, dir: string): Promise<string> {
     await snapshot(resolve(input.repo), dest);
   }
   return dest;
+}
+
+/** "/packages/x/", "packages/x" -> "packages/x"; "/" or empty -> "". Refuses "..". */
+export function normaliseSubdir(dir: string | undefined | null): string {
+  const d = (dir ?? "").trim().replace(/^\/+|\/+$/g, "");
+  if (!d || d === ".") return "";
+  if (d.split("/").some((p) => p === ".." || p === "")) throw new Error(`invalid directory ${dir}`);
+  return d;
 }
 
 async function currentVersion(inv: Inventory, pkg: string): Promise<string | null> {
@@ -267,8 +278,28 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
   const minAge = Math.max(3, opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
   try {
     log(`job ${id}: preparing repository`);
-    const repoDir = await prepareRepo(input, dir);
+    const repoRoot = await prepareRepo(input, dir);
+    const sub = normaliseSubdir(input.dir);
+    const repoDir = sub ? containedPath(repoRoot, sub) : repoRoot;
+    if (!existsSync(repoDir)) throw new Error(`directory ${sub} does not exist in the repository`);
     const inv = await inventory(repoDir);
+    if (sub) {
+      // Checks and the version bump run in the package's own directory.
+      for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
+      const sharesRootLock =
+        inv.ecosystem === "npm" &&
+        !inv.lockfiles.length &&
+        ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].some((f) =>
+          existsSync(join(repoRoot, f)),
+        );
+      if (sharesRootLock) {
+        job.state = "blocked_policy";
+        job.notes.push(
+          `Unsupported (for now): ${sub} is a workspace member that shares the repository's root lockfile. Packages with their own lockfile in a sub-directory are supported.`,
+        );
+        return job;
+      }
+    }
     // Configured check commands replace detected ones (argv only, validated in config).
     for (const [name, cmd] of Object.entries(opts.config?.checks ?? {})) {
       if (!cmd) continue;
@@ -338,6 +369,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       refresh: opts.refreshChangeRecord,
     });
     job.impact = await buildImpactMap(repoDir, eco, input.packageName, job.change_record);
+    if (sub) for (const it of job.impact.items) it.file = `${sub}/${it.file}`;
     job.state = "analysed";
     log(`job ${id}: ${job.impact.items.length} impact item(s), class ${job.impact.upgrade_class}`);
 
@@ -347,7 +379,8 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       nodeMajor: inv.nodeMajor,
       label: id,
     });
-    await sb.copyIn(repoDir);
+    await sb.copyIn(repoRoot);
+    const wd = sub ? `/workspace/${sub}` : undefined;
     log(`job ${id}: baseline checks`);
     job.baseline = await runChecks(sb, inv.checks, deadline);
     if (!job.baseline.find((c) => c.name === "install")?.passed)
@@ -365,7 +398,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       eco === "npm"
         ? "package.json"
         : (inv.manifests.find((m) => m.endsWith(".txt")) ?? "pyproject.toml");
-    const cur = await sb.exec(["cat", "--", manifest]);
+    const cur = await sb.exec(["cat", "--", manifest], { cwd: wd });
     if (eco === "npm") {
       const info = npmDepInfo(cur.stdout, input.packageName);
       if (!info) throw new Error(`could not find ${input.packageName} in ${manifest}`);
@@ -395,7 +428,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           workspaceRoot,
           companions,
         ),
-        { network: true, timeoutSec: 15 * 60 },
+        { network: true, timeoutSec: 15 * 60, cwd: wd },
       );
       if (up.exitCode !== 0 && inv.packageManager === "npm") {
         job.notes.push(
@@ -411,7 +444,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
             false,
             companions,
           ).filter((a) => !a.startsWith("--before")),
-          { network: true, timeoutSec: 15 * 60 },
+          { network: true, timeoutSec: 15 * 60, cwd: wd },
         );
       }
       if (up.exitCode !== 0)
@@ -421,7 +454,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     } else {
       const bumped = bumpFile(eco, manifest, cur.stdout, input.packageName, input.to);
       if (!bumped) throw new Error(`could not find ${input.packageName} in ${manifest}`);
-      await sb.exec(["sh", "-c", 'cat > "$1"', "sh", manifest], { input: bumped });
+      await sb.exec(["sh", "-c", 'cat > "$1"', "sh", manifest], { input: bumped, cwd: wd });
     }
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
@@ -510,15 +543,23 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
 
     // Patch on the trusted host
     await sb.copyOut(join(dir, "after"));
-    await snapshot(repoDir, join(dir, "before"));
+    await snapshot(repoRoot, join(dir, "before"));
     const fullPatch = await computePatch(dir, "before", "after");
     // Only the version bump, lockfiles and files the agent edited through its tools go in
     // the patch. Anything else that changed (build output, caches) was produced by
     // running checks and is excluded.
+    const inSub = (f: string) => (sub ? `${sub}/${f}` : f);
     const keep = new Set<string>([
-      ...inv.manifests,
-      ...inv.lockfiles,
-      ...["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "uv.lock", "poetry.lock"],
+      ...inv.manifests.map(inSub),
+      ...inv.lockfiles.map(inSub),
+      ...[
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lock",
+        "uv.lock",
+        "poetry.lock",
+      ].map(inSub),
       ...policy.edits.keys(),
     ]);
     const { patch, excluded } = filterPatch(fullPatch, (p) => keep.has(p));

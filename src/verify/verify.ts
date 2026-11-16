@@ -40,6 +40,7 @@ export async function runCheck(
     network: check.name === "install",
     timeoutSec,
     guardManifest: check.name !== "install",
+    cwd: check.cwd,
   });
   const out = `${r.stdout}\n${r.stderr}`.trim();
   return {

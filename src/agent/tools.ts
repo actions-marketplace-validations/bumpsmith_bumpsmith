@@ -262,6 +262,7 @@ export function buildTools(ctx: ToolContext): AgentTool[] {
           network: name === "install",
           timeoutSec: agentCheckTimeout(ctx, name),
           guardManifest: name !== "install",
+          cwd: check.cwd,
         });
         const out = `${r.stdout}\n${r.stderr}`.trim();
         return `$ ${check.argv.join(" ")}\nexit code: ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${clip(out, 8000)}`;
