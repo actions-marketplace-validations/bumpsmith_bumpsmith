@@ -278840,16 +278840,20 @@ async function ensureInfraOnce() {
   ]);
   await runOk("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
   for (let i = 0; i < 20; i++) {
-    const logs = await run("docker", ["logs", MIRROR_NAME]);
-    if (logs.stdout.includes('"event":"listening"')) return;
+    const logs2 = await run("docker", ["logs", MIRROR_NAME]);
+    if (logs2.stdout.includes('"event":"listening"')) return;
     const st = await run("docker", ["inspect", "-f", "{{.State.Running}}", MIRROR_NAME]);
     if (st.stdout.trim() !== "true")
       throw new Error(
-        `registry mirror failed to start: ${(logs.stdout + logs.stderr).slice(-800)}`
+        `registry mirror failed to start: ${(logs2.stdout + logs2.stderr).slice(-800)}`
       );
     await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error("registry mirror did not become ready in 10 seconds");
+  const logs = await run("docker", ["logs", "--tail", "40", MIRROR_NAME]);
+  const restarts = (await run("docker", ["inspect", "-f", "{{.RestartCount}}", MIRROR_NAME])).stdout.trim();
+  throw new Error(
+    `registry mirror did not become ready in 10 seconds (restarts: ${restarts}): ${(logs.stdout + logs.stderr).slice(-1500)}`
+  );
 }
 var DockerSandbox = class _DockerSandbox {
   constructor(id, container, volume) {
