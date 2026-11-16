@@ -49,6 +49,8 @@ export interface JobInput {
   ecosystem?: Ecosystem;
   /** Sub-directory of the package within the repository (monorepos), e.g. "packages/api". */
   dir?: string;
+  /** Other packages upgraded in the same change (grouped Dependabot/Renovate updates). */
+  alsoUpgrade?: { name: string; to: string }[];
 }
 
 export interface JobOptions {
@@ -416,6 +418,26 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           // no such version of the companion; leave it alone
         }
       }
+      // Grouped updates: every extra package must pass the same release gate.
+      for (const extra of input.alsoUpgrade ?? []) {
+        try {
+          const xrel = await getRelease("npm", extra.name, extra.to);
+          const xgate = releaseGate(
+            xrel,
+            await checkMalicious("npm", extra.name, extra.to),
+            minAge,
+          );
+          if (xgate.allowed) companions.push(`${extra.name}@${extra.to}`);
+          else
+            job.notes.push(
+              `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`,
+            );
+        } catch (err) {
+          job.notes.push(
+            `Not upgraded with the group: ${extra.name}@${extra.to} (${(err as Error).message.slice(0, 120)}).`,
+          );
+        }
+      }
       if (companions.length)
         job.notes.push(`Upgraded together with ${input.packageName}: ${companions.join(", ")}.`);
       let up = await sb.exec(
@@ -452,8 +474,20 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           `could not install ${input.packageName}@${input.to}: ${(up.stderr || up.stdout).slice(-1500)}`,
         );
     } else {
-      const bumped = bumpFile(eco, manifest, cur.stdout, input.packageName, input.to);
-      if (!bumped) throw new Error(`could not find ${input.packageName} in ${manifest}`);
+      const first = bumpFile(eco, manifest, cur.stdout, input.packageName, input.to);
+      if (!first) throw new Error(`could not find ${input.packageName} in ${manifest}`);
+      let bumped: string = first;
+      for (const extra of input.alsoUpgrade ?? []) {
+        const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
+        const ok =
+          xrel &&
+          releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
+        const next: string | null = ok
+          ? bumpFile(eco, manifest, bumped, extra.name, extra.to)
+          : null;
+        if (next) bumped = next;
+        else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
+      }
       await sb.exec(["sh", "-c", 'cat > "$1"', "sh", manifest], { input: bumped, cwd: wd });
     }
     job.after_bump = await runChecks(sb, checks, deadline);

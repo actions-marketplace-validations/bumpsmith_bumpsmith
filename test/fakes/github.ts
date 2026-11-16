@@ -217,6 +217,7 @@ export class FakeGitHub {
       branch: string;
       files: Record<string, string>;
       red: boolean;
+      body?: string;
     },
   ): number {
     const head = repo.refs.get(`heads/${repo.defaultBranch}`) as string;
@@ -229,7 +230,7 @@ export class FakeGitHub {
       id: this.nextId++,
       number: this.nextNumber++,
       title: opts.title,
-      body: "",
+      body: opts.body ?? "",
       head: opts.branch,
       base: repo.defaultBranch,
       state: "open",

@@ -13,6 +13,7 @@
 import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import semver from "semver";
 import { CONFIG_PATHS, parseConfig, type RepoConfig } from "./config/repo-config.ts";
 import { type GitHubClient, tokenClient } from "./github/client.ts";
 import { cloneAtCommit } from "./github/clone.ts";
@@ -27,7 +28,12 @@ import { AnthropicProvider } from "./model/anthropic.ts";
 import { compatibleProvider, PRESETS } from "./model/openai-compatible.ts";
 import type { ModelProvider } from "./model/provider.ts";
 import { type JobRecord, normaliseSubdir, runJob } from "./pipeline.ts";
-import { BOT_AUTHORS, parseBotPr } from "./rescue/bot-pr.ts";
+import {
+  BOT_AUTHORS,
+  type GroupedUpdate,
+  parseBotPr,
+  parseGroupedUpdates,
+} from "./rescue/bot-pr.ts";
 import { botPrEcosystem, exactTarget } from "./rescue/resolve.ts";
 import { maskSecrets } from "./security/secrets.ts";
 import { sha256Hex } from "./util/hash.ts";
@@ -90,6 +96,8 @@ export interface Target {
   rescueOf: number | null;
   /** Monorepo sub-directory ("" = root). */
   dir?: string;
+  /** Other packages of a grouped update, upgraded in the same pull request. */
+  also?: { name: string; to: string }[];
 }
 
 /** Work out what to upgrade from the event. Returns null when there is nothing to do. */
@@ -175,7 +183,26 @@ export async function resolveTargets(
     if (pr.state !== "open" || !BOT_AUTHORS.has(pr.user?.login ?? "")) continue;
     const parsed = parseBotPr(pr.title, pr.user?.login ?? "");
     if (!parsed) {
-      notice(`#${n}: not a single-package update (grouped updates are not supported yet); skipped`);
+      // Grouped update: take the biggest major jump as the primary package; the rest are
+      // upgraded in the same job (each still passes the release gate).
+      const group = parseGroupedUpdates(pr.body ?? "");
+      if (group.length < 2) {
+        notice(`#${n}: could not read the packages of this update; skipped`);
+        continue;
+      }
+      const jump = (g: GroupedUpdate) =>
+        (semver.coerce(g.to)?.major ?? 0) - (semver.coerce(g.from ?? "0")?.major ?? 0);
+      const [primary, ...rest] = [...group].sort((a, b) => jump(b) - jump(a));
+      if (!primary) continue;
+      out.push({
+        packageName: primary.pkg,
+        from: primary.from,
+        to: primary.to,
+        ecosystem: await botPrEcosystem(gh, owner, repo, n, pr.head.ref),
+        rescueOf: n,
+        dir: normaliseSubdir(/(?:across|in) (\/[\w./-]*)/.exec(pr.title)?.[1]),
+        also: rest.map((g) => ({ name: g.pkg, to: g.to })),
+      });
       continue;
     }
     const to = await exactTarget(gh, owner, repo, pr.head.sha, parsed.pkg, parsed.to);
@@ -243,7 +270,12 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
     })
   ).data.filter((p) => p.head.ref.startsWith("bumpsmith/"));
   for (const t of targets.slice(0, 3)) {
-    const branch = branchName(t.ecosystem, t.packageName, t.to, t.dir ?? "");
+    const branch = branchName(
+      t.ecosystem,
+      t.also?.length ? `${t.packageName}-group` : t.packageName,
+      t.to,
+      t.dir ?? "",
+    );
     const branchSuffix = branch.slice(branch.lastIndexOf("/") + 1);
     const existing = open.some((p) => p.head.ref === branch);
     if (!existing && open.length >= config.limits.open_pull_requests) {
@@ -296,6 +328,7 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
         packageName: t.packageName,
         toVersion: t.to,
         dir: t.dir ?? "",
+        group: (t.also?.length ?? 0) > 0,
         jobId: record.id,
         commandPrefix: "bumpsmith",
         rescueOf: t.rescueOf,
@@ -384,6 +417,7 @@ export async function main(): Promise<void> {
             from: t.from ?? undefined,
             ecosystem: t.ecosystem,
             dir: t.dir,
+            alsoUpgrade: t.also,
           },
           { provider: makeProvider(), runsDir, budgetUsd: maxCost, config, log },
         ),

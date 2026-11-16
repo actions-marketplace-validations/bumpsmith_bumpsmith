@@ -8,9 +8,7 @@
     "from": "6.0.0",
     "to": "11.5.3",
     "pr_url": "https://github.com/thomasschafer/dependabot-review-sandbox/pull/1",
-    "human_files": [
-      "index.js"
-    ],
+    "human_files": ["index.js"],
     "merged_at": "2026-10-24T16:09:53Z"
   },
   {
@@ -48,9 +46,7 @@
     "from": "5.2.0",
     "to": "7.1.1",
     "pr_url": "https://github.com/pipetboy2001/CBRverse/pull/72",
-    "human_files": [
-      "src/hooks/useComicReader.ts"
-    ],
+    "human_files": ["src/hooks/useComicReader.ts"],
     "merged_at": "2026-11-16T14:51:42Z"
   },
   {
@@ -62,9 +58,7 @@
     "from": "5.0.0",
     "to": "8.0.0",
     "pr_url": "https://github.com/butlerx/wetty/pull/589",
-    "human_files": [
-      "src/server/socketServer/shared/path.ts"
-    ],
+    "human_files": ["src/server/socketServer/shared/path.ts"],
     "merged_at": "2026-05-26T17:00:31Z"
   },
   {
@@ -102,9 +96,7 @@
     "from": "6.0.0",
     "to": "7.1.0",
     "pr_url": "https://github.com/microsoft/monosize/pull/209",
-    "human_files": [
-      "packages/monosize/src/utils/helpers.test.mts"
-    ],
+    "human_files": ["packages/monosize/src/utils/helpers.test.mts"],
     "merged_at": "2026-04-30T08:00:30Z"
   },
   {
@@ -135,9 +127,7 @@
     "from": "15.1.0",
     "to": "16.0.0",
     "pr_url": "https://github.com/neonpixels-studio/markpost-cli/pull/244",
-    "human_files": [
-      "src/libs/config.ts"
-    ],
+    "human_files": ["src/libs/config.ts"],
     "merged_at": "2026-10-17T14:30:42Z"
   },
   {
@@ -149,10 +139,7 @@
     "from": "1.14.3",
     "to": "2.2.0",
     "pr_url": "https://github.com/linagora/twake-calendar-frontend/pull/1959",
-    "human_files": [
-      "__test__/utils/apiUtils.test.ts",
-      "common/src/utils/apiUtils.ts"
-    ],
+    "human_files": ["__test__/utils/apiUtils.test.ts", "common/src/utils/apiUtils.ts"],
     "merged_at": "2026-11-05T12:52:48Z"
   },
   {
@@ -180,9 +167,7 @@
     "from": "7.2.0",
     "to": "8.3.0",
     "pr_url": "https://github.com/TimUx/fw-webinar/pull/115",
-    "human_files": [
-      "public/assets/lib/tiptap/tiptap-bundled.js"
-    ],
+    "human_files": ["public/assets/lib/tiptap/tiptap-bundled.js"],
     "merged_at": "2026-11-04T16:58:07Z"
   },
   {
@@ -232,9 +217,7 @@
     "from": "14.0.17",
     "to": "15.0.6",
     "pr_url": "https://github.com/tldr-pages/tldr-node-client/pull/633",
-    "human_files": [
-      "test/remote.spec.js"
-    ],
+    "human_files": ["test/remote.spec.js"],
     "merged_at": "2026-11-09T14:46:28Z"
   },
   {
@@ -246,9 +229,7 @@
     "from": "18.0.1",
     "to": "22.1.0",
     "pr_url": "https://github.com/nearform/mercurius-apollo-registry/pull/167",
-    "human_files": [
-      "test/index.test.js"
-    ],
+    "human_files": ["test/index.test.js"],
     "merged_at": "2026-10-30T11:58:44Z"
   },
   {
@@ -260,9 +241,7 @@
     "from": "0.26.0",
     "to": "0.28.1",
     "pr_url": "https://github.com/AloneRider-pixel/ai-quality-platform/pull/5",
-    "human_files": [
-      "mocks/mock_api.py"
-    ],
+    "human_files": ["mocks/mock_api.py"],
     "merged_at": "2026-09-17T10:38:59Z"
   },
   {
@@ -311,9 +290,7 @@
     "from": "3.26.2",
     "to": "4.3.0",
     "pr_url": "https://github.com/freedomofpress/pressfreedomtracker.us/pull/2243",
-    "human_files": [
-      "incident/models/topic_page.py"
-    ],
+    "human_files": ["incident/models/topic_page.py"],
     "merged_at": "2026-07-27T15:01:48Z"
   },
   {
@@ -325,9 +302,7 @@
     "from": "24.3.0",
     "to": "26.3.1",
     "pr_url": "https://github.com/arduino/report-size-deltas/pull/175",
-    "human_files": [
-      "reportsizedeltas/tests/test_reportsizedeltas.py"
-    ],
+    "human_files": ["reportsizedeltas/tests/test_reportsizedeltas.py"],
     "merged_at": "2026-03-17T08:34:39Z"
   },
   {
@@ -339,9 +314,7 @@
     "from": "1.20.2",
     "to": "2.4.1",
     "pr_url": "https://github.com/pincerhq/pincer/pull/395",
-    "human_files": [
-      "src/pincer/mcp/sandbox.py"
-    ],
+    "human_files": ["src/pincer/mcp/sandbox.py"],
     "merged_at": "2026-11-16T11:26:24Z"
   },
   {
@@ -368,10 +341,7 @@
     "from": "14.0.0",
     "to": "15.0.0",
     "pr_url": "https://github.com/python/bench_runner/pull/470",
-    "human_files": [
-      "bench_runner/scripts/run_benchmarks.py",
-      "tests/test_run_benchmarks.py"
-    ],
+    "human_files": ["bench_runner/scripts/run_benchmarks.py", "tests/test_run_benchmarks.py"],
     "merged_at": "2026-11-06T19:10:03Z"
   },
   {

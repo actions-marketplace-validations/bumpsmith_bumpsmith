@@ -31,3 +31,25 @@ export function parseBotPr(title: string, author: string): BotUpgrade | null {
   if (!m?.[1] || !m[2]) return null;
   return { bot: "renovate", pkg: m[1], from: null, to: m[2], dir: null };
 }
+
+export interface GroupedUpdate {
+  pkg: string;
+  from: string | null;
+  to: string;
+}
+
+/**
+ * The packages of a grouped update, from the PR body. Dependabot writes
+ * "Updates `eslint` from 8.57.0 to 9.1.0"; Renovate writes a table row with
+ * "[pkg](...) | ... | `1.2.3` -> `2.0.0`".
+ */
+export function parseGroupedUpdates(body: string): GroupedUpdate[] {
+  const out = new Map<string, GroupedUpdate>();
+  for (const m of body.matchAll(/Updates? `(@?[\w./-]+)` from ([\w.+-]+) to ([\w.+-]+)/g))
+    if (m[1] && m[3]) out.set(m[1], { pkg: m[1], from: m[2] ?? null, to: m[3] });
+  for (const m of body.matchAll(
+    /^\|\s*\[?(@?[\w./-]+)\]?(?:\([^)]*\))?\s*\|.*?`\^?~?v?([\w.+-]+)`\s*(?:->|→)\s*`\^?~?v?([\w.+-]+)`/gm,
+  ))
+    if (m[1] && m[3] && !out.has(m[1])) out.set(m[1], { pkg: m[1], from: m[2] ?? null, to: m[3] });
+  return [...out.values()].slice(0, 20);
+}

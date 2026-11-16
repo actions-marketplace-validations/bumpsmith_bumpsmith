@@ -187,6 +187,7 @@ async function githubRun(
             from: t.from ?? undefined,
             ecosystem: t.ecosystem,
             dir: t.dir,
+            alsoUpgrade: t.also,
           },
           { provider: prov, runsDir, budgetUsd: budget, config, log },
         ),

@@ -84,7 +84,11 @@ export function npmUpgradeArgv(
   /** Companion packages upgraded in the same command (PR-2), e.g. @vitest/coverage-v8 with vitest. */
   companions: string[] = [],
 ): string[] {
-  const specs = [`${name}@${to}`, ...companions.map((c) => `${c}@${to}`)];
+  // A companion is either a name (moves to the same version) or "name@version".
+  const specs = [
+    `${name}@${to}`,
+    ...companions.map((c) => (c.lastIndexOf("@") > 0 ? c : `${c}@${to}`)),
+  ];
   const exact = info.prefix === "";
   switch (pm) {
     case "pnpm":

@@ -234,6 +234,27 @@ describe("GitHub Action (fake GitHub)", { timeout: 60_000 }, () => {
     );
   });
 
+  it("handles a grouped Dependabot update as one companion PR", async () => {
+    const pr = gh.botPr(repo, {
+      title: "Bump the npm_and_yarn group with 2 updates",
+      user: "dependabot[bot]",
+      branch: "dependabot/npm_and_yarn/npm_and_yarn-abc",
+      files: { "package.json": "{}\n" },
+      red: true,
+      body: "Updates `left-pad` from 1.0.0 to 2.0.0\n\nUpdates `chalk` from 5.0.0 to 5.3.0",
+    });
+    const rows = await run("workflow_run", {
+      workflow_run: { conclusion: "failure", pull_requests: [{ number: pr }] },
+    });
+    expect(upgrades.at(-1)).toMatchObject({
+      packageName: "left-pad",
+      to: "2.0.0",
+      also: [{ name: "chalk", to: "5.3.0" }],
+    });
+    expect(rows[0]?.result).toMatch(/^opened #/);
+    expect(repo.pulls.some((p) => p.head === "bumpsmith/npm/left-pad-group-2.0.0")).toBe(true);
+  });
+
   it("does nothing for green runs or human PRs", async () => {
     expect(
       await run("workflow_run", {

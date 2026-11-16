@@ -54,3 +54,33 @@ describe("bot pull requests", () => {
     expect(parseBotPr("Lock file maintenance", "renovate[bot]")).toBeNull();
   });
 });
+
+describe("grouped updates", () => {
+  it("reads Dependabot and Renovate group bodies", async () => {
+    const { parseGroupedUpdates } = await import("../../src/rescue/bot-pr.ts");
+    const dependabot = `Bumps the npm_and_yarn group with 2 updates: [eslint](https://x) and [@eslint/js](https://y).\n\nUpdates \`eslint\` from 8.57.0 to 9.1.0\n- [Release notes](https://x)\n\nUpdates \`@eslint/js\` from 8.57.0 to 9.1.0`;
+    expect(parseGroupedUpdates(dependabot)).toEqual([
+      { pkg: "eslint", from: "8.57.0", to: "9.1.0" },
+      { pkg: "@eslint/js", from: "8.57.0", to: "9.1.0" },
+    ]);
+    const renovate =
+      "| Package | Change |\n|---|---|\n| [vitest](https://v) | `^4.1.0` -> `^5.0.2` |\n| [@vitest/coverage-v8](https://c) | `4.1.0` -> `5.0.2` |";
+    expect(parseGroupedUpdates(renovate)).toEqual([
+      { pkg: "vitest", from: "4.1.0", to: "5.0.2" },
+      { pkg: "@vitest/coverage-v8", from: "4.1.0", to: "5.0.2" },
+    ]);
+  });
+  it("installs grouped companions at their own versions", async () => {
+    const { npmUpgradeArgv } = await import("../../src/inventory/bump.ts");
+    const argv = npmUpgradeArgv(
+      "pnpm",
+      "eslint",
+      "9.1.0",
+      { field: "devDependencies", prefix: "^" },
+      new Date(),
+      false,
+      ["@eslint/js@9.2.0", "eslint-config-x"],
+    );
+    expect(argv.slice(-3)).toEqual(["eslint@9.1.0", "@eslint/js@9.2.0", "eslint-config-x@9.1.0"]);
+  });
+});

@@ -253284,7 +253284,7 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
 });
 
 // src/cli.ts
-var import_semver8 = __toESM(require_semver2(), 1);
+var import_semver9 = __toESM(require_semver2(), 1);
 import { mkdir as mkdir11, mkdtemp as mkdtemp5, readFile as readFile13, rm as rm6, writeFile as writeFile7 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
 import { basename as basename2, join as join17, resolve as resolve4 } from "node:path";
@@ -253292,6 +253292,7 @@ import { parseArgs } from "node:util";
 
 // src/action.ts
 import { appendFile, mkdtemp as mkdtemp2, readFile as readFile9, rm as rm3 } from "node:fs/promises";
+var import_semver6 = __toESM(require_semver2(), 1);
 import { join as join12 } from "node:path";
 
 // src/config/repo-config.ts
@@ -276588,7 +276589,12 @@ async function publishPatch(input3) {
   }).filter((f) => f.severity === "block");
   if (blocks.length)
     return { state: "blocked", reason: `rule ${blocks[0]?.rule} blocked publication` };
-  const branch = branchName(input3.ecosystem, input3.packageName, input3.toVersion, input3.dir ?? "");
+  const branch = branchName(
+    input3.ecosystem,
+    input3.group ? `${input3.packageName}-group` : input3.packageName,
+    input3.toVersion,
+    input3.dir ?? ""
+  );
   const prior = (await gh2.request("GET /repos/{owner}/{repo}/pulls", {
     owner,
     repo,
@@ -302698,7 +302704,10 @@ function npmDepInfo(text, name) {
   return null;
 }
 function npmUpgradeArgv(pm, name, to, info, before, workspaceRoot = false, companions = []) {
-  const specs = [`${name}@${to}`, ...companions.map((c) => `${c}@${to}`)];
+  const specs = [
+    `${name}@${to}`,
+    ...companions.map((c) => c.lastIndexOf("@") > 0 ? c : `${c}@${to}`)
+  ];
   const exact = info.prefix === "";
   switch (pm) {
     case "pnpm":
@@ -303949,6 +303958,25 @@ async function runJob(input3, opts) {
         } catch {
         }
       }
+      for (const extra of input3.alsoUpgrade ?? []) {
+        try {
+          const xrel = await getRelease("npm", extra.name, extra.to);
+          const xgate = releaseGate(
+            xrel,
+            await checkMalicious("npm", extra.name, extra.to),
+            minAge
+          );
+          if (xgate.allowed) companions.push(`${extra.name}@${extra.to}`);
+          else
+            job.notes.push(
+              `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`
+            );
+        } catch (err) {
+          job.notes.push(
+            `Not upgraded with the group: ${extra.name}@${extra.to} (${err.message.slice(0, 120)}).`
+          );
+        }
+      }
       if (companions.length)
         job.notes.push(`Upgraded together with ${input3.packageName}: ${companions.join(", ")}.`);
       let up = await sb.exec(
@@ -303985,8 +304013,16 @@ async function runJob(input3, opts) {
           `could not install ${input3.packageName}@${input3.to}: ${(up.stderr || up.stdout).slice(-1500)}`
         );
     } else {
-      const bumped = bumpFile(eco, manifest, cur.stdout, input3.packageName, input3.to);
-      if (!bumped) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
+      const first = bumpFile(eco, manifest, cur.stdout, input3.packageName, input3.to);
+      if (!first) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
+      let bumped = first;
+      for (const extra of input3.alsoUpgrade ?? []) {
+        const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
+        const ok = xrel && releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
+        const next = ok ? bumpFile(eco, manifest, bumped, extra.name, extra.to) : null;
+        if (next) bumped = next;
+        else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
+      }
       await sb.exec(["sh", "-c", 'cat > "$1"', "sh", manifest], { input: bumped, cwd: wd });
     }
     job.after_bump = await runChecks(sb, checks, deadline);
@@ -304437,6 +304473,16 @@ function parseBotPr(title, author) {
   if (!m?.[1] || !m[2]) return null;
   return { bot: "renovate", pkg: m[1], from: null, to: m[2], dir: null };
 }
+function parseGroupedUpdates(body) {
+  const out = /* @__PURE__ */ new Map();
+  for (const m of body.matchAll(/Updates? `(@?[\w./-]+)` from ([\w.+-]+) to ([\w.+-]+)/g))
+    if (m[1] && m[3]) out.set(m[1], { pkg: m[1], from: m[2] ?? null, to: m[3] });
+  for (const m of body.matchAll(
+    /^\|\s*\[?(@?[\w./-]+)\]?(?:\([^)]*\))?\s*\|.*?`\^?~?v?([\w.+-]+)`\s*(?:->|→)\s*`\^?~?v?([\w.+-]+)`/gm
+  ))
+    if (m[1] && m[3] && !out.has(m[1])) out.set(m[1], { pkg: m[1], from: m[2] ?? null, to: m[3] });
+  return [...out.values()].slice(0, 20);
+}
 
 // src/rescue/resolve.ts
 var import_semver5 = __toESM(require_semver2(), 1);
@@ -304557,7 +304603,23 @@ async function resolveTargets(gh2, owner, repo, event, payload, opts = modeFromI
     if (pr.state !== "open" || !BOT_AUTHORS.has(pr.user?.login ?? "")) continue;
     const parsed = parseBotPr(pr.title, pr.user?.login ?? "");
     if (!parsed) {
-      notice(`#${n}: not a single-package update (grouped updates are not supported yet); skipped`);
+      const group = parseGroupedUpdates(pr.body ?? "");
+      if (group.length < 2) {
+        notice(`#${n}: could not read the packages of this update; skipped`);
+        continue;
+      }
+      const jump = (g) => (import_semver6.default.coerce(g.to)?.major ?? 0) - (import_semver6.default.coerce(g.from ?? "0")?.major ?? 0);
+      const [primary, ...rest] = [...group].sort((a, b) => jump(b) - jump(a));
+      if (!primary) continue;
+      out.push({
+        packageName: primary.pkg,
+        from: primary.from,
+        to: primary.to,
+        ecosystem: await botPrEcosystem(gh2, owner, repo, n, pr.head.ref),
+        rescueOf: n,
+        dir: normaliseSubdir(/(?:across|in) (\/[\w./-]*)/.exec(pr.title)?.[1]),
+        also: rest.map((g) => ({ name: g.pkg, to: g.to }))
+      });
       continue;
     }
     const to = await exactTarget(gh2, owner, repo, pr.head.sha, parsed.pkg, parsed.to);
@@ -304593,7 +304655,12 @@ async function runAction(d) {
     per_page: 100
   })).data.filter((p) => p.head.ref.startsWith("bumpsmith/"));
   for (const t of targets.slice(0, 3)) {
-    const branch = branchName(t.ecosystem, t.packageName, t.to, t.dir ?? "");
+    const branch = branchName(
+      t.ecosystem,
+      t.also?.length ? `${t.packageName}-group` : t.packageName,
+      t.to,
+      t.dir ?? ""
+    );
     const branchSuffix = branch.slice(branch.lastIndexOf("/") + 1);
     const existing = open2.some((p) => p.head.ref === branch);
     if (!existing && open2.length >= config2.limits.open_pull_requests) {
@@ -304646,6 +304713,7 @@ async function runAction(d) {
         packageName: t.packageName,
         toVersion: t.to,
         dir: t.dir ?? "",
+        group: (t.also?.length ?? 0) > 0,
         jobId: record2.id,
         commandPrefix: "bumpsmith",
         rescueOf: t.rescueOf,
@@ -304758,10 +304826,10 @@ function summarise(o) {
 }
 
 // src/inventory/debt.ts
-var import_semver6 = __toESM(require_semver2(), 1);
+var import_semver7 = __toESM(require_semver2(), 1);
 function majorsBehind(current, latest) {
-  const a = import_semver6.default.coerce(current ?? "");
-  const b = import_semver6.default.coerce(latest ?? "");
+  const a = import_semver7.default.coerce(current ?? "");
+  const b = import_semver7.default.coerce(latest ?? "");
   if (!a || !b) return 0;
   if (b.major > a.major) return b.major - a.major;
   if (a.major === 0 && b.major === 0 && b.minor > a.minor) return 1;
@@ -304785,7 +304853,7 @@ async function computeDebt(opts) {
   const eco = opts.inv.ecosystem;
   const names = Object.keys(opts.inv.dependencies).slice(0, 500);
   const items = await mapLimit(names, 8, async (name) => {
-    const current = opts.resolved.get(name) ?? import_semver6.default.minVersion(opts.inv.dependencies[name]?.replace(/^==/, "") ?? "")?.version ?? null;
+    const current = opts.resolved.get(name) ?? import_semver7.default.minVersion(opts.inv.dependencies[name]?.replace(/^==/, "") ?? "")?.version ?? null;
     const latest = await latestRelease(eco, name);
     const age = latest?.publishedAt ? (now.getTime() - latest.publishedAt.getTime()) / 864e5 : null;
     return {
@@ -304824,7 +304892,7 @@ async function computeDebt(opts) {
 }
 
 // src/inventory/sbom.ts
-var import_semver7 = __toESM(require_semver2(), 1);
+var import_semver8 = __toESM(require_semver2(), 1);
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { existsSync as existsSync7 } from "node:fs";
 import { readFile as readFile11 } from "node:fs/promises";
@@ -304858,7 +304926,7 @@ async function collectComponents(inv) {
   }
   const components = [];
   for (const [name, range] of Object.entries(inv.dependencies)) {
-    const v = import_semver7.default.minVersion(range.replace(/^==/, ""))?.version ?? range.replace(/^[=~^<>!]+/, "").trim();
+    const v = import_semver8.default.minVersion(range.replace(/^==/, ""))?.version ?? range.replace(/^[=~^<>!]+/, "").trim();
     if (!v) continue;
     components.push({ name, version: v, purl: purl(eco, name, v), direct: true });
   }
@@ -322275,7 +322343,8 @@ async function githubRun(target, mode, prov, budget, log2) {
           to: t.to,
           from: t.from ?? void 0,
           ecosystem: t.ecosystem,
-          dir: t.dir
+          dir: t.dir,
+          alsoUpgrade: t.also
         },
         { provider: prov, runsDir, budgetUsd: budget, config: config2, log: log2 }
       )
@@ -322421,7 +322490,7 @@ ${job.state.toUpperCase()} (confidence ${job.confidence ?? "n/a"}, $${(job.cost_
       const dir = resolve4(values.repo ?? ".");
       const inv = await inventory(dir);
       const eco = inv.ecosystem;
-      const from = import_semver8.default.minVersion(inv.dependencies[name] ?? "")?.version;
+      const from = import_semver9.default.minVersion(inv.dependencies[name] ?? "")?.version;
       if (!from) throw new Error(`${name} is not a direct dependency of this repository`);
       const rel = await getRelease(eco, name, version2);
       const ledger = new Ledger(Number(values.budget));

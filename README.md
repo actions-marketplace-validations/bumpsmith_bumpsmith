@@ -137,7 +137,8 @@ Commands are plain argv (no shell operators). Invalid files fall back to safe de
 
 ## Limitations
 
-- Grouped bot PRs (several packages at once) are skipped for now. Packages in a monorepo
+- Grouped bot PRs are handled as one job: the biggest major jump is analysed in depth and the
+  other packages are upgraded with it (each still release-gated). Packages in a monorepo
   sub-directory are supported when they have their own lockfile; workspace members that
   share the root lockfile are reported as not supported yet.
 - Private registries and git dependencies are not supported in the sandbox.
