@@ -26,10 +26,16 @@ A human always merges. Bumpsmith never pushes to your default branch.
 
 ## Quick start: GitHub Action
 
-Rescue red Dependabot/Renovate pull requests automatically. Copy
-[`examples/bumpsmith.yml`](examples/bumpsmith.yml) to `.github/workflows/bumpsmith.yml`,
-set `workflows: [CI]` to the name of your CI workflow, and add an `ANTHROPIC_API_KEY`
-repository secret.
+Rescue red Dependabot/Renovate pull requests automatically:
+
+```sh
+npx bumpsmith init     # writes .github/workflows/bumpsmith.yml (wired to your CI) and .bumpsmith.yml
+```
+
+Then add your model key as a repository secret. Any of these providers works in the Action:
+`anthropic` (default), `openai`, `gemini`, `openrouter`, `groq`, `together`, `deepseek`, or
+`custom` with a `base-url` for any OpenAI-compatible endpoint. Set `provider`, `api-key` and
+`model` in the workflow ([example](examples/bumpsmith.yml)).
 
 When CI fails on a bot PR, Bumpsmith opens a companion PR with the same upgrade plus the
 code changes, links the two, and comments on the bot PR. If it cannot produce a verified
@@ -131,8 +137,9 @@ Commands are plain argv (no shell operators). Invalid files fall back to safe de
 
 ## Limitations
 
-- Single-package updates at the repository root; grouped bot PRs and sub-directory
-  manifests are skipped for now.
+- Grouped bot PRs (several packages at once) are skipped for now. Packages in a monorepo
+  sub-directory are supported when they have their own lockfile; workspace members that
+  share the root lockfile are reported as not supported yet.
 - Private registries and git dependencies are not supported in the sandbox.
 - Tests that need databases or other services cannot run yet.
 - Linux runners (Docker) for the Action.

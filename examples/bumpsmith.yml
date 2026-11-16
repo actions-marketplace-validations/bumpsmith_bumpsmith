@@ -44,7 +44,9 @@ jobs:
           private-key: ${{ secrets.BUMPSMITH_APP_PRIVATE_KEY }}
       - uses: bumpsmith/bumpsmith@v1 # pin to a commit SHA in production
         with:
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          provider: anthropic # or openai, gemini, openrouter, groq, together, deepseek, custom
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # model: <model id>      # required for providers other than the default
           github-token: ${{ steps.app-token.outputs.token || github.token }}
           mode: ${{ inputs.package && 'fix' || 'rescue' }}
           package: ${{ inputs.package }}

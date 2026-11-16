@@ -40,6 +40,7 @@ Usage (run inside your repository):
   bumpsmith fix <package>@<version> --github owner/repo
                                                 same, then open a pull request on GitHub from your machine
   bumpsmith rescue --github owner/repo          fix red Dependabot/Renovate PRs with companion pull requests
+  bumpsmith init                                add the GitHub Action workflow and a starter .bumpsmith.yml
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
 
@@ -100,6 +101,47 @@ function provider(name: string, model?: string, baseURL?: string): ModelProvider
   if (name === "claude-code") return new ClaudeCodeProvider(model);
   if (name === "codex") return new CodexProvider(model);
   throw new Error(`unknown provider ${name}`);
+}
+
+const INIT_CONFIG = `# Bumpsmith configuration (optional). Reference: https://github.com/bumpsmith/bumpsmith#configuration-bumpsmithyml-optional
+version: 1
+release_age_days: 3
+limits:
+  open_pull_requests: 3
+pull_requests:
+  labels: [dependencies, bumpsmith]
+  draft_below: medium
+`;
+
+function initWorkflow(ciName: string): string {
+  return `# Bumpsmith: when your CI fails on a Dependabot/Renovate PR, open a companion PR with the fix.
+name: bumpsmith
+on:
+  workflow_run:
+    workflows: [${JSON.stringify(ciName)}]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+concurrency:
+  group: bumpsmith
+  cancel-in-progress: false
+jobs:
+  bumpsmith:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       contains(fromJSON('["dependabot[bot]","renovate[bot]"]'), github.event.workflow_run.actor.login))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: bumpsmith/bumpsmith@main   # pin to a release commit SHA once v1 is tagged
+        with:
+          provider: anthropic            # or openai, gemini, openrouter, groq, together, deepseek
+          api-key: \${{ secrets.ANTHROPIC_API_KEY }}
+`;
 }
 
 async function githubToken(): Promise<string> {
@@ -195,6 +237,48 @@ async function main() {
   const prov = () =>
     provider(values.provider ?? defaultProvider(), values.model, values["base-url"]);
   switch (cmd) {
+    case "init": {
+      const dir = resolve(values.repo ?? ".");
+      const wfDir = join(dir, ".github", "workflows");
+      let ciName = "CI";
+      try {
+        const { readdir } = await import("node:fs/promises");
+        for (const f of await readdir(wfDir)) {
+          if (!/\.ya?ml$/.test(f) || /bumpsmith/.test(f)) continue;
+          const text = await readFile(join(wfDir, f), "utf8");
+          if (/pull_request/.test(text)) {
+            ciName =
+              /^name:\s*["']?([^"'\n]+)/m.exec(text)?.[1]?.trim() ?? f.replace(/\.ya?ml$/, "");
+            break;
+          }
+        }
+      } catch {
+        // no workflows yet
+      }
+      const wfPath = join(wfDir, "bumpsmith.yml");
+      const cfgPath = join(dir, ".bumpsmith.yml");
+      const { existsSync } = await import("node:fs");
+      await mkdir(wfDir, { recursive: true });
+      if (!existsSync(wfPath)) await writeFile(wfPath, initWorkflow(ciName));
+      if (!existsSync(cfgPath)) await writeFile(cfgPath, INIT_CONFIG);
+      log(
+        `wrote ${wfPath} (runs after your "${ciName}" workflow fails on a Dependabot/Renovate PR)`,
+      );
+      log(`wrote ${cfgPath}`);
+      log("\nNext:");
+      log(
+        "  1. Add a repository secret with your model key, e.g. ANTHROPIC_API_KEY (Settings → Secrets → Actions).",
+      );
+      log(
+        "     Other providers: set provider/api-key in the workflow (openai, gemini, openrouter, ...).",
+      );
+      log(
+        "  2. Optional, recommended: a GitHub App token so Bumpsmith's PRs trigger your CI (see README → Tokens).",
+      );
+      log("  3. Commit both files. No API key? Run it from your machine instead:");
+      log("     npx bumpsmith rescue --github <owner>/<repo> --provider claude-code");
+      return;
+    }
     case "rescue": {
       if (!values.github) throw new Error("usage: bumpsmith rescue --github owner/repo");
       await githubRun(values.github, { mode: "rescue" }, prov(), Number(values.budget), log);
