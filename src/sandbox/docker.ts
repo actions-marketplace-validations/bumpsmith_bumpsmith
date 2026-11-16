@@ -231,35 +231,49 @@ async function ensureInfraOnce(): Promise<void> {
     MIRROR_NAME,
   ]);
   const [running, image] = ps.stdout.trim().split(" ");
-  if (ps.exitCode === 0 && running === "true" && image === tag) return;
-  if (ps.exitCode === 0) await run("docker", ["rm", "-f", MIRROR_NAME]);
-  await runOk("docker", [
-    "run",
-    "-d",
-    "--name",
+  const alreadyRunning = ps.exitCode === 0 && running === "true" && image === tag;
+  if (!alreadyRunning) {
+    if (ps.exitCode === 0) await run("docker", ["rm", "-f", MIRROR_NAME]);
+    await runOk("docker", [
+      "run",
+      "-d",
+      "--name",
+      MIRROR_NAME,
+      "--restart",
+      "unless-stopped",
+      "--network",
+      "bridge",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
+      "--read-only",
+      "--sysctl",
+      "net.ipv4.ip_unprivileged_port_start=443",
+      "--memory",
+      "512m",
+      "--pids-limit",
+      "256",
+      "--mount",
+      `type=bind,src=${certs},dst=/etc/bumpsmith-mirror,readonly`,
+      "-e",
+      "MIRROR_PORT=443",
+      tag,
+    ]);
+  }
+  // Another process may have started the mirror a moment ago: make sure it is attached to
+  // the sandbox network at its fixed address before anyone relies on it.
+  const nets = await run("docker", [
+    "inspect",
+    "-f",
+    "{{json .NetworkSettings.Networks}}",
     MIRROR_NAME,
-    "--restart",
-    "unless-stopped",
-    "--network",
-    "bridge",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges",
-    "--read-only",
-    "--sysctl",
-    "net.ipv4.ip_unprivileged_port_start=443",
-    "--memory",
-    "512m",
-    "--pids-limit",
-    "256",
-    "--mount",
-    `type=bind,src=${certs},dst=/etc/bumpsmith-mirror,readonly`,
-    "-e",
-    "MIRROR_PORT=443",
-    tag,
   ]);
-  await runOk("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
+  if (!nets.stdout.includes(MIRROR_IP)) {
+    const c = await run("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
+    if (c.exitCode !== 0 && !/already exists/i.test(c.stderr))
+      throw new Error(`cannot attach the registry mirror: ${c.stderr.trim().slice(0, 300)}`);
+  }
   // Fail fast (with the reason) if the mirror does not come up, instead of letting
   // installs hang on an unreachable registry.
   for (let i = 0; i < 20; i++) {

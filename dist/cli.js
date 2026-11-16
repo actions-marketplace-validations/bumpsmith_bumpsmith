@@ -274553,35 +274553,47 @@ async function ensureInfraOnce() {
     MIRROR_NAME
   ]);
   const [running, image] = ps.stdout.trim().split(" ");
-  if (ps.exitCode === 0 && running === "true" && image === tag) return;
-  if (ps.exitCode === 0) await run("docker", ["rm", "-f", MIRROR_NAME]);
-  await runOk("docker", [
-    "run",
-    "-d",
-    "--name",
-    MIRROR_NAME,
-    "--restart",
-    "unless-stopped",
-    "--network",
-    "bridge",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges",
-    "--read-only",
-    "--sysctl",
-    "net.ipv4.ip_unprivileged_port_start=443",
-    "--memory",
-    "512m",
-    "--pids-limit",
-    "256",
-    "--mount",
-    `type=bind,src=${certs},dst=/etc/bumpsmith-mirror,readonly`,
-    "-e",
-    "MIRROR_PORT=443",
-    tag
+  const alreadyRunning = ps.exitCode === 0 && running === "true" && image === tag;
+  if (!alreadyRunning) {
+    if (ps.exitCode === 0) await run("docker", ["rm", "-f", MIRROR_NAME]);
+    await runOk("docker", [
+      "run",
+      "-d",
+      "--name",
+      MIRROR_NAME,
+      "--restart",
+      "unless-stopped",
+      "--network",
+      "bridge",
+      "--cap-drop",
+      "ALL",
+      "--security-opt",
+      "no-new-privileges",
+      "--read-only",
+      "--sysctl",
+      "net.ipv4.ip_unprivileged_port_start=443",
+      "--memory",
+      "512m",
+      "--pids-limit",
+      "256",
+      "--mount",
+      `type=bind,src=${certs},dst=/etc/bumpsmith-mirror,readonly`,
+      "-e",
+      "MIRROR_PORT=443",
+      tag
+    ]);
+  }
+  const nets = await run("docker", [
+    "inspect",
+    "-f",
+    "{{json .NetworkSettings.Networks}}",
+    MIRROR_NAME
   ]);
-  await runOk("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
+  if (!nets.stdout.includes(MIRROR_IP)) {
+    const c = await run("docker", ["network", "connect", "--ip", MIRROR_IP, NETWORK, MIRROR_NAME]);
+    if (c.exitCode !== 0 && !/already exists/i.test(c.stderr))
+      throw new Error(`cannot attach the registry mirror: ${c.stderr.trim().slice(0, 300)}`);
+  }
   for (let i = 0; i < 20; i++) {
     const logs2 = await run("docker", ["logs", MIRROR_NAME]);
     if (logs2.stdout.includes('"event":"listening"')) return;
