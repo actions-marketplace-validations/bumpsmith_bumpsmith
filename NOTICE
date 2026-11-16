@@ -1,0 +1,8 @@
+Bumpsmith
+Copyright 2026 The Bumpsmith Authors
+
+This product includes software developed by the Bumpsmith project
+(https://github.com/bumpsmith/bumpsmith), licensed under the Apache License, Version 2.0.
+
+Third-party dependencies and their licences are listed in dist/*.LEGAL.txt for the
+bundled builds and in pnpm-lock.yaml for the source distribution.

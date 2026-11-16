@@ -1,0 +1,52 @@
+name: Bumpsmith
+description: Fixes your code when a dependency ships a breaking change, verified in a sandbox and opened as a pull request.
+author: Bumpsmith
+branding:
+  icon: tool
+  color: orange
+inputs:
+  anthropic-api-key:
+    description: Anthropic API key (store it as a repository or organisation secret).
+    required: true
+  github-token:
+    description: >-
+      Token used to read the repository and open the pull request. A GitHub App token is
+      recommended (pull requests opened with GITHUB_TOKEN do not trigger your CI).
+    required: false
+    default: ${{ github.token }}
+  default-token:
+    description: Internal; used to warn when the default GITHUB_TOKEN is in use.
+    required: false
+    default: ${{ github.token }}
+  mode:
+    description: "rescue (red Dependabot/Renovate PRs) or fix (a specific package@version)"
+    required: false
+    default: rescue
+  package:
+    description: Package to upgrade (mode fix).
+    required: false
+  version:
+    description: Version to upgrade to (mode fix).
+    required: false
+  ecosystem:
+    description: npm or pypi (mode fix).
+    required: false
+    default: npm
+  max-cost-usd:
+    description: Stop spending on the model after this many US dollars per upgrade.
+    required: false
+    default: "5"
+  model:
+    description: Claude model ID.
+    required: false
+    default: claude-opus-5-5
+outputs:
+  state:
+    description: Result of the last upgrade (ready, needs_human, blocked_policy, ...).
+  pr-number:
+    description: Number of the pull request opened or updated.
+  pr-url:
+    description: URL of the pull request opened or updated.
+runs:
+  using: node24
+  main: dist/action.js

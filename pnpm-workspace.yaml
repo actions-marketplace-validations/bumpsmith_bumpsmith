@@ -1,0 +1,6 @@
+# Supply-chain hygiene (PRD §11, T14): only install versions published >= 3 days ago.
+minimumReleaseAge: 4320
+# No dependency may run install scripts unless listed here.
+strictDepBuilds: true
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,12 @@
+node_modules/
+.data/
+.secrets/
+.cache/
+.bumpsmith/
+runs/
+bench/runs/
+bench/*.log
+coverage/
+*.log
+.env*
+!.env.example

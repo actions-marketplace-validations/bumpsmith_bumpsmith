@@ -1,0 +1,61 @@
+{
+  "name": "bumpsmith",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Fixes your code when a dependency ships a breaking change: verified, reviewed pull requests from your own CI.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "packageManager": "pnpm@11.1.3",
+  "bin": {
+    "bumpsmith": "./dist/cli.js"
+  },
+  "scripts": {
+    "bumpsmith": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:docker": "BUMPSMITH_DOCKER_TESTS=1 vitest run test/sandbox",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "test:all": "BUMPSMITH_DOCKER_TESTS=1 vitest run",
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0",
+    "@ast-grep/napi": "0.51.2",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@octokit/core": "7.0.8",
+    "@octokit/plugin-retry": "8.1.1",
+    "@octokit/plugin-throttling": "11.0.5",
+    "diff": "9.0.0",
+    "semver": "7.8.6",
+    "typescript": "6.0.3",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "@hono/node-server": "2.1.8",
+    "@types/node": "^22.20.5",
+    "@types/semver": "7.8.0",
+    "esbuild": "0.28.2",
+    "hono": "4.13.18",
+    "tsx": "4.23.15",
+    "vitest": "5.1.0"
+  },
+  "license": "Apache-2.0",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "files": [
+    "dist",
+    "sandbox",
+    "action.yml",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ]
+}

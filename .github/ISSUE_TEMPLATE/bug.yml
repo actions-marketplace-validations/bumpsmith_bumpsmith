@@ -1,0 +1,22 @@
+name: Bug report
+description: Bumpsmith did something wrong or crashed
+labels: [bug]
+body:
+  - type: input
+    id: upgrade
+    attributes: { label: Upgrade, placeholder: "zod 3.23.8 → 4.0.1" }
+    validations: { required: true }
+  - type: input
+    id: repo
+    attributes: { label: Public repository (if any) }
+  - type: dropdown
+    id: where
+    attributes: { label: Where, options: [CLI, GitHub Action] }
+  - type: textarea
+    id: what
+    attributes:
+      {
+        label: What happened,
+        description: "Attach evidence.md if you can (check it first for anything private).",
+      }
+    validations: { required: true }

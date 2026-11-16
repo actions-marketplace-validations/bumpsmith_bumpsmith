@@ -1,0 +1,51 @@
+# .github/workflows/bumpsmith.yml
+# Rescues red Dependabot/Renovate pull requests: when your CI fails on one, Bumpsmith
+# opens a companion PR with the same upgrade plus the code changes it needs.
+name: bumpsmith
+on:
+  workflow_run:
+    workflows: [CI] # the name of your CI workflow
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      package:
+        { description: "package to upgrade (leave empty to rescue red bot PRs)", required: false }
+      version: { description: "version", required: false }
+
+# Runs from your default branch with your secrets (GitHub's recommended pattern for
+# trusted work after Dependabot workflows). Bumpsmith never checks out or runs the bot
+# PR's code; it rebuilds the upgrade itself in an isolated container.
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: bumpsmith
+  cancel-in-progress: false
+
+jobs:
+  bumpsmith:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       contains(fromJSON('["dependabot[bot]","renovate[bot]"]'), github.event.workflow_run.actor.login))
+    runs-on: ubuntu-24.04 # needs Docker
+    timeout-minutes: 60
+    steps:
+      # Recommended: a GitHub App token, so the pull request triggers your CI.
+      # Create an app with Contents + Pull requests (write) and Checks (read), install it on
+      # this repository, and store its ID and private key as secrets.
+      - id: app-token
+        if: ${{ vars.BUMPSMITH_APP_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.BUMPSMITH_APP_ID }}
+          private-key: ${{ secrets.BUMPSMITH_APP_PRIVATE_KEY }}
+      - uses: bumpsmith/bumpsmith@v1 # pin to a commit SHA in production
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
+          mode: ${{ inputs.package && 'fix' || 'rescue' }}
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}

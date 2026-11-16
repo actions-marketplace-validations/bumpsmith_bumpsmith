@@ -1,0 +1,39 @@
+# CI for Bumpsmith itself. Every action is pinned to a full commit SHA; the token
+# is read-only; no secrets are exposed to pull requests from forks.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - name: Bundles are up to date
+        run: pnpm build && git diff --exit-code -- dist/
+      - name: Sandbox isolation and attack tests
+        run: BUMPSMITH_DOCKER_TESTS=1 pnpm exec vitest run test/sandbox
+      - name: Software bill of materials for Bumpsmith itself
+        run: pnpm dlx @cyclonedx/cyclonedx-npm@7.0.1 --output-file bumpsmith-sbom.cdx.json --omit dev
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: bumpsmith-sbom.cdx.json

@@ -1,0 +1,405 @@
+[
+  {
+    "id": "Sagart-cactus__SprintFoundry__140",
+    "ecosystem": "npm",
+    "repo": "https://github.com/Sagart-cactus/SprintFoundry.git",
+    "ref": "58881ece916a2eb0c95ba27a212a7f0b3a3127db",
+    "packageName": "commander",
+    "from": "13.1.0",
+    "to": "15.0.0",
+    "pr_url": "https://github.com/Sagart-cactus/SprintFoundry/pull/140",
+    "human_files": [
+      "src/service/preflight.ts",
+      "src/service/runtime/codex-runtime.ts",
+      "tests/preflight.test.ts"
+    ],
+    "merged_at": "2026-11-12T06:52:42Z"
+  },
+  {
+    "id": "phelpsbn42__Trestleboard__12",
+    "ecosystem": "npm",
+    "repo": "https://github.com/phelpsbn42/Trestleboard.git",
+    "ref": "5b2a25a252abb4c9da7d13fae6bef3bbcc09c853",
+    "packageName": "chalk",
+    "from": "4.1.2",
+    "to": "6.0.1",
+    "pr_url": "https://github.com/phelpsbn42/Trestleboard/pull/12",
+    "human_files": ["scripts/validate.js"],
+    "merged_at": "2026-11-14T15:33:45Z"
+  },
+  {
+    "id": "FOGProject__fog-node__141",
+    "ecosystem": "npm",
+    "repo": "https://github.com/FOGProject/fog-node.git",
+    "ref": "c005bb3e55c8ae578f13a643504a1a11f0ab4b3e",
+    "packageName": "chalk",
+    "from": "4.1.2",
+    "to": "6.0.1",
+    "pr_url": "https://github.com/FOGProject/fog-node/pull/141",
+    "human_files": [
+      "test/setup/tools-load.test.js",
+      "tools/lib/header.js",
+      "tools/migrate/index.js",
+      "tools/setup/index.js",
+      "tools/setup/lib/inquire.js"
+    ],
+    "merged_at": "2026-11-05T21:09:18Z"
+  },
+  {
+    "id": "weiyiships__homebarista__73",
+    "ecosystem": "npm",
+    "repo": "https://github.com/weiyiships/homebarista.git",
+    "ref": "e03901cd3fc734622592ae32d2357538a27ed215",
+    "packageName": "vitest",
+    "from": "4.1.12",
+    "to": "5.1.0",
+    "pr_url": "https://github.com/weiyiships/homebarista/pull/73",
+    "human_files": ["src/test/setup.ts"],
+    "merged_at": "2026-11-15T22:42:10Z"
+  },
+  {
+    "id": "timdoes__bot-my-meals__99",
+    "ecosystem": "npm",
+    "repo": "https://github.com/timdoes/bot-my-meals.git",
+    "ref": "f954300f73ee9a81c77c87660dfacfa0df5ae799",
+    "packageName": "vitest",
+    "from": "4.1.11",
+    "to": "5.1.0",
+    "pr_url": "https://github.com/timdoes/bot-my-meals/pull/99",
+    "human_files": [
+      "src/lib/keep-awake.test.ts",
+      "src/lib/keep-awake.ts",
+      "src/lib/workers-builds.test.ts",
+      "worker.mjs"
+    ],
+    "merged_at": "2026-11-15T19:45:59Z"
+  },
+  {
+    "id": "stefanofoti__gres__6",
+    "ecosystem": "npm",
+    "repo": "https://github.com/stefanofoti/gres.git",
+    "ref": "bfd36eeb820a995ce5eeb969fd5f8f9397bac90c",
+    "packageName": "node-fetch",
+    "from": "2.7.0",
+    "to": "3.3.2",
+    "pr_url": "https://github.com/stefanofoti/gres/pull/6",
+    "human_files": [
+      "backend/routes/homeassistant.js",
+      "backend/routes/jellyfin.js",
+      "backend/routes/weather.js",
+      "frontend/js/app.js",
+      "tests/backend/homeassistant.test.js",
+      "tests/backend/jellyfin.test.js",
+      "tests/backend/weather.test.js",
+      "tests/helpers/tempWorkdir.js"
+    ],
+    "merged_at": "2026-09-07T15:56:49Z"
+  },
+  {
+    "id": "ZeroWiggliness__httpyac__42",
+    "ecosystem": "npm",
+    "repo": "https://github.com/ZeroWiggliness/httpyac.git",
+    "ref": "08f1576b8818a31fd216490922073decf055d154",
+    "packageName": "got",
+    "from": "11.8.6",
+    "to": "16.2.0",
+    "pr_url": "https://github.com/ZeroWiggliness/httpyac/pull/42",
+    "human_files": [
+      "src/models/httpRequest.ts",
+      "src/plugins/core/request/encodeRequestBody.ts",
+      "src/plugins/http/digestAuthVariableReplacer.ts",
+      "src/plugins/http/gotUtils.ts",
+      "src/plugins/http/httpRequestClient.ts",
+      "src/plugins/http/test/gotUtils.spec.ts",
+      "src/plugins/oauth2/flow/tokenExchangeFlow.ts"
+    ],
+    "merged_at": "2026-11-03T21:50:53Z"
+  },
+  {
+    "id": "heroku__cli__3874",
+    "ecosystem": "npm",
+    "repo": "https://github.com/heroku/cli.git",
+    "ref": "52598f20c69c0113bc5f817b38be3a086c596894",
+    "packageName": "got",
+    "from": "13.0.0",
+    "to": "16.0.0",
+    "pr_url": "https://github.com/heroku/cli/pull/3874",
+    "human_files": [
+      "src/lib/ci/source.ts",
+      "test/unit/commands/ci/rerun.unit.test.ts",
+      "test/unit/commands/ci/run.unit.test.ts"
+    ],
+    "merged_at": "2026-09-15T22:42:19Z"
+  },
+  {
+    "id": "chromaui__chromatic-cli__1700",
+    "ecosystem": "npm",
+    "repo": "https://github.com/chromaui/chromatic-cli.git",
+    "ref": "0e05697f93b73b0feb1a46ccf87f0179eeea9ac3",
+    "packageName": "execa",
+    "from": "9.6.1",
+    "to": "10.2.1",
+    "pr_url": "https://github.com/chromaui/chromatic-cli/pull/1700",
+    "human_files": ["node-src/git/execGit.ts", "node-src/lib/shell/shell.ts"],
+    "merged_at": "2026-11-15T14:58:20Z"
+  },
+  {
+    "id": "danieleloscozzese__kafkajs__22",
+    "ecosystem": "npm",
+    "repo": "https://github.com/danieleloscozzese/kafkajs.git",
+    "ref": "472b5be23e03228bba2e08dad61d46dbbb96e544",
+    "packageName": "execa",
+    "from": "2.1.0",
+    "to": "10.2.1",
+    "pr_url": "https://github.com/danieleloscozzese/kafkajs/pull/22",
+    "human_files": [
+      "scripts/pipeline/checkBetaEligibility.js",
+      "scripts/pipeline/commentBackOnPR.js",
+      "scripts/pipeline/updatePackageJsonForPreRelease.js",
+      "scripts/waitForKafka.js",
+      "scripts/wait_for_kafka.spec.js",
+      "testHelpers/index.js"
+    ],
+    "merged_at": "2026-11-04T12:48:40Z"
+  },
+  {
+    "id": "rqzbeh__KhatamRouter__128",
+    "ecosystem": "npm",
+    "repo": "https://github.com/rqzbeh/KhatamRouter.git",
+    "ref": "f3e6b53e5c671018711fb0f0c99c1e6f2965a3fa",
+    "packageName": "ora",
+    "from": "9.4.1",
+    "to": "10.0.0",
+    "pr_url": "https://github.com/rqzbeh/KhatamRouter/pull/128",
+    "human_files": [
+      "src/lib/network/proxyHealthPolicy.js",
+      "src/shared/components/NoAuthProxyCard.js",
+      "tests/unit/proxy-403-attribution.test.js",
+      "tests/unit/proxy-health-policy.test.js"
+    ],
+    "merged_at": "2026-11-08T10:51:36Z"
+  },
+  {
+    "id": "flcdrg__replace-multiple-action__1222",
+    "ecosystem": "npm",
+    "repo": "https://github.com/flcdrg/replace-multiple-action.git",
+    "ref": "b09a3c786c5d0818aed71578b0f55beb936008f0",
+    "packageName": "glob",
+    "from": "13.0.6",
+    "to": "14.0.4",
+    "pr_url": "https://github.com/flcdrg/replace-multiple-action/pull/1222",
+    "human_files": ["dist/index.js"],
+    "merged_at": "2026-11-14T10:01:42Z"
+  },
+  {
+    "id": "wearerequired__lint-action__1064",
+    "ecosystem": "npm",
+    "repo": "https://github.com/wearerequired/lint-action.git",
+    "ref": "19885cc9eee02c5170458681b5be6698a8392559",
+    "packageName": "glob",
+    "from": "8.1.0",
+    "to": "13.0.6",
+    "pr_url": "https://github.com/wearerequired/lint-action/pull/1064",
+    "human_files": ["dist/index.js"],
+    "merged_at": "2026-11-03T08:43:17Z"
+  },
+  {
+    "id": "klinux__dbportal__92",
+    "ecosystem": "npm",
+    "repo": "https://github.com/klinux/dbportal.git",
+    "ref": "d57043751b5cb2f8eea0183f2fab9a309a3a858a",
+    "packageName": "ioredis",
+    "from": "5.11.1",
+    "to": "6.0.0",
+    "pr_url": "https://github.com/klinux/dbportal/pull/92",
+    "human_files": [
+      "src/lib/db/providers/keyvalue/redis.ts",
+      "tests/integration/db/redis-provider.test.ts"
+    ],
+    "merged_at": "2026-11-16T00:36:32Z"
+  },
+  {
+    "id": "sanidhyy__genius-ai__85",
+    "ecosystem": "npm",
+    "repo": "https://github.com/sanidhyy/genius-ai.git",
+    "ref": "4cff236431c05717208558f7f16873b577e5b212",
+    "packageName": "stripe",
+    "from": "22.6.2",
+    "to": "23.1.0",
+    "pr_url": "https://github.com/sanidhyy/genius-ai/pull/85",
+    "human_files": ["app/api/stripe/route.ts", "lib/stripe.ts"],
+    "merged_at": "2026-11-13T16:16:59Z"
+  },
+  {
+    "id": "BilaldeCipheR__visualph__57",
+    "ecosystem": "npm",
+    "repo": "https://github.com/BilaldeCipheR/visualph.git",
+    "ref": "ae765b13cf123c015fa03860c17bfe5818f539e5",
+    "packageName": "date-fns",
+    "from": "3.6.0",
+    "to": "4.4.0",
+    "pr_url": "https://github.com/BilaldeCipheR/visualph/pull/57",
+    "human_files": ["components/ui/calendar.tsx", "components/visualph/visualph-explorer.tsx"],
+    "merged_at": "2026-11-14T17:06:34Z"
+  },
+  {
+    "id": "Alfresco__alfresco-ng2-components__12375",
+    "ecosystem": "npm",
+    "repo": "https://github.com/Alfresco/alfresco-ng2-components.git",
+    "ref": "1953bb8ae8e6c62ed7d1fd1b2eebae8d50ce3c7e",
+    "packageName": "date-fns",
+    "from": "2.30.0",
+    "to": "4.4.0",
+    "pr_url": "https://github.com/Alfresco/alfresco-ng2-components/pull/12375",
+    "human_files": [
+      "lib/core/src/lib/common/utils/date-fns-adapter.spec.ts",
+      "lib/core/src/lib/common/utils/date-fns-adapter.ts",
+      "lib/core/src/lib/common/utils/date-fns-utils.ts",
+      "lib/core/src/lib/common/utils/datetime-fns-adapter.spec.ts",
+      "lib/core/src/lib/common/utils/datetime-fns-adapter.ts"
+    ],
+    "merged_at": "2026-11-06T18:53:52Z"
+  },
+  {
+    "id": "jst-stack__jst-showcase__51",
+    "ecosystem": "npm",
+    "repo": "https://github.com/jst-stack/jst-showcase.git",
+    "ref": "4d76ff4244d39bb7c13f493fed8e24cc80f940ba",
+    "packageName": "msw",
+    "from": "2.15.0",
+    "to": "3.0.4",
+    "pr_url": "https://github.com/jst-stack/jst-showcase/pull/51",
+    "human_files": ["src/entities/post/__tests__/posts.repository.test.ts"],
+    "merged_at": "2026-11-13T10:03:25Z"
+  },
+  {
+    "id": "navikt__sokos-up-fastedata__400",
+    "ecosystem": "npm",
+    "repo": "https://github.com/navikt/sokos-up-fastedata.git",
+    "ref": "2f1defc55847cc628fcf9a7e2d5b414bf818115f",
+    "packageName": "msw",
+    "from": "2.15.0",
+    "to": "3.0.3",
+    "pr_url": "https://github.com/navikt/sokos-up-fastedata/pull/400",
+    "human_files": ["playwright-tests/accessibility.spec.ts", "src/main.tsx"],
+    "merged_at": "2026-11-10T07:34:29Z"
+  },
+  {
+    "id": "iota-pi__flock__236",
+    "ecosystem": "npm",
+    "repo": "https://github.com/iota-pi/flock.git",
+    "ref": "1ed6fc550930ab1ac4397cd552325c7ed2e8212a",
+    "packageName": "@sentry/node",
+    "from": "10.75.3",
+    "to": "11.11.0",
+    "pr_url": "https://github.com/iota-pi/flock/pull/236",
+    "human_files": ["src/vault/sentry.spec.ts", "src/vault/sentry.ts"],
+    "merged_at": "2026-11-15T04:44:27Z"
+  },
+  {
+    "id": "nattiini45__jiangtang__9",
+    "ecosystem": "npm",
+    "repo": "https://github.com/nattiini45/jiangtang.git",
+    "ref": "828d331252ff5f64b927363faf0a85ce09f3191e",
+    "packageName": "@sentry/node",
+    "from": "8.55.2",
+    "to": "11.10.0",
+    "pr_url": "https://github.com/nattiini45/jiangtang/pull/9",
+    "human_files": [
+      "app/lib/observability/__tests__/sentry.test.ts",
+      "app/lib/observability/sentry.server.ts"
+    ],
+    "merged_at": "2026-11-03T15:10:16Z"
+  },
+  {
+    "id": "dhaupin__synmergia__87",
+    "ecosystem": "npm",
+    "repo": "https://github.com/dhaupin/synmergia.git",
+    "ref": "6279571bf3c5e10bd91166f783bd06f9e199bd25",
+    "packageName": "react-router-dom",
+    "from": "6.30.6",
+    "to": "7.18.5",
+    "pr_url": "https://github.com/dhaupin/synmergia/pull/87",
+    "human_files": ["vite.config.ts"],
+    "merged_at": "2026-11-15T06:07:07Z"
+  },
+  {
+    "id": "guimatheus92__pr-review__52",
+    "ecosystem": "npm",
+    "repo": "https://github.com/guimatheus92/pr-review.git",
+    "ref": "bb510fd79555673c57bf2b0c66a5a121d139343e",
+    "packageName": "p-limit",
+    "from": "6.2.0",
+    "to": "7.3.3",
+    "pr_url": "https://github.com/guimatheus92/pr-review/pull/52",
+    "human_files": ["dist/cli.cjs"],
+    "merged_at": "2026-10-06T18:41:51Z"
+  },
+  {
+    "id": "cncf__prow-github-actions__122",
+    "ecosystem": "npm",
+    "repo": "https://github.com/cncf/prow-github-actions.git",
+    "ref": "b019c9bf6dc18e104f69fb9865a589c0c89ff5f7",
+    "packageName": "@octokit/rest",
+    "from": "20.1.2",
+    "to": "22.0.1",
+    "pr_url": "https://github.com/cncf/prow-github-actions/pull/122",
+    "human_files": [
+      "dist/index.js",
+      "src/cronJobs/lgtm.ts",
+      "src/cronJobs/prLabeler.ts",
+      "src/issueComment/approve.ts"
+    ],
+    "merged_at": "2026-09-08T09:43:28Z"
+  },
+  {
+    "id": "EvanGribar__Swarm-Review__80",
+    "ecosystem": "npm",
+    "repo": "https://github.com/EvanGribar/Swarm-Review.git",
+    "ref": "fc3f8662a1bacc3eed0d3d0f7c097ef06ed9a5cf",
+    "packageName": "@octokit/rest",
+    "from": "21.1.1",
+    "to": "22.0.1",
+    "pr_url": "https://github.com/EvanGribar/Swarm-Review/pull/80",
+    "human_files": ["dist/index.js", "src/context.ts"],
+    "merged_at": "2026-09-03T19:34:26Z"
+  },
+  {
+    "id": "web-scrobbler__web-scrobbler__6291",
+    "ecosystem": "npm",
+    "repo": "https://github.com/web-scrobbler/web-scrobbler.git",
+    "ref": "7bc9e8a5a23d3d817347e1d12ced31d26f1d5f5b",
+    "packageName": "sharp",
+    "from": "0.34.5",
+    "to": "0.35.5",
+    "pr_url": "https://github.com/web-scrobbler/web-scrobbler/pull/6291",
+    "human_files": ["scripts/minify-images.ts"],
+    "merged_at": "2026-11-10T21:52:08Z"
+  },
+  {
+    "id": "casama233__astrbot_plugin_whatsapp_adapter__54",
+    "ecosystem": "npm",
+    "repo": "https://github.com/casama233/astrbot_plugin_whatsapp_adapter.git",
+    "ref": "e08a3723bd1ed29c4b1c196eaa966bd5449b6fe0",
+    "packageName": "pino",
+    "from": "9.14.0",
+    "to": "10.4.0",
+    "pr_url": "https://github.com/casama233/astrbot_plugin_whatsapp_adapter/pull/54",
+    "human_files": [
+      "gateway/login-recovery.test.mjs",
+      "gateway/pairing-code-compat.test.mjs",
+      "gateway/session-lifecycle.mjs",
+      "gateway/session-lifecycle.test.mjs",
+      "gateway/shutdown-hardening.test.mjs",
+      "gateway/whatsapp-gateway-impl.mjs",
+      "main.py",
+      "pages/whatsapp-login/app.js",
+      "tests/gateway-fixtures/baileys.mjs",
+      "tests/integration/check_login_page_browser.py",
+      "tests/integration/verify_astrbot.py",
+      "tests/test_whatsapp_client_pairing.py",
+      "whatsapp_client.py"
+    ],
+    "merged_at": "2026-11-09T16:20:47Z"
+  }
+]
