@@ -39,6 +39,26 @@ const TEST_FILE =
 const ASSERT =
   /\b(assert|expect\s*\(|should\.|\.toBe|\.toEqual|\.toThrow|assertEqual|assertTrue|pytest\.raises)/;
 
+const NPM_DEP_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
+
+/** Dependency names declared in a package.json text, or null if it does not parse. */
+export function packageJsonDeps(text: string | null): Set<string> | null {
+  if (text === null) return new Set();
+  try {
+    const pkg = JSON.parse(text) as Record<string, Record<string, string> | undefined>;
+    return new Set(
+      NPM_DEP_FIELDS.flatMap((f) => Object.keys(pkg[f] ?? {})).map((n) => n.toLowerCase()),
+    );
+  } catch {
+    return null;
+  }
+}
+
 function depNames(ecosystem: Ecosystem, lines: string[]): Set<string> {
   const out = new Set<string>();
   for (const l of lines) {
@@ -60,6 +80,13 @@ export interface RuleInput {
   maxChangedLines?: number;
   /** Extra protected paths from the repository's .bumpsmith.yml. */
   protectedPaths?: string[];
+  /**
+   * Full manifest text before and after, when available. For package.json the
+   * new-dependency rule then compares the dependency sections themselves instead of
+   * guessing from changed lines (so "engines", "scripts" or metadata never look like
+   * dependencies).
+   */
+  manifests?: { path: string; before: string | null; after: string | null }[];
   /** Non-optional peer dependencies declared by the new version of the package. */
   peerDependencies?: string[];
 }
@@ -124,8 +151,19 @@ export function applyRules(input: RuleInput): RuleFinding[] {
 
     const isManifest = /(^|\/)(package\.json|pyproject\.toml|requirements[^/]*\.txt)$/.test(f.path);
     if (isManifest) {
-      const before = depNames(input.ecosystem, f.removed);
-      for (const name of depNames(input.ecosystem, f.added))
+      const full = input.manifests?.find((m) => m.path === f.path);
+      const structured =
+        full && /(^|\/)package\.json$/.test(f.path)
+          ? { before: packageJsonDeps(full.before), after: packageJsonDeps(full.after) }
+          : null;
+      const useStructured = structured?.before && structured.after;
+      const before = useStructured
+        ? (structured.before as Set<string>)
+        : depNames(input.ecosystem, f.removed);
+      const added = useStructured
+        ? (structured.after as Set<string>)
+        : depNames(input.ecosystem, f.added);
+      for (const name of added)
         if (!before.has(name) && !allowedNewDeps.has(name))
           out.push({
             rule: "new_dependency",

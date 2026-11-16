@@ -85,6 +85,36 @@ describe("rule refinements from the benchmark", () => {
     parsePatch(
       `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n${removed.map((l) => `-${l}`).join("\n")}\n${added.map((l) => `+${l}`).join("\n")}\n`,
     );
+  it("does not treat engines.node as a new dependency, but still blocks a real one", () => {
+    const before = JSON.stringify(
+      { name: "x", engines: { node: ">=12" }, dependencies: { "lru-cache": "^6.0.0" } },
+      null,
+      2,
+    );
+    const after = before.replace(">=12", ">=20").replace("^6.0.0", "^11.5.3");
+    const engines = applyRules({
+      ecosystem: "npm",
+      packageName: "lru-cache",
+      files: files("package.json", ['    "node": ">=20"'], ['    "node": ">=12"']),
+      manifests: [{ path: "package.json", before, after }],
+      record,
+      edits: [],
+    });
+    expect(engines.some((x) => x.rule === "new_dependency")).toBe(false);
+    const sneaky = after.replace(
+      '"dependencies": {',
+      '"dependencies": {\n    "left-pad": "1.3.0",',
+    );
+    const added = applyRules({
+      ecosystem: "npm",
+      packageName: "lru-cache",
+      files: files("package.json", ['    "left-pad": "1.3.0",']),
+      manifests: [{ path: "package.json", before, after: sneaky }],
+      record,
+      edits: [],
+    });
+    expect(added.some((x) => x.rule === "new_dependency" && x.severity === "block")).toBe(true);
+  });
   it("allows required peer dependencies of the new version", () => {
     const f = applyRules({
       ecosystem: "npm",

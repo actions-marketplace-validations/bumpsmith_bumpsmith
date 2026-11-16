@@ -275586,6 +275586,23 @@ var SUSPICIOUS = [
 var LOCKFILES = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|poetry\.lock|Pipfile\.lock)$/;
 var TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.py$/;
 var ASSERT = /\b(assert|expect\s*\(|should\.|\.toBe|\.toEqual|\.toThrow|assertEqual|assertTrue|pytest\.raises)/;
+var NPM_DEP_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies"
+];
+function packageJsonDeps(text) {
+  if (text === null) return /* @__PURE__ */ new Set();
+  try {
+    const pkg = JSON.parse(text);
+    return new Set(
+      NPM_DEP_FIELDS.flatMap((f) => Object.keys(pkg[f] ?? {})).map((n) => n.toLowerCase())
+    );
+  } catch {
+    return null;
+  }
+}
 function depNames(ecosystem, lines) {
   const out = /* @__PURE__ */ new Set();
   for (const l of lines) {
@@ -275646,8 +275663,12 @@ function applyRules(input3) {
     changedLines += f.added.length + f.removed.length;
     const isManifest = /(^|\/)(package\.json|pyproject\.toml|requirements[^/]*\.txt)$/.test(f.path);
     if (isManifest) {
-      const before = depNames(input3.ecosystem, f.removed);
-      for (const name of depNames(input3.ecosystem, f.added))
+      const full = input3.manifests?.find((m) => m.path === f.path);
+      const structured = full && /(^|\/)package\.json$/.test(f.path) ? { before: packageJsonDeps(full.before), after: packageJsonDeps(full.after) } : null;
+      const useStructured = structured?.before && structured.after;
+      const before = useStructured ? structured.before : depNames(input3.ecosystem, f.removed);
+      const added = useStructured ? structured.after : depNames(input3.ecosystem, f.added);
+      for (const name of added)
         if (!before.has(name) && !allowedNewDeps.has(name))
           out.push({
             rule: "new_dependency",
@@ -276552,10 +276573,23 @@ async function publishPatch(input3) {
     return { state: "blocked", reason: "patch hash mismatch" };
   if (!record2.change_record) return { state: "blocked", reason: "no Change Record" };
   const peers = input3.ecosystem === "npm" ? await (input3.peerDependencies ?? npmPeerDependencies)(input3.packageName, input3.toVersion) : [];
+  const baseFiles = /* @__PURE__ */ new Map();
+  let changes;
+  try {
+    changes = await applyStrict(input3.patch, async (p) => {
+      const text = await readBaseFile(gh2, owner, repo, p, input3.baseSha);
+      baseFiles.set(p, text);
+      return text;
+    });
+  } catch (err) {
+    if (err instanceof PatchError) return { state: "blocked", reason: err.message };
+    throw err;
+  }
   const blocks = applyRules({
     ecosystem: input3.ecosystem,
     packageName: input3.packageName,
     files: parsePatch(input3.patch),
+    manifests: changes.filter((c) => /(^|\/)package\.json$/.test(c.path)).map((c) => ({ path: c.path, before: baseFiles.get(c.path) ?? null, after: c.content })),
     record: record2.change_record,
     edits: record2.edits ?? [],
     peerDependencies: peers,
@@ -276579,16 +276613,6 @@ async function publishPatch(input3) {
   if (prior.some((p) => p.state === "closed" && !p.merged_at))
     return { state: "skipped", reason: "a pull request for this upgrade was closed by a user" };
   const open2 = prior.find((p) => p.state === "open") ?? null;
-  let changes;
-  try {
-    changes = await applyStrict(
-      input3.patch,
-      (p) => readBaseFile(gh2, owner, repo, p, input3.baseSha)
-    );
-  } catch (err) {
-    if (err instanceof PatchError) return { state: "blocked", reason: err.message };
-    throw err;
-  }
   const meta3 = (await gh2.request("GET /repos/{owner}/{repo}", { owner, repo })).data;
   const baseCommit = (await gh2.request("GET /repos/{owner}/{repo}/git/commits/{commit_sha}", {
     owner,
@@ -304084,10 +304108,22 @@ async function runJob(input3, opts) {
     const files = parsePatch(patch);
     job.patch_lines = files.reduce((n, f) => n + f.added.length + f.removed.length, 0);
     job.state = "reviewing";
+    const readSnap = async (side, path5) => {
+      const f = join11(dir, side, path5);
+      return existsSync6(f) ? await readFile8(f, "utf8") : null;
+    };
+    const manifests = await Promise.all(
+      files.filter((f) => /(^|\/)package\.json$/.test(f.path)).map(async (f) => ({
+        path: f.path,
+        before: await readSnap("before", f.path),
+        after: await readSnap("after", f.path)
+      }))
+    );
     job.rules = applyRules({
       ecosystem: eco,
       packageName: input3.packageName,
       files,
+      manifests,
       record: job.change_record,
       edits: job.edits,
       peerDependencies: eco === "npm" ? await npmPeerDependencies(input3.packageName, input3.to) : [],

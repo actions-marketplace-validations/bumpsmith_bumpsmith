@@ -145,10 +145,26 @@ export async function publishPatch(input: PublishInput): Promise<PublishResult> 
     input.ecosystem === "npm"
       ? await (input.peerDependencies ?? npmPeerDependencies)(input.packageName, input.toVersion)
       : [];
+  // 3. Rebuild files from the base commit + reviewed patch.
+  const baseFiles = new Map<string, string | null>();
+  let changes: FileChange[];
+  try {
+    changes = await applyStrict(input.patch, async (p) => {
+      const text = await readBaseFile(gh, owner, repo, p, input.baseSha);
+      baseFiles.set(p, text);
+      return text;
+    });
+  } catch (err) {
+    if (err instanceof PatchError) return { state: "blocked", reason: err.message };
+    throw err;
+  }
   const blocks = applyRules({
     ecosystem: input.ecosystem,
     packageName: input.packageName,
     files: parsePatch(input.patch),
+    manifests: changes
+      .filter((c) => /(^|\/)package\.json$/.test(c.path))
+      .map((c) => ({ path: c.path, before: baseFiles.get(c.path) ?? null, after: c.content })),
     record: record.change_record,
     edits: record.edits ?? [],
     peerDependencies: peers,
@@ -177,16 +193,6 @@ export async function publishPatch(input: PublishInput): Promise<PublishResult> 
     return { state: "skipped", reason: "a pull request for this upgrade was closed by a user" };
   const open = prior.find((p) => p.state === "open") ?? null;
 
-  // 3. Rebuild files from the base commit + reviewed patch.
-  let changes: FileChange[];
-  try {
-    changes = await applyStrict(input.patch, (p) =>
-      readBaseFile(gh, owner, repo, p, input.baseSha),
-    );
-  } catch (err) {
-    if (err instanceof PatchError) return { state: "blocked", reason: err.message };
-    throw err;
-  }
   const meta = (await gh.request("GET /repos/{owner}/{repo}", { owner, repo })).data;
   const baseCommit = (
     await gh.request("GET /repos/{owner}/{repo}/git/commits/{commit_sha}", {

@@ -607,10 +607,24 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
 
     // Diff rules + independent review
     job.state = "reviewing";
+    const readSnap = async (side: string, path: string) => {
+      const f = join(dir, side, path);
+      return existsSync(f) ? await readFile(f, "utf8") : null;
+    };
+    const manifests = await Promise.all(
+      files
+        .filter((f) => /(^|\/)package\.json$/.test(f.path))
+        .map(async (f) => ({
+          path: f.path,
+          before: await readSnap("before", f.path),
+          after: await readSnap("after", f.path),
+        })),
+    );
     job.rules = applyRules({
       ecosystem: eco,
       packageName: input.packageName,
       files,
+      manifests,
       record: job.change_record,
       edits: job.edits,
       peerDependencies: eco === "npm" ? await npmPeerDependencies(input.packageName, input.to) : [],
