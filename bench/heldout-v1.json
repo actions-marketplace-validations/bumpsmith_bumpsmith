@@ -1,0 +1,399 @@
+[
+  {
+    "id": "thomasschafer__dependabot-review-sandbox__1",
+    "ecosystem": "npm",
+    "repo": "https://github.com/thomasschafer/dependabot-review-sandbox.git",
+    "ref": "edacc749410ed404e9291567ebc2107bd7e2ecc3",
+    "packageName": "lru-cache",
+    "from": "6.0.0",
+    "to": "11.5.3",
+    "pr_url": "https://github.com/thomasschafer/dependabot-review-sandbox/pull/1",
+    "human_files": [
+      "index.js"
+    ],
+    "merged_at": "2026-10-24T16:09:53Z"
+  },
+  {
+    "id": "chaynHQ__bloom-frontend__2028",
+    "ecosystem": "npm",
+    "repo": "https://github.com/chaynHQ/bloom-frontend.git",
+    "ref": "e77cc239facab0b5117ef2a1091fae5d175bb8ba",
+    "packageName": "@types/node",
+    "from": "24.19.2",
+    "to": "26.6.6",
+    "pr_url": "https://github.com/chaynHQ/bloom-frontend/pull/2028",
+    "human_files": [
+      "app/[locale]/[slug]/page.tsx",
+      "app/[locale]/activity/[slug]/page.tsx",
+      "app/[locale]/audio/[slug]/page.tsx",
+      "app/[locale]/courses/[slug]/[sessionSlug]/[resourceSlug]/page.tsx",
+      "app/[locale]/courses/[slug]/[sessionSlug]/page.tsx",
+      "app/[locale]/courses/[slug]/page.tsx",
+      "app/[locale]/policies/[slug]/page.tsx",
+      "app/[locale]/video/[slug]/page.tsx",
+      "app/[locale]/written/[slug]/page.tsx",
+      "lib/storyblok.test.ts",
+      "lib/storyblok.ts",
+      "lib/utils/validateSlugPageRequest.test.ts",
+      "lib/utils/validateSlugPageRequest.ts"
+    ],
+    "merged_at": "2026-11-16T17:49:17Z"
+  },
+  {
+    "id": "pipetboy2001__CBRverse__72",
+    "ecosystem": "npm",
+    "repo": "https://github.com/pipetboy2001/CBRverse.git",
+    "ref": "ffea684b89906a771315effe2069a78da39b253f",
+    "packageName": "eslint-plugin-react-hooks",
+    "from": "5.2.0",
+    "to": "7.1.1",
+    "pr_url": "https://github.com/pipetboy2001/CBRverse/pull/72",
+    "human_files": [
+      "src/hooks/useComicReader.ts"
+    ],
+    "merged_at": "2026-11-16T14:51:42Z"
+  },
+  {
+    "id": "butlerx__wetty__589",
+    "ecosystem": "npm",
+    "repo": "https://github.com/butlerx/wetty.git",
+    "ref": "3f3de7d3d24fd8974e43b6fd40d47547b38b34f8",
+    "packageName": "find-up",
+    "from": "5.0.0",
+    "to": "8.0.0",
+    "pr_url": "https://github.com/butlerx/wetty/pull/589",
+    "human_files": [
+      "src/server/socketServer/shared/path.ts"
+    ],
+    "merged_at": "2026-05-26T17:00:31Z"
+  },
+  {
+    "id": "zpyoung__pando__50",
+    "ecosystem": "npm",
+    "repo": "https://github.com/zpyoung/pando.git",
+    "ref": "b0d48b2a741ef5da74ef27b721fb9de36b08e7c1",
+    "packageName": "globby",
+    "from": "14.1.0",
+    "to": "16.2.0",
+    "pr_url": "https://github.com/zpyoung/pando/pull/50",
+    "human_files": [
+      "src/commands/add.ts",
+      "src/commands/config/init.ts",
+      "src/config/env.ts",
+      "src/config/schema.ts",
+      "src/utils/fileOps.ts",
+      "src/utils/git.ts",
+      "src/utils/worktreeSetup.ts",
+      "test/config/env.test.ts",
+      "test/e2e/commands/add.e2e.test.ts",
+      "test/integration/worktreeSetup.integration.test.ts",
+      "test/utils/fileOps.test.ts",
+      "test/utils/git.test.ts",
+      "test/utils/worktreeSetup.test.ts"
+    ],
+    "merged_at": "2026-07-21T23:11:08Z"
+  },
+  {
+    "id": "microsoft__monosize__209",
+    "ecosystem": "npm",
+    "repo": "https://github.com/microsoft/monosize.git",
+    "ref": "ca322aa3af9276e4e41e1d1d5090d96f28b58b3f",
+    "packageName": "pretty-bytes",
+    "from": "6.0.0",
+    "to": "7.1.0",
+    "pr_url": "https://github.com/microsoft/monosize/pull/209",
+    "human_files": [
+      "packages/monosize/src/utils/helpers.test.mts"
+    ],
+    "merged_at": "2026-04-30T08:00:30Z"
+  },
+  {
+    "id": "strapi__sdk-plugin__148",
+    "ecosystem": "npm",
+    "repo": "https://github.com/strapi/sdk-plugin.git",
+    "ref": "de1e9575f625303877be129702e841e2431af98c",
+    "packageName": "boxen",
+    "from": "5.1.2",
+    "to": "8.0.1",
+    "pr_url": "https://github.com/strapi/sdk-plugin/pull/148",
+    "human_files": [
+      "src/cli/commands/plugin/build.ts",
+      "src/cli/commands/plugin/init/action.ts",
+      "src/cli/commands/plugin/link-watch.ts",
+      "src/cli/commands/plugin/verify.ts",
+      "src/cli/commands/plugin/watch.ts",
+      "src/cli/commands/utils/helpers.ts"
+    ],
+    "merged_at": "2026-05-18T13:23:43Z"
+  },
+  {
+    "id": "neonpixels-studio__markpost-cli__244",
+    "ecosystem": "npm",
+    "repo": "https://github.com/neonpixels-studio/markpost-cli.git",
+    "ref": "40c4567ff161bff12f4dc7693cc6ca3d8d0abdaa",
+    "packageName": "conf",
+    "from": "15.1.0",
+    "to": "16.0.0",
+    "pr_url": "https://github.com/neonpixels-studio/markpost-cli/pull/244",
+    "human_files": [
+      "src/libs/config.ts"
+    ],
+    "merged_at": "2026-10-17T14:30:42Z"
+  },
+  {
+    "id": "linagora__twake-calendar-frontend__1959",
+    "ecosystem": "npm",
+    "repo": "https://github.com/linagora/twake-calendar-frontend.git",
+    "ref": "54e7fcd3202d64163a4540a384bcf3f44f559fc4",
+    "packageName": "ky",
+    "from": "1.14.3",
+    "to": "2.2.0",
+    "pr_url": "https://github.com/linagora/twake-calendar-frontend/pull/1959",
+    "human_files": [
+      "__test__/utils/apiUtils.test.ts",
+      "common/src/utils/apiUtils.ts"
+    ],
+    "merged_at": "2026-11-05T12:52:48Z"
+  },
+  {
+    "id": "carlosmezquita__snoojote__46",
+    "ecosystem": "npm",
+    "repo": "https://github.com/carlosmezquita/snoojote.git",
+    "ref": "5ba12eb60923754f0d0ef4d091b4f98bee4fdb94",
+    "packageName": "node-cron",
+    "from": "3.0.3",
+    "to": "4.6.0",
+    "pr_url": "https://github.com/carlosmezquita/snoojote/pull/46",
+    "human_files": [
+      "src/features/dailyWord/events/dailyWord.ts",
+      "src/features/trivia/events/dailyQuestion.ts",
+      "src/index.ts"
+    ],
+    "merged_at": "2026-11-12T04:32:33Z"
+  },
+  {
+    "id": "TimUx__fw-webinar__115",
+    "ecosystem": "npm",
+    "repo": "https://github.com/TimUx/fw-webinar.git",
+    "ref": "1693d79dcb93e0243881706656f9841b373d1fbf",
+    "packageName": "helmet",
+    "from": "7.2.0",
+    "to": "8.3.0",
+    "pr_url": "https://github.com/TimUx/fw-webinar/pull/115",
+    "human_files": [
+      "public/assets/lib/tiptap/tiptap-bundled.js"
+    ],
+    "merged_at": "2026-11-04T16:58:07Z"
+  },
+  {
+    "id": "keldaanCommunity__pokemonAutoChess__4174",
+    "ecosystem": "npm",
+    "repo": "https://github.com/keldaanCommunity/pokemonAutoChess.git",
+    "ref": "252c85c6255b2f3c1b3ef6ad276780c053ca4e33",
+    "packageName": "firebase-admin",
+    "from": "13.10.0",
+    "to": "14.5.0",
+    "pr_url": "https://github.com/keldaanCommunity/pokemonAutoChess/pull/4174",
+    "human_files": [
+      "app/app.config.ts",
+      "app/rooms/after-game-room.ts",
+      "app/rooms/custom-lobby-room.ts",
+      "app/rooms/game-room.ts",
+      "app/rooms/preparation-room.ts",
+      "app/services/cronjobs.ts",
+      "db-commands/count-inactive-users.ts",
+      "db-commands/delete-inactive-users.ts"
+    ],
+    "merged_at": "2026-11-03T19:22:43Z"
+  },
+  {
+    "id": "gemivnet__tripsheet__2",
+    "ecosystem": "npm",
+    "repo": "https://github.com/gemivnet/tripsheet.git",
+    "ref": "87fc54d2228ccc851f67d1631d95bd83914ff917",
+    "packageName": "esbuild",
+    "from": "0.27.7",
+    "to": "0.28.1",
+    "pr_url": "https://github.com/gemivnet/tripsheet/pull/2",
+    "human_files": [
+      "src/auth/routes.ts",
+      "src/config.ts",
+      "src/itemKinds/index.ts",
+      "src/routes/trips.ts"
+    ],
+    "merged_at": "2026-11-13T05:12:27Z"
+  },
+  {
+    "id": "tldr-pages__tldr-node-client__633",
+    "ecosystem": "npm",
+    "repo": "https://github.com/tldr-pages/tldr-node-client.git",
+    "ref": "5d7b4cb91def2c9ad794239c7b3ffba52c1a82fb",
+    "packageName": "nock",
+    "from": "14.0.17",
+    "to": "15.0.6",
+    "pr_url": "https://github.com/tldr-pages/tldr-node-client/pull/633",
+    "human_files": [
+      "test/remote.spec.js"
+    ],
+    "merged_at": "2026-11-09T14:46:28Z"
+  },
+  {
+    "id": "nearform__mercurius-apollo-registry__167",
+    "ecosystem": "npm",
+    "repo": "https://github.com/nearform/mercurius-apollo-registry.git",
+    "ref": "dc0c3f505b09731f81f7a5f805e2a53b65bf2b0e",
+    "packageName": "sinon",
+    "from": "18.0.1",
+    "to": "22.1.0",
+    "pr_url": "https://github.com/nearform/mercurius-apollo-registry/pull/167",
+    "human_files": [
+      "test/index.test.js"
+    ],
+    "merged_at": "2026-10-30T11:58:44Z"
+  },
+  {
+    "id": "AloneRider-pixel__ai-quality-platform__5",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/AloneRider-pixel/ai-quality-platform.git",
+    "ref": "a1b81bb1ddce02c13287630d9da80fcd7a2643d0",
+    "packageName": "httpx",
+    "from": "0.26.0",
+    "to": "0.28.1",
+    "pr_url": "https://github.com/AloneRider-pixel/ai-quality-platform/pull/5",
+    "human_files": [
+      "mocks/mock_api.py"
+    ],
+    "merged_at": "2026-09-17T10:38:59Z"
+  },
+  {
+    "id": "philipphoehn__flopyarcade__58",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/philipphoehn/flopyarcade.git",
+    "ref": "95d413f660ab42b4dfc3866e81d0adf0a932d8a9",
+    "packageName": "numpy",
+    "from": "1.22.0",
+    "to": "2.2.6",
+    "pr_url": "https://github.com/philipphoehn/flopyarcade/pull/58",
+    "human_files": [
+      "flopyarcade/tests/conftest.py",
+      "flopyarcade/tests/test_cov_render.py",
+      "flopyarcade/tests/test_mock_rllib.py"
+    ],
+    "merged_at": "2026-11-13T21:10:25Z"
+  },
+  {
+    "id": "rhizomatics__homeassistant-repl__33",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/rhizomatics/homeassistant-repl.git",
+    "ref": "4fa52efa52bd4ab9baf605ceab95f99e50b858a2",
+    "packageName": "pandas",
+    "from": "2.3.3",
+    "to": "3.1.1",
+    "pr_url": "https://github.com/rhizomatics/homeassistant-repl/pull/33",
+    "human_files": [
+      "custom_components/ha_repl_server/complete.py",
+      "custom_components/ha_repl_server/objtree.py",
+      "custom_components/ha_repl_server/sql.py",
+      "docs_hooks/pagetree_sections.py",
+      "src/homeassistant_repl/api_objtree.py",
+      "src/homeassistant_repl/complete.py",
+      "src/homeassistant_repl/sql.py",
+      "tests/test_complete.py"
+    ],
+    "merged_at": "2026-11-13T17:20:38Z"
+  },
+  {
+    "id": "freedomofpress__pressfreedomtracker.us__2243",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/freedomofpress/pressfreedomtracker.us.git",
+    "ref": "6a867b7f9fe99b1ab2da280ec414b3a2898bc631",
+    "packageName": "marshmallow",
+    "from": "3.26.2",
+    "to": "4.3.0",
+    "pr_url": "https://github.com/freedomofpress/pressfreedomtracker.us/pull/2243",
+    "human_files": [
+      "incident/models/topic_page.py"
+    ],
+    "merged_at": "2026-07-27T15:01:48Z"
+  },
+  {
+    "id": "arduino__report-size-deltas__175",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/arduino/report-size-deltas.git",
+    "ref": "413ab4ece4ee6f98ccc7cd685b6a958fba8dad5a",
+    "packageName": "black",
+    "from": "24.3.0",
+    "to": "26.3.1",
+    "pr_url": "https://github.com/arduino/report-size-deltas/pull/175",
+    "human_files": [
+      "reportsizedeltas/tests/test_reportsizedeltas.py"
+    ],
+    "merged_at": "2026-03-17T08:34:39Z"
+  },
+  {
+    "id": "pincerhq__pincer__395",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/pincerhq/pincer.git",
+    "ref": "728f6360aed5459d5cb501c99b1dfae3b48822cf",
+    "packageName": "mypy",
+    "from": "1.20.2",
+    "to": "2.4.1",
+    "pr_url": "https://github.com/pincerhq/pincer/pull/395",
+    "human_files": [
+      "src/pincer/mcp/sandbox.py"
+    ],
+    "merged_at": "2026-11-16T11:26:24Z"
+  },
+  {
+    "id": "jorgenosberg__docstra__47",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/jorgenosberg/docstra.git",
+    "ref": "84190e5b455fec895680e5b5c36d5332fb7bf2aa",
+    "packageName": "fastapi",
+    "from": "0.136.3",
+    "to": "0.141.1",
+    "pr_url": "https://github.com/jorgenosberg/docstra/pull/47",
+    "human_files": [
+      "docstra/core/document_processing/parser.py",
+      "docstra/core/retrieval/fusion.py"
+    ],
+    "merged_at": "2026-11-16T15:49:51Z"
+  },
+  {
+    "id": "python__bench_runner__470",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/python/bench_runner.git",
+    "ref": "c733e8c2c8c0240ec398ff59b9ef314d5c148095",
+    "packageName": "rich",
+    "from": "14.0.0",
+    "to": "15.0.0",
+    "pr_url": "https://github.com/python/bench_runner/pull/470",
+    "human_files": [
+      "bench_runner/scripts/run_benchmarks.py",
+      "tests/test_run_benchmarks.py"
+    ],
+    "merged_at": "2026-11-06T19:10:03Z"
+  },
+  {
+    "id": "openaleph__ftm-analyze__702",
+    "ecosystem": "pypi",
+    "repo": "https://github.com/openaleph/ftm-analyze.git",
+    "ref": "8011a522ab044d216a332a57a93fc8909eec7075",
+    "packageName": "structlog",
+    "from": "24.4.0",
+    "to": "26.1.0",
+    "pr_url": "https://github.com/openaleph/ftm-analyze/pull/702",
+    "human_files": [
+      "ftm_analyze/__init__.py",
+      "ftm_analyze/analysis/aggregate.py",
+      "ftm_analyze/analysis/analyzer.py",
+      "ftm_analyze/analysis/extract/__init__.py",
+      "ftm_analyze/analysis/extract/juditha.py",
+      "ftm_analyze/cli.py",
+      "ftm_analyze/logic.py",
+      "ftm_analyze/settings.py",
+      "tests/test_analyze.py"
+    ],
+    "merged_at": "2026-10-31T12:31:08Z"
+  }
+]
