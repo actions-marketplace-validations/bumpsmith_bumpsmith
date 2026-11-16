@@ -33,7 +33,7 @@ jobs:
         timeout-minutes: 15
         run: BUMPSMITH_DOCKER_TESTS=1 pnpm exec vitest run test/sandbox
       - name: Software bill of materials for Bumpsmith itself
-        run: pnpm dlx @cyclonedx/cyclonedx-npm@7.0.1 --output-file bumpsmith-sbom.cdx.json --omit dev
+        run: pnpm sbom --sbom-format cyclonedx --prod > bumpsmith-sbom.cdx.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
