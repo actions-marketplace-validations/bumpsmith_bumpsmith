@@ -385,19 +385,32 @@ export function needsHumanComment(record: JobRecord, product = "Bumpsmith"): str
 }
 
 /**
- * Without a database (GitHub Action): a branch head is ours if the commit carries our
- * patch trailer and was authored by a bot account (the app or github-actions).
+ * Without a database (GitHub Action, local CLI): a branch head is ours if the commit carries
+ * our patch trailer and was authored either by a bot account (an App or github-actions) or
+ * by the very account this run is authenticated as (local runs with a personal login).
  */
 export async function headWrittenByBumpsmith(
   gh: GitHubClient,
   owner: string,
   repo: string,
   sha: string,
+  selfLogin: string | null = null,
 ): Promise<boolean> {
   const c = (await gh.request("GET /repos/{owner}/{repo}/commits/{ref}", { owner, repo, ref: sha }))
     .data;
   const author = c.author?.login ?? "";
+  if (!/\nBumpsmith-Patch-SHA256: [0-9a-f]{64}\b/.test(c.commit.message)) return false;
   return (
-    /\nBumpsmith-Patch-SHA256: [0-9a-f]{64}\b/.test(c.commit.message) && author.endsWith("[bot]")
+    author.endsWith("[bot]") ||
+    (selfLogin !== null && author.toLowerCase() === selfLogin.toLowerCase())
   );
+}
+
+/** The login a token belongs to, or null for App/installation tokens (they cannot call /user). */
+export async function tokenLogin(gh: GitHubClient): Promise<string | null> {
+  try {
+    return (await gh.request("GET /user")).data.login;
+  } catch {
+    return null;
+  }
 }

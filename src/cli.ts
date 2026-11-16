@@ -1,34 +1,42 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import semver from "semver";
+import { type ModeOptions, runAction } from "./action.ts";
 import { type BenchTask, mine, saveTasks } from "./bench/mine.ts";
 import { runBench, summarise } from "./bench/run.ts";
 import { npmApiDiff, renderApiDiff } from "./change/dts-diff.ts";
 import { buildChangeRecord } from "./change/extract.ts";
 import { CONFIG_PATHS, parseConfig } from "./config/repo-config.ts";
+import { tokenClient } from "./github/client.ts";
+import { cloneAtCommit } from "./github/clone.ts";
 import { buildImpactMap } from "./impact/impact.ts";
 import { computeDebt } from "./inventory/debt.ts";
 import { inventory } from "./inventory/inventory.ts";
 import { collectComponents, cycloneDx } from "./inventory/sbom.ts";
 import { AnthropicProvider } from "./model/anthropic.ts";
 import { ClaudeCodeProvider } from "./model/claude-code.ts";
+import { CodexProvider } from "./model/codex.ts";
 import { Ledger } from "./model/ledger.ts";
 import type { Effort, ModelProvider } from "./model/provider.ts";
 import { runJob } from "./pipeline.ts";
 import { getRelease } from "./registry/registry.ts";
 import { cleanupStale } from "./sandbox/docker.ts";
-import { runOk } from "./util/proc.ts";
+import { run, runOk } from "./util/proc.ts";
 
 const HELP = `bumpsmith — fix your code when a dependency ships a breaking change
 
 Usage (run inside your repository):
   bumpsmith fix <package>@<version> [--apply]   upgrade + fix + verify in a sandbox; writes a patch and evidence
+  bumpsmith fix <package>@<version> --github owner/repo
+                                                same, then open a pull request on GitHub from your machine
+  bumpsmith rescue --github owner/repo          fix red Dependabot/Renovate PRs with companion pull requests
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
 
-Options: --repo <dir> (default .), --provider anthropic-api|claude-code, --model, --budget <usd>
+Options: --repo <dir> (default .), --provider anthropic-api|claude-code|codex, --model, --budget <usd>
 
 Advanced:
   bumpsmith inspect <repo-dir>
@@ -43,7 +51,11 @@ Advanced:
 
 Providers:
   anthropic-api  Claude API with your ANTHROPIC_API_KEY (default when the variable is set).
-  claude-code    Your local Claude Code login (personal use on your own code).
+  claude-code    Your own Claude Code login (Pro/Max plan); counts against your plan's limits.
+  codex          Your own Codex CLI login (ChatGPT plan); counts against your plan's limits.
+  Subscription providers run the official CLI you signed in to; Bumpsmith never sees your login.
+
+GitHub (--github, rescue): uses GITHUB_TOKEN, or your GitHub CLI login (gh auth token).
 
 Requires Docker (untrusted install/test steps run in an isolated container).`;
 
@@ -74,7 +86,64 @@ async function repoConfig(dir: string) {
 function provider(name: string, model?: string): ModelProvider {
   if (name === "anthropic-api") return new AnthropicProvider(model);
   if (name === "claude-code") return new ClaudeCodeProvider(model);
+  if (name === "codex") return new CodexProvider(model);
   throw new Error(`unknown provider ${name}`);
+}
+
+async function githubToken(): Promise<string> {
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  const r = await run("gh", ["auth", "token"]).catch(() => null);
+  const t = r?.stdout.trim();
+  if (!r || r.exitCode !== 0 || !t)
+    throw new Error("set GITHUB_TOKEN or sign in with the GitHub CLI (gh auth login)");
+  return t;
+}
+
+/** Open pull requests on GitHub from this machine, through the same path as the Action. */
+async function githubRun(
+  target: string,
+  mode: ModeOptions,
+  prov: ModelProvider,
+  budget: number,
+  log: (m: string) => void,
+) {
+  const [owner, repo] = target.split("/");
+  if (!owner || !repo || !/^[\w.-]+$/.test(owner) || !/^[\w.-]+$/.test(repo))
+    throw new Error("--github expects owner/repo");
+  const token = await githubToken();
+  const gh = tokenClient(token, { userAgent: "bumpsmith-cli", log });
+  const work = await mkdtemp(join(tmpdir(), "bumpsmith-gh-"));
+  try {
+    const rows = await runAction({
+      gh,
+      owner,
+      repo,
+      event: "workflow_dispatch",
+      payload: {},
+      workDir: work,
+      maxCostUsd: budget,
+      mode,
+      checkout: (dest, sha) => cloneAtCommit({ token, fullName: `${owner}/${repo}`, sha, dest }),
+      upgrade: (t, repoDir, runsDir, config) =>
+        runJob(
+          {
+            repo: repoDir,
+            packageName: t.packageName,
+            to: t.to,
+            from: t.from ?? undefined,
+            ecosystem: t.ecosystem,
+          },
+          { provider: prov, runsDir, budgetUsd: budget, config, log },
+        ),
+    });
+    if (!rows.length) log("nothing to do: no red Dependabot/Renovate pull requests");
+    for (const r of rows)
+      log(
+        `${r.target.packageName} ${r.target.from ?? "?"} -> ${r.target.to}: ${r.state} (${r.confidence ?? "n/a"}) ${r.result}${r.prUrl ? ` ${r.prUrl}` : ""}`,
+      );
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 }
 
 async function main() {
@@ -87,6 +156,7 @@ async function main() {
       from: { type: "string" },
       to: { type: "string" },
       provider: { type: "string" },
+      github: { type: "string" },
       apply: { type: "boolean", default: false },
       model: { type: "string" },
       budget: { type: "string", default: "8" },
@@ -108,8 +178,23 @@ async function main() {
   const log = (m: string) => process.stderr.write(`${m}\n`);
   const prov = () => provider(values.provider ?? defaultProvider(), values.model);
   switch (cmd) {
+    case "rescue": {
+      if (!values.github) throw new Error("usage: bumpsmith rescue --github owner/repo");
+      await githubRun(values.github, { mode: "rescue" }, prov(), Number(values.budget), log);
+      return;
+    }
     case "fix": {
       const { name, version } = parseSpec(args[0]);
+      if (values.github) {
+        await githubRun(
+          values.github,
+          { mode: "fix", package: name, version },
+          prov(),
+          Number(values.budget),
+          log,
+        );
+        return;
+      }
       const dir = resolve(values.repo ?? ".");
       const runsDir = join(dir, ".bumpsmith", "runs");
       const job = await runJob(

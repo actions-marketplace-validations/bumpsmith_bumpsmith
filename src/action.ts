@@ -16,7 +16,12 @@ import { join } from "node:path";
 import { CONFIG_PATHS, parseConfig, type RepoConfig } from "./config/repo-config.ts";
 import { type GitHubClient, tokenClient } from "./github/client.ts";
 import { cloneAtCommit } from "./github/clone.ts";
-import { headWrittenByBumpsmith, needsHumanComment, publishPatch } from "./github/publish/core.ts";
+import {
+  headWrittenByBumpsmith,
+  needsHumanComment,
+  publishPatch,
+  tokenLogin,
+} from "./github/publish/core.ts";
 import { AnthropicProvider } from "./model/anthropic.ts";
 import { type JobRecord, runJob } from "./pipeline.ts";
 import { BOT_AUTHORS, parseBotPr } from "./rescue/bot-pr.ts";
@@ -26,7 +31,8 @@ import { sha256Hex } from "./util/hash.ts";
 
 // ------------------------------------------------------------------ workflow commands
 
-const esc = (s: string) => s.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+export const esc = (s: string) =>
+  s.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
 const log = (m: string) => process.stdout.write(`${maskSecrets(m).text}\n`);
 const notice = (m: string) => log(`::notice::${esc(m)}`);
 const warning = (m: string) => log(`::warning::${esc(m)}`);
@@ -82,24 +88,38 @@ export interface Target {
 }
 
 /** Work out what to upgrade from the event. Returns null when there is nothing to do. */
+export interface ModeOptions {
+  mode: "rescue" | "fix";
+  package?: string;
+  version?: string;
+  ecosystem?: "npm" | "pypi";
+}
+
+export function modeFromInputs(): ModeOptions {
+  return {
+    mode: input("mode", "rescue") === "fix" ? "fix" : "rescue",
+    package: input("package"),
+    version: input("version"),
+    ecosystem: input("ecosystem", "npm") === "pypi" ? "pypi" : "npm",
+  };
+}
+
 export async function resolveTargets(
   gh: GitHubClient,
   owner: string,
   repo: string,
   event: string,
   payload: Record<string, any>,
+  opts: ModeOptions = modeFromInputs(),
 ): Promise<Target[]> {
-  const mode = input("mode", "rescue");
-  if (mode === "fix") {
-    const pkg = input("package");
-    const version = input("version");
-    if (!pkg || !version) throw new Error("mode: fix needs the package and version inputs");
+  if (opts.mode === "fix") {
+    if (!opts.package || !opts.version) throw new Error("mode fix needs a package and a version");
     return [
       {
-        packageName: pkg,
+        packageName: opts.package,
         from: null,
-        to: version,
-        ecosystem: input("ecosystem", "npm") === "pypi" ? "pypi" : "npm",
+        to: opts.version,
+        ecosystem: opts.ecosystem ?? "npm",
         rescueOf: null,
       },
     ];
@@ -174,6 +194,7 @@ export interface ActionDeps {
   payload: Record<string, any>;
   workDir: string;
   maxCostUsd: number;
+  mode?: ModeOptions;
   /** Fetch the default branch at `sha` into `dest` (no token ever reaches the sandbox). */
   checkout(dest: string, sha: string): Promise<{ removedSymlinks: string[] }>;
   /** Run the analyse → fix → verify → review pipeline. */
@@ -201,9 +222,10 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
     })
   ).data.commit.sha;
   const config = await readRepoConfig(gh, owner, repo, baseSha);
-  const targets = await resolveTargets(gh, owner, repo, d.event, d.payload);
+  const targets = await resolveTargets(gh, owner, repo, d.event, d.payload, d.mode);
   const rows: ActionRow[] = [];
   if (!targets.length) return rows;
+  const selfLogin = await tokenLogin(gh);
   const open = (
     await gh.request("GET /repos/{owner}/{repo}/pulls", {
       owner,
@@ -267,7 +289,7 @@ export async function runAction(d: ActionDeps): Promise<ActionRow[]> {
         jobId: record.id,
         commandPrefix: "bumpsmith",
         rescueOf: t.rescueOf,
-        isOurHead: (sha) => headWrittenByBumpsmith(gh, owner, repo, sha),
+        isOurHead: (sha) => headWrittenByBumpsmith(gh, owner, repo, sha, selfLogin),
       });
       if (r.state === "published") {
         row.result = `${r.updated ? "updated" : "opened"} #${r.prNumber}${r.draft ? " (draft)" : ""}`;
@@ -369,11 +391,3 @@ export async function main(): Promise<void> {
     await rm(work, { recursive: true, force: true });
   }
 }
-
-if (process.env.GITHUB_ACTIONS === "true" && !process.env.VITEST)
-  main().catch((err: unknown) => {
-    process.stdout.write(
-      `::error::${esc(maskSecrets(err instanceof Error ? err.message : String(err)).text)}\n`,
-    );
-    process.exitCode = 1;
-  });

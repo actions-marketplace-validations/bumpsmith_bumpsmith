@@ -60,7 +60,7 @@ interface ClaudeResult {
 
 const MCP_NAME = "bumpsmith";
 
-async function startToolServer(
+export async function startToolServer(
   tools: AgentTool[],
 ): Promise<{ url: string; token: string; server: Server }> {
   const token = randomBytes(24).toString("hex");

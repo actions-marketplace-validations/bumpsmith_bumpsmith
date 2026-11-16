@@ -55,8 +55,29 @@ npx bumpsmith fix zod@4.1.0            # upgrade + fix + verify; writes a patch 
 npx bumpsmith fix zod@4.1.0 --apply    # ...and stage the patch if it was verified
 ```
 
-Model access: set `ANTHROPIC_API_KEY`, or use `--provider claude-code` to use your local
-Claude Code login for personal use. Results go to `.bumpsmith/` (add it to `.gitignore`).
+Model access, pick one:
+
+| Provider                                                  | What you need                                                            | Billing            |
+| --------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
+| `anthropic-api` (default when `ANTHROPIC_API_KEY` is set) | an Anthropic API key                                                     | pay per use        |
+| `--provider claude-code`                                  | the official Claude Code CLI, signed in with your Pro/Max plan           | your plan's limits |
+| `--provider codex`                                        | the official Codex CLI, signed in with your ChatGPT plan (`codex login`) | your plan's limits |
+
+Subscription providers run the official CLI you signed in to; Bumpsmith never sees or
+stores your login, and switches off the CLI's own shell, browser and web tools so the model
+can only use Bumpsmith's confined tools. They are for your own use on your own machine.
+Results go to `.bumpsmith/` (add it to `.gitignore`).
+
+Open pull requests straight from your machine (uses `GITHUB_TOKEN` or your `gh` login):
+
+```sh
+npx bumpsmith rescue --github owner/repo --provider claude-code     # fix red Dependabot/Renovate PRs
+npx bumpsmith fix zod@4.1.0 --github owner/repo --provider codex     # one upgrade, as a PR
+```
+
+Pull requests opened this way come from your account, so your CI runs on them. GitHub marks
+commits "Verified" only when they are made by a GitHub App, so use the Action with an App
+token if you want signed commits.
 
 ## How Bumpsmith stays safe
 

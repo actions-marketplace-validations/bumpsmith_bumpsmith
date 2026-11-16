@@ -21,7 +21,7 @@ const common = {
   },
   logLevel: "info",
 };
-await build({ ...common, entryPoints: ["src/action.ts"], outfile: "dist/action.js" });
+await build({ ...common, entryPoints: ["src/action-entry.ts"], outfile: "dist/action.js" });
 await build({
   ...common,
   entryPoints: ["src/cli.ts"],
