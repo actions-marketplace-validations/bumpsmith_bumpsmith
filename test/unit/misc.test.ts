@@ -244,3 +244,27 @@ describe("subscription sign-in detection", () => {
     expect(SIGN_IN_RE.test("TypeError: cannot read properties of undefined")).toBe(false);
   });
 });
+
+describe("verification gate", () => {
+  it("is unverified without a passing install and at least one real check after the upgrade", async () => {
+    const { isVerified } = await import("../../src/pipeline.ts");
+    const check = (name: string, passed: boolean) =>
+      ({
+        name,
+        passed,
+        command: "",
+        exit_code: passed ? 0 : 1,
+        duration_ms: 1,
+        timed_out: false,
+        output_tail: "",
+      }) as never;
+    const cmp = (name: string, after: boolean) =>
+      ({ name, baseline: true, after, flaky: false, regression: false }) as never;
+    const verdict = (c: never[]) => ({ passed: true, comparisons: c }) as never;
+    expect(isVerified([check("install", false)], verdict([]))).toBe(false);
+    expect(isVerified([check("install", true)], verdict([cmp("install", true)]))).toBe(false);
+    expect(
+      isVerified([check("install", true)], verdict([cmp("install", true), cmp("test", true)])),
+    ).toBe(true);
+  });
+});

@@ -360,7 +360,7 @@ export class DockerSandbox implements Sandbox {
         "PIP_CERT=/etc/bumpsmith/ca.crt",
         "REQUESTS_CA_BUNDLE=/etc/bumpsmith/ca.crt",
         "SSL_CERT_FILE=/etc/bumpsmith/ca.crt",
-        "UV_NATIVE_TLS=1",
+        "UV_SYSTEM_CERTS=1",
       ].flatMap((e) => ["-e", e]),
       image,
       "sleep",

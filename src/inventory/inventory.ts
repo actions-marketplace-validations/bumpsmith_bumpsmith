@@ -177,7 +177,10 @@ function parseRequirements(text: string): Record<string, string> {
 async function inventoryPython(root: string): Promise<Inventory> {
   const files = await readdir(root);
   const lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock"].filter((f) => files.includes(f));
-  const reqFiles = files.filter((f) => /^requirements.*\.txt$/.test(f));
+  // requirements.txt, requirements-dev.txt, dev-requirements.txt, ci-requirements.txt, ...
+  const reqFiles = files.filter((f) => /requirements[^/]*\.txt$/.test(f)).sort();
+  // pip-tools sources (requirements.in) are manifests too: they are what humans edit.
+  const inFiles = files.filter((f) => /requirements[^/]*\.in$/.test(f)).sort();
   const pyproject = await read(join(root, "pyproject.toml"));
   const pm: PackageManager = files.includes("uv.lock")
     ? "uv"
@@ -195,19 +198,21 @@ async function inventoryPython(root: string): Promise<Inventory> {
       if (m[1]) deps[m[1].replace(/\[.*\]/, "").toLowerCase()] = (m[2] ?? "").trim();
   }
 
-  const installArgv =
-    pm === "uv"
-      ? ["uv", "sync", "--all-extras"]
-      : pm === "poetry"
-        ? ["poetry", "install", "--no-interaction"]
-        : reqFiles.length
-          ? pipViaUv(reqFiles)
-          : ["pip", "install", "-e", ".[test]"];
   const hasTests =
     files.includes("tests") ||
     files.includes("test") ||
     /pytest/.test(pyproject ?? "") ||
     "pytest" in deps;
+  // Projects often keep pytest out of their requirements (CI installs it separately).
+  const ensurePytest = pm === "pip" && hasTests && !("pytest" in deps);
+  const installArgv =
+    pm === "uv"
+      ? UV_SYNC
+      : pm === "poetry"
+        ? ["poetry", "install", "--no-interaction"]
+        : reqFiles.length
+          ? pipViaUv(reqFiles, ensurePytest)
+          : withPytest(["pip", "install", "-e", ".[test]"], ensurePytest);
   const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
   const checks: CheckCommand[] = [{ name: "install", argv: installArgv }];
   if (hasTests)
@@ -217,7 +222,7 @@ async function inventoryPython(root: string): Promise<Inventory> {
     root,
     ecosystem: "pypi",
     packageManager: pm,
-    manifests: ["pyproject.toml", ...reqFiles].filter((f) => files.includes(f)),
+    manifests: ["pyproject.toml", ...reqFiles, ...inFiles].filter((f) => files.includes(f)),
     lockfiles,
     dependencies: deps,
     checks,
@@ -230,21 +235,43 @@ async function inventoryPython(root: string): Promise<Inventory> {
 }
 
 /** Detect ecosystem, package manager, dependencies and check commands (INV-1, INV-4). */
+const sh = (script: string, args: string[] = []) => ["sh", "-c", script, "sh", ...args];
+
+function withPytest(argv: string[], ensure: boolean): string[] {
+  if (!ensure) return argv;
+  const quoted = argv.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+  return sh(`${quoted} && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }`);
+}
+
 /**
  * Resolve requirements with uv (seconds, and a fast failure on conflicts), then let pip
  * install exactly that list without resolving again. Plain `pip install -r` can backtrack
  * through hundreds of versions for many minutes on large requirement files. pip still does
  * the install, so packages land where pip puts them (a user install in the sandbox).
  */
-export function pipViaUv(reqFiles: string[]): string[] {
-  return [
-    "sh",
-    "-c",
-    'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt',
-    "sh",
-    ...reqFiles,
-  ];
+export function pipViaUv(reqFiles: string[], ensurePytest = false): string[] {
+  const pytest = ensurePytest
+    ? " && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }"
+    : "";
+  return sh(
+    `uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
+    reqFiles,
+  );
 }
+
+/**
+ * `uv sync`, and when the project pins a different uv (`required-version`), install that
+ * uv from PyPI through the mirror and sync with it instead.
+ */
+export const UV_SYNC = sh(
+  [
+    "out=$(uv sync --all-extras 2>&1); rc=$?; printf '%s\\n' \"$out\"",
+    "[ $rc -eq 0 ] && exit 0",
+    "spec=$(printf '%s' \"$out\" | sed -n 's/.*Required uv version `\\([^`]*\\)`.*/\\1/p' | head -n1)",
+    '[ -n "$spec" ] || exit $rc',
+    'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras',
+  ].join("\n"),
+);
 
 export async function inventory(root: string): Promise<Inventory> {
   const pkgText = await read(join(root, "package.json"));

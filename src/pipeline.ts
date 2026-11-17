@@ -226,6 +226,12 @@ export function nonRegistryDependencies(packageJsonText: string): string[] {
   return out;
 }
 
+/** True when the dependencies installed and at least one real check passed after the upgrade. */
+export function isVerified(baseline: CheckResult[], verdict: Verdict): boolean {
+  if (!baseline.find((c) => c.name === "install")?.passed) return false;
+  return verdict.comparisons.some((c) => c.name !== "install" && c.after === true);
+}
+
 export function confidenceBand(r: {
   baseline: CheckResult[];
   verdict: Verdict;
@@ -396,11 +402,9 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       job.notes.push(`Skipped checks that timed out at baseline: ${timedOut.join(", ")}.`);
 
     // Bump the version inside the sandbox
-    const manifest =
-      eco === "npm"
-        ? "package.json"
-        : (inv.manifests.find((m) => m.endsWith(".txt")) ?? "pyproject.toml");
-    const cur = await sb.exec(["cat", "--", manifest], { cwd: wd });
+    const manifest = "package.json";
+    const cur =
+      eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
     if (eco === "npm") {
       const info = npmDepInfo(cur.stdout, input.packageName);
       if (!info) throw new Error(`could not find ${input.packageName} in ${manifest}`);
@@ -474,21 +478,49 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           `could not install ${input.packageName}@${input.to}: ${(up.stderr || up.stdout).slice(-1500)}`,
         );
     } else {
-      const first = bumpFile(eco, manifest, cur.stdout, input.packageName, input.to);
-      if (!first) throw new Error(`could not find ${input.packageName} in ${manifest}`);
-      let bumped: string = first;
+      // Every manifest that declares the package moves together (requirements*.txt,
+      // requirements*.in, pyproject.toml); one stale file would reinstall the old version.
+      const extras: { name: string; to: string }[] = [];
       for (const extra of input.alsoUpgrade ?? []) {
         const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
         const ok =
           xrel &&
           releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
-        const next: string | null = ok
-          ? bumpFile(eco, manifest, bumped, extra.name, extra.to)
-          : null;
-        if (next) bumped = next;
+        if (ok) extras.push(extra);
         else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
       }
-      await sb.exec(["sh", "-c", 'cat > "$1"', "sh", manifest], { input: bumped, cwd: wd });
+      const touched: string[] = [];
+      for (const m of inv.manifests) {
+        const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
+        let next = bumpFile(eco, m, text, input.packageName, input.to);
+        if (!next) continue;
+        for (const x of extras) next = bumpFile(eco, m, next, x.name, x.to) ?? next;
+        await sb.exec(["sh", "-c", 'cat > "$1"', "sh", m], { input: next, cwd: wd });
+        touched.push(m);
+      }
+      if (!touched.length)
+        throw new Error(
+          `could not find ${input.packageName} in ${inv.manifests.join(", ") || "any manifest"}`,
+        );
+      // pip-tools: hash-pinned requirements compiled from a .in file are regenerated from
+      // it (uv keeps every other pin as it was); editing the version alone breaks the hashes.
+      for (const m of touched.filter((f) => f.endsWith(".txt"))) {
+        const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
+        if (!text.includes("--hash=")) continue;
+        const source = m.replace(/\.txt$/, ".in");
+        if (!inv.manifests.includes(source)) {
+          job.notes.push(
+            `${m} pins hashes but has no ${source} to compile from; its hashes were not regenerated.`,
+          );
+          continue;
+        }
+        const r = await sb.exec(
+          ["uv", "pip", "compile", "--quiet", "--generate-hashes", source, "-o", m],
+          { network: true, timeoutSec: 10 * 60, cwd: wd },
+        );
+        if (r.exitCode !== 0)
+          job.notes.push(`Could not recompile ${m} from ${source}: ${r.stderr.slice(-300)}`);
+      }
     }
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
@@ -651,8 +683,18 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       impact: job.impact,
     });
 
+    // Never claim more than was proven: with no check beyond install passing after the
+    // upgrade (or no install at all), the change is unverified, whatever the review says.
+    const verified = isVerified(job.baseline, verdict);
+    if (!verified) {
+      job.confidence = "low";
+      job.notes.push(
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check.",
+      );
+    }
+
     if (job.rules.some((r) => r.severity === "block")) job.state = "blocked_policy";
-    else if (!verdict.passed) job.state = "needs_human";
+    else if (!verdict.passed || !verified) job.state = "needs_human";
     else if (!patch.trim()) job.state = "safe";
     else if (job.review && job.review.verdict !== "approve") job.state = "needs_human";
     else job.state = "ready";

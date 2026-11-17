@@ -32,20 +32,56 @@ export function bumpPackageJson(text: string, name: string, to: string): string 
   return `${JSON.stringify(pkg, null, indent)}${text.endsWith("\n") ? "\n" : ""}`;
 }
 
-/** Update a requirements.txt or pyproject dependency line for `name`. */
+const OP = "(?:===|==|~=|>=|<=|!=|>|<)";
+
+/** Compare dotted numeric versions (enough for specifier bounds; ignores pre-release tags). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0);
+  const pb = b.split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return Math.sign(d);
+  }
+  return 0;
+}
+
+/** Keep `<`, `<=` and `!=` clauses that still admit `to`; drop the rest. */
+function keptBounds(clauses: { op: string; v: string }[], to: string): string {
+  return clauses
+    .slice(1)
+    .filter(({ op, v }) => {
+      if (op === "<") return compareVersions(to, v) < 0;
+      if (op === "<=") return compareVersions(to, v) <= 0;
+      if (op === "!=") return v !== to;
+      return false;
+    })
+    .map(({ op, v }) => `,${op}${v}`)
+    .join("");
+}
+
+/**
+ * Update a requirements / requirements.in / pyproject dependency for `name`. Handles a
+ * whole specifier set (">=3.2,<4"), environment markers ("; python_version...") and
+ * pip-compile line continuations ("pkg==1.0 \\" followed by --hash lines).
+ */
 export function bumpPythonText(text: string, name: string, to: string): string | null {
   const escaped = name.replace(/[-_.]/g, "[-_.]");
+  const clause = `\\s*${OP}\\s*[^"'\\s\\\\;#,]+`;
   const re = new RegExp(
-    `(^|["'\\s])(${escaped})(\\[[^\\]]*\\])?\\s*(==|~=|>=|<=|>|<|!=)[^"'\\n;#]*`,
+    `(^|["'\\s])(${escaped})(\\[[^\\]]*\\])?(${clause}(?:\\s*,${clause})*)`,
     "gim",
   );
   let changed = false;
   const out = text.replace(
     re,
-    (_m, lead: string, pkg: string, extras: string | undefined, op: string) => {
+    (_m, lead: string, pkg: string, extras: string | undefined, spec: string) => {
+      const clauses = [...spec.matchAll(new RegExp(`(${OP})\\s*([^"'\\s\\\\;#,]+)`, "g"))].map(
+        (m) => ({ op: m[1] as string, v: m[2] as string }),
+      );
+      const first = clauses[0]?.op ?? "==";
+      const newOp = first === "~=" || first === ">=" ? first : "==";
       changed = true;
-      const newOp = op === "~=" ? "~=" : op === ">=" ? ">=" : "==";
-      return `${lead}${pkg}${extras ?? ""}${newOp}${to}`;
+      return `${lead}${pkg}${extras ?? ""}${newOp}${to}${keptBounds(clauses, to)}`;
     },
   );
   return changed ? out : null;

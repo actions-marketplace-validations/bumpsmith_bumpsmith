@@ -256831,15 +256831,15 @@ function handleCatchall(proms, input3, payload, ctx, def, inst, abortEarly) {
 var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   $ZodType.init(inst, def);
   const desc = Object.getOwnPropertyDescriptor(def, "shape");
-  const sh = desc?.get ? desc.get.raw : def.shape ?? {};
-  if (sh) {
+  const sh2 = desc?.get ? desc.get.raw : def.shape ?? {};
+  if (sh2) {
     const get = () => {
-      const newSh = { ...sh };
+      const newSh = { ...sh2 };
       Object.defineProperty(def, "shape", { value: newSh });
       get.raw = newSh;
       return newSh;
     };
-    get.raw = sh;
+    get.raw = sh2;
     Object.defineProperty(def, "shape", { get });
   }
   const _normalized = cached(() => normalizeDef(def));
@@ -258380,10 +258380,10 @@ function isRecursive(inst, stack, resolve5) {
         result = answer;
     }
   };
-  const shape = (sh, spread) => {
+  const shape = (sh2, spread) => {
     let answer = NONE;
-    for (const key of Reflect.ownKeys(sh)) {
-      const desc = Object.getOwnPropertyDescriptor(sh, key);
+    for (const key of Reflect.ownKeys(sh2)) {
+      const desc = Object.getOwnPropertyDescriptor(sh2, key);
       if (spread && !desc.enumerable)
         continue;
       const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve5) : NONE;
@@ -302709,19 +302709,42 @@ function bumpPackageJson(text, name, to) {
   const indent = /\n(\s+)"/.exec(text)?.[1] ?? "  ";
   return `${JSON.stringify(pkg, null, indent)}${text.endsWith("\n") ? "\n" : ""}`;
 }
+var OP = "(?:===|==|~=|>=|<=|!=|>|<)";
+function compareVersions(a, b) {
+  const pa = a.split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0);
+  const pb = b.split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return Math.sign(d);
+  }
+  return 0;
+}
+function keptBounds(clauses, to) {
+  return clauses.slice(1).filter(({ op, v }) => {
+    if (op === "<") return compareVersions(to, v) < 0;
+    if (op === "<=") return compareVersions(to, v) <= 0;
+    if (op === "!=") return v !== to;
+    return false;
+  }).map(({ op, v }) => `,${op}${v}`).join("");
+}
 function bumpPythonText(text, name, to) {
   const escaped = name.replace(/[-_.]/g, "[-_.]");
+  const clause = `\\s*${OP}\\s*[^"'\\s\\\\;#,]+`;
   const re2 = new RegExp(
-    `(^|["'\\s])(${escaped})(\\[[^\\]]*\\])?\\s*(==|~=|>=|<=|>|<|!=)[^"'\\n;#]*`,
+    `(^|["'\\s])(${escaped})(\\[[^\\]]*\\])?(${clause}(?:\\s*,${clause})*)`,
     "gim"
   );
   let changed = false;
   const out = text.replace(
     re2,
-    (_m, lead, pkg, extras, op) => {
+    (_m, lead, pkg, extras, spec) => {
+      const clauses = [...spec.matchAll(new RegExp(`(${OP})\\s*([^"'\\s\\\\;#,]+)`, "g"))].map(
+        (m) => ({ op: m[1], v: m[2] })
+      );
+      const first = clauses[0]?.op ?? "==";
+      const newOp = first === "~=" || first === ">=" ? first : "==";
       changed = true;
-      const newOp = op === "~=" ? "~=" : op === ">=" ? ">=" : "==";
-      return `${lead}${pkg}${extras ?? ""}${newOp}${to}`;
+      return `${lead}${pkg}${extras ?? ""}${newOp}${to}${keptBounds(clauses, to)}`;
     }
   );
   return changed ? out : null;
@@ -302925,7 +302948,8 @@ function parseRequirements(text) {
 async function inventoryPython(root) {
   const files = await readdir4(root);
   const lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock"].filter((f) => files.includes(f));
-  const reqFiles = files.filter((f) => /^requirements.*\.txt$/.test(f));
+  const reqFiles = files.filter((f) => /requirements[^/]*\.txt$/.test(f)).sort();
+  const inFiles = files.filter((f) => /requirements[^/]*\.in$/.test(f)).sort();
   const pyproject = await read(join9(root, "pyproject.toml"));
   const pm = files.includes("uv.lock") ? "uv" : files.includes("poetry.lock") ? "poetry" : "pip";
   const deps = {};
@@ -302936,8 +302960,9 @@ async function inventoryPython(root) {
     for (const m of block.matchAll(/["']([A-Za-z0-9_.\-[\]]+)\s*([^"']*)["']/g))
       if (m[1]) deps[m[1].replace(/\[.*\]/, "").toLowerCase()] = (m[2] ?? "").trim();
   }
-  const installArgv = pm === "uv" ? ["uv", "sync", "--all-extras"] : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(reqFiles) : ["pip", "install", "-e", ".[test]"];
   const hasTests = files.includes("tests") || files.includes("test") || /pytest/.test(pyproject ?? "") || "pytest" in deps;
+  const ensurePytest = pm === "pip" && hasTests && !("pytest" in deps);
+  const installArgv = pm === "uv" ? UV_SYNC : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(reqFiles, ensurePytest) : withPytest(["pip", "install", "-e", ".[test]"], ensurePytest);
   const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
   const checks = [{ name: "install", argv: installArgv }];
   if (hasTests)
@@ -302946,7 +302971,7 @@ async function inventoryPython(root) {
     root,
     ecosystem: "pypi",
     packageManager: pm,
-    manifests: ["pyproject.toml", ...reqFiles].filter((f) => files.includes(f)),
+    manifests: ["pyproject.toml", ...reqFiles, ...inFiles].filter((f) => files.includes(f)),
     lockfiles,
     dependencies: deps,
     checks,
@@ -302957,15 +302982,28 @@ async function inventoryPython(root) {
     agentsMd: await read(join9(root, "AGENTS.md"))
   };
 }
-function pipViaUv(reqFiles) {
-  return [
-    "sh",
-    "-c",
-    'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt',
-    "sh",
-    ...reqFiles
-  ];
+var sh = (script, args = []) => ["sh", "-c", script, "sh", ...args];
+function withPytest(argv, ensure) {
+  if (!ensure) return argv;
+  const quoted = argv.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+  return sh(`${quoted} && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }`);
 }
+function pipViaUv(reqFiles, ensurePytest = false) {
+  const pytest = ensurePytest ? " && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }" : "";
+  return sh(
+    `uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
+    reqFiles
+  );
+}
+var UV_SYNC = sh(
+  [
+    `out=$(uv sync --all-extras 2>&1); rc=$?; printf '%s\\n' "$out"`,
+    "[ $rc -eq 0 ] && exit 0",
+    "spec=$(printf '%s' \"$out\" | sed -n 's/.*Required uv version `\\([^`]*\\)`.*/\\1/p' | head -n1)",
+    '[ -n "$spec" ] || exit $rc',
+    'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras'
+  ].join("\n")
+);
 async function inventory(root) {
   const pkgText = await read(join9(root, "package.json"));
   if (pkgText) return inventoryNode(root, JSON.parse(pkgText));
@@ -303497,7 +303535,7 @@ var DockerSandbox = class _DockerSandbox {
         "PIP_CERT=/etc/bumpsmith/ca.crt",
         "REQUESTS_CA_BUNDLE=/etc/bumpsmith/ca.crt",
         "SSL_CERT_FILE=/etc/bumpsmith/ca.crt",
-        "UV_NATIVE_TLS=1"
+        "UV_SYSTEM_CERTS=1"
       ].flatMap((e) => ["-e", e]),
       image,
       "sleep",
@@ -303843,6 +303881,10 @@ function nonRegistryDependencies(packageJsonText) {
   }
   return out;
 }
+function isVerified(baseline, verdict) {
+  if (!baseline.find((c) => c.name === "install")?.passed) return false;
+  return verdict.comparisons.some((c) => c.name !== "install" && c.after === true);
+}
 function confidenceBand(r) {
   const hasTests = r.baseline.some((c) => c.name === "test");
   const baselineHealthy = r.baseline.every((c) => c.passed);
@@ -303984,8 +304026,8 @@ async function runJob(input3, opts) {
     const checks = inv.checks.filter((c) => !timedOut.includes(c.name));
     if (timedOut.length)
       job.notes.push(`Skipped checks that timed out at baseline: ${timedOut.join(", ")}.`);
-    const manifest = eco === "npm" ? "package.json" : inv.manifests.find((m) => m.endsWith(".txt")) ?? "pyproject.toml";
-    const cur = await sb.exec(["cat", "--", manifest], { cwd: wd });
+    const manifest = "package.json";
+    const cur = eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
     if (eco === "npm") {
       const info = npmDepInfo(cur.stdout, input3.packageName);
       if (!info) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
@@ -304055,17 +304097,43 @@ async function runJob(input3, opts) {
           `could not install ${input3.packageName}@${input3.to}: ${(up.stderr || up.stdout).slice(-1500)}`
         );
     } else {
-      const first = bumpFile(eco, manifest, cur.stdout, input3.packageName, input3.to);
-      if (!first) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
-      let bumped = first;
+      const extras = [];
       for (const extra of input3.alsoUpgrade ?? []) {
         const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
         const ok = xrel && releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
-        const next = ok ? bumpFile(eco, manifest, bumped, extra.name, extra.to) : null;
-        if (next) bumped = next;
+        if (ok) extras.push(extra);
         else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
       }
-      await sb.exec(["sh", "-c", 'cat > "$1"', "sh", manifest], { input: bumped, cwd: wd });
+      const touched = [];
+      for (const m of inv.manifests) {
+        const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
+        let next = bumpFile(eco, m, text, input3.packageName, input3.to);
+        if (!next) continue;
+        for (const x of extras) next = bumpFile(eco, m, next, x.name, x.to) ?? next;
+        await sb.exec(["sh", "-c", 'cat > "$1"', "sh", m], { input: next, cwd: wd });
+        touched.push(m);
+      }
+      if (!touched.length)
+        throw new Error(
+          `could not find ${input3.packageName} in ${inv.manifests.join(", ") || "any manifest"}`
+        );
+      for (const m of touched.filter((f) => f.endsWith(".txt"))) {
+        const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
+        if (!text.includes("--hash=")) continue;
+        const source = m.replace(/\.txt$/, ".in");
+        if (!inv.manifests.includes(source)) {
+          job.notes.push(
+            `${m} pins hashes but has no ${source} to compile from; its hashes were not regenerated.`
+          );
+          continue;
+        }
+        const r = await sb.exec(
+          ["uv", "pip", "compile", "--quiet", "--generate-hashes", source, "-o", m],
+          { network: true, timeoutSec: 10 * 60, cwd: wd }
+        );
+        if (r.exitCode !== 0)
+          job.notes.push(`Could not recompile ${m} from ${source}: ${r.stderr.slice(-300)}`);
+      }
     }
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
@@ -304215,8 +304283,15 @@ async function runJob(input3, opts) {
       review: job.review,
       impact: job.impact
     });
+    const verified = isVerified(job.baseline, verdict);
+    if (!verified) {
+      job.confidence = "low";
+      job.notes.push(
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      );
+    }
     if (job.rules.some((r) => r.severity === "block")) job.state = "blocked_policy";
-    else if (!verdict.passed) job.state = "needs_human";
+    else if (!verdict.passed || !verified) job.state = "needs_human";
     else if (!patch.trim()) job.state = "safe";
     else if (job.review && job.review.verdict !== "approve") job.state = "needs_human";
     else job.state = "ready";

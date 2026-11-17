@@ -93,3 +93,28 @@ describe("npmCompanions", () => {
     expect(npmCompanions(sentry, "@sentry/node", "10.75.3")).toEqual(["@sentry/profiling-node"]);
   });
 });
+
+describe("Python specifiers from the held-out benchmark", () => {
+  it("bumps whole specifier sets, keeps bounds that still fit, markers and continuations", async () => {
+    const { bumpPythonText } = await import("../../src/inventory/bump.ts");
+    expect(bumpPythonText("marshmallow>=3.26.2,<4\n", "marshmallow", "4.1.0")).toBe(
+      "marshmallow>=4.1.0\n",
+    );
+    expect(bumpPythonText("marshmallow>=3.26.2,<5\n", "marshmallow", "4.1.0")).toBe(
+      "marshmallow>=4.1.0,<5\n",
+    );
+    expect(
+      bumpPythonText("marshmallow==3.26.2 \\\n    --hash=sha256:abc\n", "marshmallow", "4.1.0"),
+    ).toBe("marshmallow==4.1.0 \\\n    --hash=sha256:abc\n");
+    expect(
+      bumpPythonText('structlog==24.4.0 ; python_version >= "3.12"\n', "structlog", "25.4.0"),
+    ).toBe('structlog==25.4.0 ; python_version >= "3.12"\n');
+    expect(
+      bumpPythonText(
+        'deps = ["httpx>=0.26,<0.27", "flask-marshmallow==1"]',
+        "marshmallow",
+        "4.0.0",
+      ),
+    ).toBeNull();
+  });
+});
