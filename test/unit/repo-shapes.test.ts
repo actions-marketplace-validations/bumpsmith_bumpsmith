@@ -316,3 +316,62 @@ describe("git dependencies", async () => {
     expect(cfg).toContain("insteadOf = https://github.com/osbuild/images.git");
   });
 });
+
+describe("transitive (lockfile-only) updates", async () => {
+  const { lockedVersions, lockfileUpdateArgv } = await import("../../src/inventory/bump.ts");
+  it("reads locked versions from every lockfile format", () => {
+    expect(
+      lockedVersions(
+        '"node_modules/qs": {\n      "version": "6.11.0",\n "node_modules/express/node_modules/qs": { "version": "6.5.2"',
+        "qs",
+      ),
+    ).toEqual(["6.5.2", "6.11.0"]);
+    expect(
+      lockedVersions("packages:\n  qs@6.11.0:\n    resolution: x\n  /qs@6.9.1:", "qs"),
+    ).toEqual(["6.9.1", "6.11.0"]);
+    expect(
+      lockedVersions('qs@^6.5.2, qs@~6.5.2:\n  version "6.5.3"\n  resolved "x"\n', "qs"),
+    ).toEqual(["6.5.3"]);
+    expect(
+      lockedVersions('"qs@npm:^6.5.2":\n  version: 6.13.0\n  resolution: "qs@npm:6.13.0"', "qs"),
+    ).toContain("6.13.0");
+    expect(
+      lockedVersions('[[package]]\nname = "certifi"\nversion = "2024.2.2"\n', "certifi"),
+    ).toEqual(["2024.2.2"]);
+    expect(
+      lockedVersions('"certifi": {\n "hashes": [],\n "version": "==2022.12.7"\n}', "certifi"),
+    ).toEqual(["2022.12.7"]);
+    expect(lockedVersions('"node_modules/qsx": {"version": "1.0.0"', "qs")).toEqual([]);
+  });
+
+  it("removes only the package's entries from a Yarn 1 lockfile", async () => {
+    const { run } = await import("../../src/util/proc.ts");
+    const dir = await repo({
+      "yarn.lock": `# yarn lockfile v1\n\n\nqs@^6.5.2, qs@~6.5.2:\n  version "6.5.3"\n\nqsx@^1.0.0:\n  version "1.0.0"\n\n"@a/qs@^1":\n  version "1.0.0"\n`,
+    });
+    const argv = lockfileUpdateArgv("yarn", "qs") ?? [];
+    // Run only the node part (no yarn install in a unit test).
+    const script = (argv[2] ?? "").replace(/ && yarn install.*$/s, "");
+    await run("sh", ["-c", script, "sh", "qs"], { cwd: dir });
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile(join(dir, "yarn.lock"), "utf8");
+    expect(text).not.toContain('version "6.5.3"');
+    expect(text).toContain("qsx@^1.0.0");
+    expect(text).toContain('"@a/qs@^1"');
+  });
+});
+
+describe("Python projects without tests", () => {
+  it("check that the project's packages still import", async () => {
+    const dir = await repo({
+      "setup.py": "setup()",
+      "src/mylib/__init__.py": "",
+      "tests_data/x.txt": "",
+      "docs/__init__.py": "",
+    });
+    const inv = await inventory(dir, "pypi");
+    const build = inv.checks.find((c) => c.name === "build");
+    expect(build?.argv.join(" ")).toContain("import mylib");
+    expect(build?.argv.join(" ")).not.toContain("import docs");
+  });
+});

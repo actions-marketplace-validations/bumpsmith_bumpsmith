@@ -6,7 +6,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates coreutils tar git build-essential \
  && rm -rf /var/lib/apt/lists/* \
  && pip install --no-cache-dir uv==0.13.8 poetry==2.5.1 pipenv==2026.10.4 pdm==2.29.4 \
- && UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install 3.10 3.11 3.13 3.14 \
+ && UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install 3.10 3.11 3.13 3.14 3.15 \
  && chmod -R a+rX /opt/uv-python \
  && groupadd --gid 10001 sandbox && useradd --uid 10001 --gid 10001 --create-home sandbox \
  && mkdir /workspace && chown sandbox:sandbox /workspace

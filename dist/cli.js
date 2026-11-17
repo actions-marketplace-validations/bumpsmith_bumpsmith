@@ -253285,13 +253285,13 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
 
 // src/cli.ts
 var import_semver9 = __toESM(require_semver2(), 1);
-import { mkdir as mkdir13, mkdtemp as mkdtemp5, readFile as readFile15, rm as rm6, writeFile as writeFile8 } from "node:fs/promises";
+import { mkdir as mkdir13, mkdtemp as mkdtemp5, readFile as readFile15, rm as rm7, writeFile as writeFile8 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
 import { basename as basename2, join as join20, resolve as resolve4 } from "node:path";
 import { parseArgs } from "node:util";
 
 // src/action.ts
-import { appendFile, mkdtemp as mkdtemp2, readFile as readFile11, rm as rm3 } from "node:fs/promises";
+import { appendFile, mkdtemp as mkdtemp2, readFile as readFile11, rm as rm4 } from "node:fs/promises";
 var import_semver6 = __toESM(require_semver2(), 1);
 import { join as join14 } from "node:path";
 
@@ -301458,7 +301458,7 @@ function compatibleProvider(preset, model, baseURL, apiKey) {
 var import_semver3 = __toESM(require_semver2(), 1);
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { existsSync as existsSync6 } from "node:fs";
-import { mkdir as mkdir9, readFile as readFile10, writeFile as writeFile4 } from "node:fs/promises";
+import { mkdir as mkdir9, readFile as readFile10, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
 import { join as join13, resolve as resolve3 } from "node:path";
 
 // src/change/extract.ts
@@ -302893,6 +302893,63 @@ function npmCompanions(text, name, from) {
   }
   return out.sort();
 }
+function lockfileUpdateArgv(pm, name) {
+  switch (pm) {
+    case "npm":
+      return ["npm", "update", "--ignore-scripts", "--no-audit", "--no-fund", name];
+    case "pnpm":
+      return ["pnpm", "update", "--ignore-scripts", name];
+    case "yarn-berry":
+      return ["yarn-berry", "up", "-R", name];
+    case "yarn":
+      return [
+        "sh",
+        "-c",
+        `node -e '
+const fs = require("fs"); const name = process.argv[1];
+const text = fs.readFileSync("yarn.lock", "utf8");
+const keep = text.split(/\\n\\n/).filter((block) => {
+  const head = block.split("\\n").find((l) => l && !l.startsWith("#")) || "";
+  return !head.replace(/:$/, "").split(/,\\s*/).some((k) => k.replace(/^"|"$/g, "").startsWith(name + "@"));
+});
+fs.writeFileSync("yarn.lock", keep.join("\\n\\n"));
+' "$1" && yarn install --ignore-scripts`,
+        "sh",
+        name
+      ];
+    case "bun":
+      return ["bun", "update", "--ignore-scripts", name];
+    case "uv":
+      return ["uv", "lock", "--upgrade-package", name];
+    case "poetry":
+      return ["poetry", "update", "--lock", "--no-interaction", name];
+    case "pipenv":
+      return ["pipenv", "update", name];
+    case "pdm":
+      return ["pdm", "update", "--no-sync", name];
+    default:
+      return null;
+  }
+}
+function lockedVersions(text, name) {
+  const n = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const py = name.replace(/[-_.]/g, "[-_.]");
+  const out = /* @__PURE__ */ new Set();
+  const patterns = [
+    new RegExp(`node_modules/${n}"\\s*:\\s*\\{\\s*"version"\\s*:\\s*"([^"]+)"`, "g"),
+    // package-lock
+    new RegExp(`(?:^|[\\s/'"])${n}@(\\d[^:\\s()'"]*)`, "gm"),
+    // pnpm-lock, bun.lock
+    new RegExp(`^"?${n}@[^\\n]*:\\n\\s+version:?\\s+"?([^"\\n]+)"?`, "gm"),
+    // yarn.lock
+    new RegExp(`name = "${py}"\\nversion = "([^"]+)"`, "gim"),
+    // uv.lock, poetry.lock, pdm.lock
+    new RegExp(`"${py}"\\s*:\\s*\\{[^}]*?"version"\\s*:\\s*"==([^"]+)"`, "gi")
+    // Pipfile.lock
+  ];
+  for (const re2 of patterns) for (const m of text.matchAll(re2)) if (m[1]) out.add(m[1]);
+  return [...out].sort(compareVersions);
+}
 
 // src/inventory/inventory.ts
 import { existsSync as existsSync4, readFileSync } from "node:fs";
@@ -303113,7 +303170,7 @@ function parsePythonManifest(text) {
   }
   return deps;
 }
-var SANDBOX_PYTHONS = ["3.12", "3.13", "3.11", "3.10", "3.14"];
+var SANDBOX_PYTHONS = ["3.12", "3.13", "3.11", "3.10", "3.14", "3.15"];
 function pythonSatisfies(version2, spec) {
   const cmp = (a, b) => {
     const pa = a.split(".").map(Number);
@@ -303246,6 +303303,23 @@ function pipenvInstall(python) {
     `pipenv install --dev --python "$(uv python find ${python} 2>/dev/null || command -v python3)"`
   );
 }
+async function importablePackages(root, files) {
+  const out = [];
+  for (const base of files.includes("src") ? ["src", ""] : [""]) {
+    let entries = [];
+    try {
+      entries = await readdir4(join9(root, base), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries)
+      if (e.isDirectory() && /^[A-Za-z_][A-Za-z0-9_]*$/.test(e.name) && !/^(tests?|docs?|examples?|scripts?|benchmarks?|migrations|build|dist|site|venv)$/i.test(
+        e.name
+      ) && existsSync4(join9(root, base, e.name, "__init__.py")))
+        out.push(e.name);
+  }
+  return [...new Set(out)].slice(0, 5);
+}
 async function inventoryPython(root) {
   const files = await readdir4(root);
   const reqDir = files.includes("requirements") ? (await readdir4(join9(root, "requirements")).catch(() => [])).filter((f) => /\.(txt|in)$/.test(f)).map((f) => `requirements/${f}`) : [];
@@ -303316,11 +303390,35 @@ async function inventoryPython(root) {
   const py = pm === "pip" ? [VPY] : [...runner, "python"];
   const checks = [{ name: "install", argv: installArgv }];
   if (djangoRunner) checks.push({ name: "test", argv: [...py, "manage.py", "test", "--noinput"] });
-  else if (hasTests)
+  else if (hasTests) {
+    const pytest = [
+      ...py,
+      "-m",
+      "pytest",
+      "-q",
+      "-rfE",
+      "-p",
+      "no:cacheprovider",
+      // One module that cannot import must not hide every other test.
+      "--continue-on-collection-errors"
+    ];
     checks.push({
       name: "test",
-      argv: [...py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
+      argv: files.includes("src") ? sh('PYTHONPATH="$PWD/src:$PWD${PYTHONPATH:+:$PYTHONPATH}" exec "$@"', pytest) : pytest
     });
+  }
+  if (!checks.some((c) => c.name === "test")) {
+    const pkgs = await importablePackages(root, files);
+    if (pkgs.length)
+      checks.push({
+        name: "build",
+        argv: sh(`PYTHONPATH="$PWD/src:$PWD\${PYTHONPATH:+:$PYTHONPATH}" exec "$@"`, [
+          ...py,
+          "-c",
+          pkgs.map((p) => `import ${p}`).join("; ")
+        ])
+      });
+  }
   return {
     root,
     ecosystem: "pypi",
@@ -303778,7 +303876,7 @@ async function ensureImage(kind, buildArgs = []) {
 }
 async function ensureMirrorCerts(dir = CERT_DIR) {
   const { existsSync: existsSync8 } = await import("node:fs");
-  const { writeFile: writeFile9, rm: rm7 } = await import("node:fs/promises");
+  const { writeFile: writeFile9, rm: rm8 } = await import("node:fs/promises");
   if (existsSync8(join11(dir, "mirror.crt")) && existsSync8(join11(dir, "ca.crt"))) return dir;
   await mkdir7(dir, { recursive: true, mode: 493 });
   const { chmod: chmodDir } = await import("node:fs/promises");
@@ -303850,7 +303948,7 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
     "ext"
   ]);
   for (const f of ["ca.key", "mirror.csr", "ca.srl", "leaf.cnf"])
-    await rm7(join11(dir, f), { force: true });
+    await rm8(join11(dir, f), { force: true });
   const { chmod } = await import("node:fs/promises");
   await chmod(join11(dir, "mirror.key"), 420);
   await chmod(join11(dir, "mirror.crt"), 420);
@@ -304251,42 +304349,61 @@ import { mkdir as mkdir8, readFile as readFile9 } from "node:fs/promises";
 import { join as join12 } from "node:path";
 var HOSTS = "github\\.com|gitlab\\.com|bitbucket\\.org|codeberg\\.org";
 var GIT_URL = new RegExp(
-  `git\\+(https://(?:${HOSTS})/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?(?=[@#\\s"';,]|$)`,
+  `git\\+(https://(?:${HOSTS})/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?(?:@([^#\\s"';,]+))?(?=[#\\s"';,]|$)`,
   "g"
 );
-function gitDependencyUrls(texts) {
-  const out = /* @__PURE__ */ new Set();
-  for (const t of texts) for (const m of t.matchAll(GIT_URL)) if (m[1]) out.add(m[1]);
-  return [...out].sort().slice(0, 10);
+function gitDependencies(texts) {
+  const byUrl = /* @__PURE__ */ new Map();
+  for (const t of texts)
+    for (const m of t.matchAll(GIT_URL)) {
+      if (!m[1]) continue;
+      const refs = byUrl.get(m[1]) ?? /* @__PURE__ */ new Set();
+      if (m[2] && /^[\w./-]{1,100}$/.test(m[2])) refs.add(m[2]);
+      byUrl.set(m[1], refs);
+    }
+  return [...byUrl.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, 10).map(([url2, refs]) => ({ url: url2, refs: [...refs].sort() }));
 }
-async function fetchGitDeps(urls, workDir) {
+var gitEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/bin/false" };
+var git = (args, timeoutMs = 5 * 6e4) => run("git", ["-c", "core.hooksPath=/dev/null", "-c", "credential.helper=", ...args], {
+  timeoutMs,
+  env: gitEnv
+});
+async function fetchGitDeps(deps, workDir) {
   const fetched = [];
   const failed = [];
   await mkdir8(workDir, { recursive: true });
-  for (const [i, url2] of urls.entries()) {
-    const name = `${i}-${url2.split("/").slice(-1)[0]?.replace(/[^A-Za-z0-9_.-]/g, "_")}.git`;
+  for (const [i, dep] of deps.entries()) {
+    const name = `${i}-${dep.url.split("/").pop()?.replace(/[^A-Za-z0-9_.-]/g, "_")}.git`;
     const hostDir = join12(workDir, name);
-    const r = await run(
-      "git",
-      [
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "credential.helper=",
-        "clone",
-        "--bare",
-        "--quiet",
-        `${url2}.git`,
-        hostDir
-      ],
-      {
-        timeoutMs: 5 * 6e4,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/bin/false" }
+    const remote = `${dep.url}.git`;
+    await git(["init", "--bare", "-q", hostDir]);
+    const fetch2 = (spec) => git(["-C", hostDir, "fetch", "--quiet", "--depth", "1", "--no-tags", remote, spec]);
+    const head = await fetch2("+HEAD:refs/heads/bumpsmith-default");
+    let ok = head.exitCode === 0;
+    if (ok) await git(["-C", hostDir, "symbolic-ref", "HEAD", "refs/heads/bumpsmith-default"]);
+    let lastErr = head.stderr;
+    for (const ref of dep.refs) {
+      const attempts = [
+        `+refs/heads/${ref}:refs/heads/${ref}`,
+        `+refs/tags/${ref}:refs/tags/${ref}`,
+        .../^[0-9a-f]{7,40}$/.test(ref) ? [`+${ref}:refs/heads/bumpsmith-${ref.slice(0, 12)}`] : []
+      ];
+      let got = false;
+      for (const spec of attempts) {
+        const r = await fetch2(spec);
+        if (r.exitCode === 0) {
+          got = true;
+          break;
+        }
+        lastErr = r.stderr;
       }
-    );
-    if (r.exitCode === 0) fetched.push({ url: url2, hostDir, name });
+      ok = ok && got;
+    }
+    if (ok) fetched.push({ url: dep.url, hostDir, name });
     else
-      failed.push(`${url2} (${r.stderr.trim().split("\n").pop()?.slice(0, 120) ?? "clone failed"})`);
+      failed.push(
+        `${dep.url} (${lastErr.trim().split("\n").pop()?.slice(0, 120) || "fetch failed"})`
+      );
   }
   return { fetched, failed };
 }
@@ -304453,19 +304570,30 @@ function filesFromOutput(output2) {
 async function prepareRepo(input3, dir) {
   const dest = join13(dir, "repo");
   if (/^https:\/\//.test(input3.repo)) {
-    await runOk(
-      "git",
-      [
-        "-c",
-        "core.hooksPath=/dev/null",
-        "clone",
-        "--no-recurse-submodules",
-        "--filter=blob:none",
-        input3.repo,
-        dest
-      ],
-      { timeoutMs: 10 * 6e4 }
-    );
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await runOk(
+          "git",
+          [
+            "-c",
+            "core.hooksPath=/dev/null",
+            ...attempt === 3 ? ["-c", "http.version=HTTP/1.1"] : [],
+            "clone",
+            "--no-recurse-submodules",
+            "--filter=blob:none",
+            input3.repo,
+            dest
+          ],
+          { timeoutMs: 10 * 6e4 }
+        );
+        break;
+      } catch (err) {
+        await rm3(dest, { recursive: true, force: true });
+        if (attempt >= 3 || /not found|Authentication failed|could not read Username/i.test(String(err)))
+          throw err;
+        await new Promise((r) => setTimeout(r, attempt * 5e3));
+      }
+    }
     if (input3.ref)
       await runOk("git", [
         "-c",
@@ -304502,6 +304630,27 @@ async function currentVersion(inv, pkg) {
   const range = inv.dependencies[pkg] ?? inv.dependencies[pkg.toLowerCase()] ?? inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "-")] ?? inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "_")];
   if (range === void 0) return null;
   return lowestVersion(range);
+}
+var LOCKFILES2 = [
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "uv.lock",
+  "poetry.lock",
+  "Pipfile.lock",
+  "pdm.lock"
+];
+async function lockTexts(dirs) {
+  const parts = [];
+  for (const d of dirs)
+    for (const f of LOCKFILES2) {
+      try {
+        parts.push(await readFile10(join13(d, f), "utf8"));
+      } catch {
+      }
+    }
+  return parts.join("\n");
 }
 function lowestVersion(range) {
   const r = range.trim().replace(/^(==|===|~=)/, "");
@@ -304590,7 +304739,9 @@ function installFailureReason(baseline) {
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
   if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
     return " (a package is built from source and needs a system library the sandbox does not have)";
-  if (/no wheels with a matching platform tag|Unsupported platform|EBADPLATFORM/i.test(out))
+  if (/no wheels with a matching platform tag|Wheels are available for .* on the following platforms|Unsupported platform|EBADPLATFORM/i.test(
+    out
+  ))
     return ` (a pinned package has no build for this machine's CPU (${process.arch}); it installs on x86_64 machines such as GitHub Actions runners)`;
   if (/No solution found when resolving|ResolutionImpossible|unsatisfiable/i.test(out))
     return " (the repository's pinned requirements cannot be resolved together)";
@@ -304695,6 +304846,10 @@ async function runJob(input3, opts) {
         );
       } else for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
     }
+    if (!inv.checks.some((c) => c.name !== "install") && !Object.keys(opts.config?.checks ?? {}).length)
+      job.notes.push(
+        "This repository has no build, typecheck, lint or test command Bumpsmith could find, so only the install can be checked; add checks to .bumpsmith.yml to verify more."
+      );
     for (const [name, cmd] of Object.entries(opts.config?.checks ?? {})) {
       if (!cmd) continue;
       const argv = commandArgv(cmd);
@@ -304708,7 +304863,19 @@ async function runJob(input3, opts) {
       job.notes.push(
         `Workspace members that declare ${input3.packageName}: ${members2.map((m) => m.dir).join(", ")}.`
       );
-    const from = input3.from ?? await currentVersion(inv, input3.packageName) ?? (members2[0] ? lowestVersion(members2[0].range) : null);
+    const declaredVersion = await currentVersion(inv, input3.packageName);
+    let transitive = false;
+    if (declaredVersion === null && !members2.length) {
+      const locked = lockedVersions(await lockTexts([repoDir, repoRoot]), input3.packageName);
+      if (locked.length) {
+        transitive = true;
+        job.notes.push(
+          `${input3.packageName} is a transitive dependency (locked at ${locked.join(", ")}); only the lockfile is updated.`
+        );
+        input3.from ??= locked[0];
+      }
+    }
+    const from = input3.from ?? declaredVersion ?? (members2[0] ? lowestVersion(members2[0].range) : null);
     if (!from) throw new Error(`${input3.packageName} is not a dependency of this repository`);
     job.from = from;
     const privateHost = eco === "npm" ? workspaceMember ? await privateRegistryHost(
@@ -304797,11 +304964,19 @@ async function runJob(input3, opts) {
         `CI services not run in the sandbox (only official postgres, mysql, mariadb, redis, valkey and mongo images are): ${svc.skipped.join(", ")}.`
       );
     await sb.copyIn(repoRoot);
+    await sb.exec(
+      [
+        "sh",
+        "-c",
+        "git init -q && git add -A && git -c user.name=bumpsmith -c user.email=bumpsmith@localhost commit -q --no-verify -m baseline"
+      ],
+      { timeoutSec: 300 }
+    );
     if (eco === "pypi") {
-      const urls = gitDependencyUrls(await readManifests(repoDir, inv.manifests));
-      if (urls.length) {
+      const deps = gitDependencies(await readManifests(repoDir, inv.manifests));
+      if (deps.length) {
         const gitDir = join13(dir, "git-deps");
-        const { fetched, failed: failed2 } = await fetchGitDeps(urls, gitDir);
+        const { fetched, failed: failed2 } = await fetchGitDeps(deps, gitDir);
         await installGitDeps(sb, fetched, gitDir);
         if (fetched.length)
           job.notes.push(
@@ -304826,6 +305001,30 @@ async function runJob(input3, opts) {
     const checks = inv.checks.filter((c) => !timedOut.includes(c.name));
     if (timedOut.length)
       job.notes.push(`Skipped checks that timed out at baseline: ${timedOut.join(", ")}.`);
+    const updateTransitive = async (pm, cwd) => {
+      const argv = lockfileUpdateArgv(pm, input3.packageName);
+      if (!argv) {
+        job.notes.push(
+          `${input3.packageName} is not pinned by any file here, so installs already take the newest version its dependents allow; nothing to change.`
+        );
+        return;
+      }
+      const r = await sb?.exec(argv, { network: true, timeoutSec: 15 * 60, cwd });
+      if (!r || r.exitCode !== 0)
+        throw new Error(
+          `could not update ${input3.packageName} in the lockfile: ${(r?.stderr || r?.stdout || "").slice(-1200)}`
+        );
+      const texts = [];
+      for (const f of LOCKFILES2) {
+        const c = await sb?.exec(["cat", "--", f], { cwd: cwd ?? "/workspace" });
+        if (c?.exitCode === 0) texts.push(c.stdout);
+      }
+      const now = lockedVersions(texts.join("\n"), input3.packageName);
+      const reached = now.some((v) => compareVersions(v, input3.to) >= 0);
+      job.notes.push(
+        reached ? `Lockfile now resolves ${input3.packageName} to ${now.join(", ")}.` : `The lockfile could only move ${input3.packageName} to ${now.join(", ") || "an unknown version"}: a package that depends on it allows nothing newer. Upgrading that parent package is needed to reach ${input3.to}.`
+      );
+    };
     const manifest = "package.json";
     const cur = eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
     if (eco === "npm") {
@@ -304839,7 +305038,9 @@ async function runJob(input3, opts) {
         const text = (await sb.exec(["cat", "--", "package.json"], { cwd: `/workspace/${m.dir}` })).stdout;
         targets.push({ dir: m.dir, member: true, text });
       }
-      if (!targets.length) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
+      if (!targets.length && !transitive)
+        throw new Error(`could not find ${input3.packageName} in ${manifest}`);
+      if (transitive) await updateTransitive(inv.packageManager, workspaceMember ? void 0 : wd);
       const extras = [];
       for (const extra of input3.alsoUpgrade ?? []) {
         try {
@@ -304947,7 +305148,8 @@ async function runJob(input3, opts) {
         await sb.exec(["sh", "-c", 'cat > "$1"', "sh", m], { input: next, cwd: wd });
         touched.push(m);
       }
-      if (!touched.length)
+      if (!touched.length && transitive) await updateTransitive(inv.packageManager, wd);
+      else if (!touched.length)
         throw new Error(
           `could not find ${input3.packageName} in ${inv.manifests.join(", ") || "any manifest"}`
         );
@@ -306179,7 +306381,7 @@ function cycloneDx(opts) {
 
 // src/model/claude-code.ts
 import { randomBytes } from "node:crypto";
-import { mkdtemp as mkdtemp3, rm as rm4 } from "node:fs/promises";
+import { mkdtemp as mkdtemp3, rm as rm5 } from "node:fs/promises";
 import { createServer as createServer2 } from "node:http";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join18 } from "node:path";
@@ -323132,7 +323334,7 @@ ${r.stderr}`.trim());
       if (res.is_error && USAGE_LIMIT_RE.test(text)) throw new UsageLimitError(text);
       return res;
     } finally {
-      await rm4(cwd, { recursive: true, force: true });
+      await rm5(cwd, { recursive: true, force: true });
     }
   }
   usage(role, res, started) {
@@ -323238,7 +323440,7 @@ ${r.stderr}`.trim());
 };
 
 // src/model/codex.ts
-import { mkdtemp as mkdtemp4, readFile as readFile14, rm as rm5 } from "node:fs/promises";
+import { mkdtemp as mkdtemp4, readFile as readFile14, rm as rm6 } from "node:fs/promises";
 import { tmpdir as tmpdir3 } from "node:os";
 import { join as join19 } from "node:path";
 var DISABLED_FEATURES = [
@@ -323341,7 +323543,7 @@ ${events.error ?? ""}`;
         );
       return { text, events, started };
     } finally {
-      await rm5(cwd, { recursive: true, force: true });
+      await rm6(cwd, { recursive: true, force: true });
     }
   }
   usage(role, ev, started) {
@@ -323577,7 +323779,7 @@ async function githubRun(target, mode, prov, budget, log2) {
         `${r.target.packageName} ${r.target.from ?? "?"} -> ${r.target.to}: ${r.state} (${r.confidence ?? "n/a"}) ${r.result}${r.prUrl ? ` ${r.prUrl}` : ""}`
       );
   } finally {
-    await rm6(work, { recursive: true, force: true });
+    await rm7(work, { recursive: true, force: true });
   }
 }
 async function main() {

@@ -289,3 +289,65 @@ export function npmCompanions(text: string, name: string, from: string): string[
   }
   return out.sort();
 }
+
+/**
+ * Lockfile-only update of a transitive dependency (Dependabot security updates bump
+ * packages nothing declares directly). Moves `name` to the newest version its dependents'
+ * ranges allow; the caller checks the lockfile afterwards for the target version.
+ */
+export function lockfileUpdateArgv(pm: string, name: string): string[] | null {
+  switch (pm) {
+    case "npm":
+      return ["npm", "update", "--ignore-scripts", "--no-audit", "--no-fund", name];
+    case "pnpm":
+      return ["pnpm", "update", "--ignore-scripts", name];
+    case "yarn-berry":
+      return ["yarn-berry", "up", "-R", name];
+    case "yarn":
+      // Yarn 1 cannot upgrade a transitive package: drop its lockfile entries and let
+      // install resolve them again (what Dependabot does).
+      return [
+        "sh",
+        "-c",
+        `node -e '
+const fs = require("fs"); const name = process.argv[1];
+const text = fs.readFileSync("yarn.lock", "utf8");
+const keep = text.split(/\\n\\n/).filter((block) => {
+  const head = block.split("\\n").find((l) => l && !l.startsWith("#")) || "";
+  return !head.replace(/:$/, "").split(/,\\s*/).some((k) => k.replace(/^"|"$/g, "").startsWith(name + "@"));
+});
+fs.writeFileSync("yarn.lock", keep.join("\\n\\n"));
+' "$1" && yarn install --ignore-scripts`,
+        "sh",
+        name,
+      ];
+    case "bun":
+      return ["bun", "update", "--ignore-scripts", name];
+    case "uv":
+      return ["uv", "lock", "--upgrade-package", name];
+    case "poetry":
+      return ["poetry", "update", "--lock", "--no-interaction", name];
+    case "pipenv":
+      return ["pipenv", "update", name];
+    case "pdm":
+      return ["pdm", "update", "--no-sync", name];
+    default:
+      return null;
+  }
+}
+
+/** Versions of `name` recorded in a lockfile (npm, pnpm, yarn, bun, uv, poetry, Pipfile.lock, pdm). */
+export function lockedVersions(text: string, name: string): string[] {
+  const n = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const py = name.replace(/[-_.]/g, "[-_.]");
+  const out = new Set<string>();
+  const patterns = [
+    new RegExp(`node_modules/${n}"\\s*:\\s*\\{\\s*"version"\\s*:\\s*"([^"]+)"`, "g"), // package-lock
+    new RegExp(`(?:^|[\\s/'"])${n}@(\\d[^:\\s()'"]*)`, "gm"), // pnpm-lock, bun.lock
+    new RegExp(`^"?${n}@[^\\n]*:\\n\\s+version:?\\s+"?([^"\\n]+)"?`, "gm"), // yarn.lock
+    new RegExp(`name = "${py}"\\nversion = "([^"]+)"`, "gim"), // uv.lock, poetry.lock, pdm.lock
+    new RegExp(`"${py}"\\s*:\\s*\\{[^}]*?"version"\\s*:\\s*"==([^"]+)"`, "gi"), // Pipfile.lock
+  ];
+  for (const re of patterns) for (const m of text.matchAll(re)) if (m[1]) out.add(m[1]);
+  return [...out].sort(compareVersions);
+}

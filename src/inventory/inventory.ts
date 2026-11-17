@@ -324,7 +324,7 @@ export function parsePythonManifest(text: string): Record<string, string> {
 }
 
 /** Python interpreters in the sandbox image (3.12 is the image's own). */
-export const SANDBOX_PYTHONS = ["3.12", "3.13", "3.11", "3.10", "3.14"] as const;
+export const SANDBOX_PYTHONS = ["3.12", "3.13", "3.11", "3.10", "3.14", "3.15"] as const;
 
 /** Does a Python version satisfy a requires-python / Poetry / Pipfile spec? */
 export function pythonSatisfies(version: string, spec: string): boolean {
@@ -499,6 +499,30 @@ export function pipenvInstall(python: string): string[] {
   );
 }
 
+/** Top-level Python packages of the project (root or src/ layout), excluding tests and docs. */
+async function importablePackages(root: string, files: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const base of files.includes("src") ? ["src", ""] : [""]) {
+    let entries: import("node:fs").Dirent[] = [];
+    try {
+      entries = await readdir(join(root, base), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries)
+      if (
+        e.isDirectory() &&
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(e.name) &&
+        !/^(tests?|docs?|examples?|scripts?|benchmarks?|migrations|build|dist|site|venv)$/i.test(
+          e.name,
+        ) &&
+        existsSync(join(root, base, e.name, "__init__.py"))
+      )
+        out.push(e.name);
+  }
+  return [...new Set(out)].slice(0, 5);
+}
+
 async function inventoryPython(root: string): Promise<Inventory> {
   const files = await readdir(root);
   const reqDir = files.includes("requirements")
@@ -600,11 +624,41 @@ async function inventoryPython(root: string): Promise<Inventory> {
   if (djangoRunner) checks.push({ name: "test", argv: [...py, "manage.py", "test", "--noinput"] });
   // All tests, with a summary of failures: a test that already failed before the upgrade
   // must not hide the others (verification compares test by test).
-  else if (hasTests)
+  else if (hasTests) {
+    const pytest = [
+      ...py,
+      "-m",
+      "pytest",
+      "-q",
+      "-rfE",
+      "-p",
+      "no:cacheprovider",
+      // One module that cannot import must not hide every other test.
+      "--continue-on-collection-errors",
+    ];
+    // src/ layouts import from src even when the project itself does not install.
     checks.push({
       name: "test",
-      argv: [...py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"],
+      argv: files.includes("src")
+        ? sh('PYTHONPATH="$PWD/src:$PWD${PYTHONPATH:+:$PYTHONPATH}" exec "$@"', pytest)
+        : pytest,
     });
+  }
+
+  // No tests: at least check that the project's own packages still import after the upgrade
+  // (removed modules and renamed names usually break at import time).
+  if (!checks.some((c) => c.name === "test")) {
+    const pkgs = await importablePackages(root, files);
+    if (pkgs.length)
+      checks.push({
+        name: "build",
+        argv: sh(`PYTHONPATH="$PWD/src:$PWD\${PYTHONPATH:+:$PYTHONPATH}" exec "$@"`, [
+          ...py,
+          "-c",
+          pkgs.map((p) => `import ${p}`).join("; "),
+        ]),
+      });
+  }
 
   return {
     root,

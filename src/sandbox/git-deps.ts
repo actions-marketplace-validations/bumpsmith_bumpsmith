@@ -12,15 +12,36 @@ import type { Sandbox } from "./sandbox.ts";
 
 const HOSTS = "github\\.com|gitlab\\.com|bitbucket\\.org|codeberg\\.org";
 const GIT_URL = new RegExp(
-  `git\\+(https://(?:${HOSTS})/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?(?=[@#\\s"';,]|$)`,
+  `git\\+(https://(?:${HOSTS})/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?(?:@([^#\\s"';,]+))?(?=[#\\s"';,]|$)`,
   "g",
 );
 
-/** Public git repository URLs (canonical, without ".git") referenced by these texts. */
+export interface GitDep {
+  /** Canonical https URL without ".git". */
+  url: string;
+  /** Branches, tags or commits referenced with "@ref"; empty means the default branch. */
+  refs: string[];
+}
+
+/** Public git dependencies (URL and refs) referenced by these texts. */
+export function gitDependencies(texts: string[]): GitDep[] {
+  const byUrl = new Map<string, Set<string>>();
+  for (const t of texts)
+    for (const m of t.matchAll(GIT_URL)) {
+      if (!m[1]) continue;
+      const refs = byUrl.get(m[1]) ?? new Set<string>();
+      if (m[2] && /^[\w./-]{1,100}$/.test(m[2])) refs.add(m[2]);
+      byUrl.set(m[1], refs);
+    }
+  return [...byUrl.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(0, 10)
+    .map(([url, refs]) => ({ url, refs: [...refs].sort() }));
+}
+
+/** Just the URLs, for messages and tests. */
 export function gitDependencyUrls(texts: string[]): string[] {
-  const out = new Set<string>();
-  for (const t of texts) for (const m of t.matchAll(GIT_URL)) if (m[1]) out.add(m[1]);
-  return [...out].sort().slice(0, 10);
+  return gitDependencies(texts).map((d) => d.url);
 }
 
 export interface FetchedGitDep {
@@ -30,41 +51,63 @@ export interface FetchedGitDep {
   name: string;
 }
 
-/** Clone each URL on the host as a bare repository. Failures are returned, not thrown. */
+const gitEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/bin/false" };
+const git = (args: string[], timeoutMs = 5 * 60_000) =>
+  run("git", ["-c", "core.hooksPath=/dev/null", "-c", "credential.helper=", ...args], {
+    timeoutMs,
+    env: gitEnv,
+  });
+
+/**
+ * Fetch only what the manifests reference (depth 1) into a bare repository on the host:
+ * the default branch, and each @ref as a branch, a tag or a commit. Large repositories
+ * stay cheap. Failures are returned, not thrown.
+ */
 export async function fetchGitDeps(
-  urls: string[],
+  deps: GitDep[],
   workDir: string,
 ): Promise<{ fetched: FetchedGitDep[]; failed: string[] }> {
   const fetched: FetchedGitDep[] = [];
   const failed: string[] = [];
   await mkdir(workDir, { recursive: true });
-  for (const [i, url] of urls.entries()) {
-    const name = `${i}-${url
+  for (const [i, dep] of deps.entries()) {
+    const name = `${i}-${dep.url
       .split("/")
-      .slice(-1)[0]
+      .pop()
       ?.replace(/[^A-Za-z0-9_.-]/g, "_")}.git`;
     const hostDir = join(workDir, name);
-    const r = await run(
-      "git",
-      [
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "credential.helper=",
-        "clone",
-        "--bare",
-        "--quiet",
-        `${url}.git`,
-        hostDir,
-      ],
-      {
-        timeoutMs: 5 * 60_000,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/bin/false" },
-      },
-    );
-    if (r.exitCode === 0) fetched.push({ url, hostDir, name });
+    const remote = `${dep.url}.git`;
+    await git(["init", "--bare", "-q", hostDir]);
+    const fetch = (spec: string) =>
+      git(["-C", hostDir, "fetch", "--quiet", "--depth", "1", "--no-tags", remote, spec]);
+    const head = await fetch("+HEAD:refs/heads/bumpsmith-default");
+    let ok = head.exitCode === 0;
+    if (ok) await git(["-C", hostDir, "symbolic-ref", "HEAD", "refs/heads/bumpsmith-default"]);
+    let lastErr = head.stderr;
+    for (const ref of dep.refs) {
+      const attempts = [
+        `+refs/heads/${ref}:refs/heads/${ref}`,
+        `+refs/tags/${ref}:refs/tags/${ref}`,
+        ...(/^[0-9a-f]{7,40}$/.test(ref)
+          ? [`+${ref}:refs/heads/bumpsmith-${ref.slice(0, 12)}`]
+          : []),
+      ];
+      let got = false;
+      for (const spec of attempts) {
+        const r = await fetch(spec);
+        if (r.exitCode === 0) {
+          got = true;
+          break;
+        }
+        lastErr = r.stderr;
+      }
+      ok = ok && got;
+    }
+    if (ok) fetched.push({ url: dep.url, hostDir, name });
     else
-      failed.push(`${url} (${r.stderr.trim().split("\n").pop()?.slice(0, 120) ?? "clone failed"})`);
+      failed.push(
+        `${dep.url} (${lastErr.trim().split("\n").pop()?.slice(0, 120) || "fetch failed"})`,
+      );
   }
   return { fetched, failed };
 }

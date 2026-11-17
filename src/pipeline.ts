@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import semver from "semver";
 import { FIXER_PROMPT_VERSION, fixerUserPrompt, runFixerRound } from "./agent/fixer.ts";
@@ -9,7 +9,15 @@ import { buildTools, type ToolLog } from "./agent/tools.ts";
 import { buildChangeRecord, EXTRACTOR_PROMPT_VERSION } from "./change/extract.ts";
 import { commandArgv, type RepoConfig } from "./config/repo-config.ts";
 import { buildImpactMap } from "./impact/impact.ts";
-import { bumpFile, npmCompanions, npmDepInfo, npmUpgradeArgv } from "./inventory/bump.ts";
+import {
+  bumpFile,
+  compareVersions,
+  lockedVersions,
+  lockfileUpdateArgv,
+  npmCompanions,
+  npmDepInfo,
+  npmUpgradeArgv,
+} from "./inventory/bump.ts";
 import { type Inventory, inventory, workspaceMembersDeclaring } from "./inventory/inventory.ts";
 import { Ledger } from "./model/ledger.ts";
 import type { AgentStop, Effort, ModelProvider } from "./model/provider.ts";
@@ -28,7 +36,7 @@ import { applyRules, type RuleFinding } from "./review/rules.ts";
 import { dockerSandboxFactory } from "./sandbox/docker.ts";
 import {
   fetchGitDeps,
-  gitDependencyUrls,
+  gitDependencies,
   installGitDeps,
   readManifests,
 } from "./sandbox/git-deps.ts";
@@ -130,19 +138,34 @@ export interface JobRecord {
 async function prepareRepo(input: JobInput, dir: string): Promise<string> {
   const dest = join(dir, "repo");
   if (/^https:\/\//.test(input.repo)) {
-    await runOk(
-      "git",
-      [
-        "-c",
-        "core.hooksPath=/dev/null",
-        "clone",
-        "--no-recurse-submodules",
-        "--filter=blob:none",
-        input.repo,
-        dest,
-      ],
-      { timeoutMs: 10 * 60_000 },
-    );
+    // Clones fail transiently (HTTP/2 stream resets, 5xx): retry, the last time over HTTP/1.1.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await runOk(
+          "git",
+          [
+            "-c",
+            "core.hooksPath=/dev/null",
+            ...(attempt === 3 ? ["-c", "http.version=HTTP/1.1"] : []),
+            "clone",
+            "--no-recurse-submodules",
+            "--filter=blob:none",
+            input.repo,
+            dest,
+          ],
+          { timeoutMs: 10 * 60_000 },
+        );
+        break;
+      } catch (err) {
+        await rm(dest, { recursive: true, force: true });
+        if (
+          attempt >= 3 ||
+          /not found|Authentication failed|could not read Username/i.test(String(err))
+        )
+          throw err;
+        await new Promise((r) => setTimeout(r, attempt * 5000));
+      }
+    }
     if (input.ref)
       await runOk("git", [
         "-c",
@@ -189,6 +212,31 @@ async function currentVersion(inv: Inventory, pkg: string): Promise<string | nul
     inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "_")];
   if (range === undefined) return null;
   return lowestVersion(range);
+}
+
+const LOCKFILES = [
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "uv.lock",
+  "poetry.lock",
+  "Pipfile.lock",
+  "pdm.lock",
+];
+
+/** Lockfile texts in these directories (first match per name wins). */
+async function lockTexts(dirs: string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const d of dirs)
+    for (const f of LOCKFILES) {
+      try {
+        parts.push(await readFile(join(d, f), "utf8"));
+      } catch {
+        // no such lockfile
+      }
+    }
+  return parts.join("\n");
 }
 
 /** Lowest version a declared range admits, for npm and Python styles; null if none is named. */
@@ -300,7 +348,11 @@ export function installFailureReason(baseline: CheckResult[]): string {
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
   if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
     return " (a package is built from source and needs a system library the sandbox does not have)";
-  if (/no wheels with a matching platform tag|Unsupported platform|EBADPLATFORM/i.test(out))
+  if (
+    /no wheels with a matching platform tag|Wheels are available for .* on the following platforms|Unsupported platform|EBADPLATFORM/i.test(
+      out,
+    )
+  )
     return ` (a pinned package has no build for this machine's CPU (${process.arch}); it installs on x86_64 machines such as GitHub Actions runners)`;
   if (/No solution found when resolving|ResolutionImpossible|unsatisfiable/i.test(out))
     return " (the repository's pinned requirements cannot be resolved together)";
@@ -430,6 +482,13 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         );
       } else for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
     }
+    if (
+      !inv.checks.some((c) => c.name !== "install") &&
+      !Object.keys(opts.config?.checks ?? {}).length
+    )
+      job.notes.push(
+        "This repository has no build, typecheck, lint or test command Bumpsmith could find, so only the install can be checked; add checks to .bumpsmith.yml to verify more.",
+      );
     // Configured check commands replace detected ones (argv only, validated in config).
     for (const [name, cmd] of Object.entries(opts.config?.checks ?? {})) {
       if (!cmd) continue;
@@ -450,10 +509,22 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       job.notes.push(
         `Workspace members that declare ${input.packageName}: ${members.map((m) => m.dir).join(", ")}.`,
       );
+    const declaredVersion = await currentVersion(inv, input.packageName);
+    // Not declared anywhere but present in a lockfile: a transitive dependency (Dependabot
+    // security updates). The lockfile moves; manifests stay as they are.
+    let transitive = false;
+    if (declaredVersion === null && !members.length) {
+      const locked = lockedVersions(await lockTexts([repoDir, repoRoot]), input.packageName);
+      if (locked.length) {
+        transitive = true;
+        job.notes.push(
+          `${input.packageName} is a transitive dependency (locked at ${locked.join(", ")}); only the lockfile is updated.`,
+        );
+        input.from ??= locked[0];
+      }
+    }
     const from =
-      input.from ??
-      (await currentVersion(inv, input.packageName)) ??
-      (members[0] ? lowestVersion(members[0].range) : null);
+      input.from ?? declaredVersion ?? (members[0] ? lowestVersion(members[0].range) : null);
     if (!from) throw new Error(`${input.packageName} is not a dependency of this repository`);
     job.from = from;
 
@@ -561,12 +632,23 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         `CI services not run in the sandbox (only official postgres, mysql, mariadb, redis, valkey and mongo images are): ${svc.skipped.join(", ")}.`,
       );
     await sb.copyIn(repoRoot);
+    // A local one-commit git repository: version plugins (setuptools-scm, hatch-vcs) and
+    // some test setups ask git about the checkout. It never leaves the sandbox (.git is
+    // excluded from copy-out and patches) and needs no network.
+    await sb.exec(
+      [
+        "sh",
+        "-c",
+        "git init -q && git add -A && git -c user.name=bumpsmith -c user.email=bumpsmith@localhost commit -q --no-verify -m baseline",
+      ],
+      { timeoutSec: 300 },
+    );
     // Public git dependencies: fetched by the host, served to the sandbox from a local copy.
     if (eco === "pypi") {
-      const urls = gitDependencyUrls(await readManifests(repoDir, inv.manifests));
-      if (urls.length) {
+      const deps = gitDependencies(await readManifests(repoDir, inv.manifests));
+      if (deps.length) {
         const gitDir = join(dir, "git-deps");
-        const { fetched, failed } = await fetchGitDeps(urls, gitDir);
+        const { fetched, failed } = await fetchGitDeps(deps, gitDir);
         await installGitDeps(sb, fetched, gitDir);
         if (fetched.length)
           job.notes.push(
@@ -593,6 +675,34 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     if (timedOut.length)
       job.notes.push(`Skipped checks that timed out at baseline: ${timedOut.join(", ")}.`);
 
+    /** Lockfile-only update of a transitive dependency, then report what version it reached. */
+    const updateTransitive = async (pm: string, cwd: string | undefined) => {
+      const argv = lockfileUpdateArgv(pm, input.packageName);
+      if (!argv) {
+        job.notes.push(
+          `${input.packageName} is not pinned by any file here, so installs already take the newest version its dependents allow; nothing to change.`,
+        );
+        return;
+      }
+      const r = await sb?.exec(argv, { network: true, timeoutSec: 15 * 60, cwd });
+      if (!r || r.exitCode !== 0)
+        throw new Error(
+          `could not update ${input.packageName} in the lockfile: ${(r?.stderr || r?.stdout || "").slice(-1200)}`,
+        );
+      const texts = [];
+      for (const f of LOCKFILES) {
+        const c = await sb?.exec(["cat", "--", f], { cwd: cwd ?? "/workspace" });
+        if (c?.exitCode === 0) texts.push(c.stdout);
+      }
+      const now = lockedVersions(texts.join("\n"), input.packageName);
+      const reached = now.some((v) => compareVersions(v, input.to) >= 0);
+      job.notes.push(
+        reached
+          ? `Lockfile now resolves ${input.packageName} to ${now.join(", ")}.`
+          : `The lockfile could only move ${input.packageName} to ${now.join(", ") || "an unknown version"}: a package that depends on it allows nothing newer. Upgrading that parent package is needed to reach ${input.to}.`,
+      );
+    };
+
     // Bump the version inside the sandbox
     const manifest = "package.json";
     const cur =
@@ -615,7 +725,9 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           .stdout;
         targets.push({ dir: m.dir, member: true, text });
       }
-      if (!targets.length) throw new Error(`could not find ${input.packageName} in ${manifest}`);
+      if (!targets.length && !transitive)
+        throw new Error(`could not find ${input.packageName} in ${manifest}`);
+      if (transitive) await updateTransitive(inv.packageManager, workspaceMember ? undefined : wd);
 
       // Grouped updates: every extra package must pass the same release gate.
       const extras: string[] = [];
@@ -733,7 +845,8 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         await sb.exec(["sh", "-c", 'cat > "$1"', "sh", m], { input: next, cwd: wd });
         touched.push(m);
       }
-      if (!touched.length)
+      if (!touched.length && transitive) await updateTransitive(inv.packageManager, wd);
+      else if (!touched.length)
         throw new Error(
           `could not find ${input.packageName} in ${inv.manifests.join(", ") || "any manifest"}`,
         );
