@@ -280,3 +280,39 @@ jobs:
     expect(checkFailureReason(base("sh: 1: foo: command not found"))).toMatch(/not installed/);
   });
 });
+
+describe("workspace members", async () => {
+  const { workspaceMembersDeclaring } = await import("../../src/inventory/inventory.ts");
+  it("finds members that declare a package, skipping nested projects and node_modules", async () => {
+    const dir = await repo({
+      "package.json": JSON.stringify({ workspaces: ["packages/*"] }),
+      "package-lock.json": "{}",
+      "packages/web/package.json": JSON.stringify({ dependencies: { react: "^18.2.0" } }),
+      "packages/api/package.json": JSON.stringify({ devDependencies: { react: "18.2.0" } }),
+      "packages/ui/package.json": JSON.stringify({ dependencies: { react: "workspace:*" } }),
+      "examples/demo/package.json": JSON.stringify({ dependencies: { react: "^17" } }),
+      "examples/demo/package-lock.json": "{}",
+      "node_modules/x/package.json": JSON.stringify({ dependencies: { react: "^16" } }),
+    });
+    expect(await workspaceMembersDeclaring(dir, "react")).toEqual([
+      { dir: "packages/api", range: "18.2.0" },
+      { dir: "packages/web", range: "^18.2.0" },
+    ]);
+  });
+});
+
+describe("git dependencies", async () => {
+  const { gitDependencyUrls, gitInsteadOfConfig } = await import("../../src/sandbox/git-deps.ts");
+  it("finds public git URLs and maps them to local copies", () => {
+    const urls = gitDependencyUrls([
+      "vmtest @ git+https://github.com/osbuild/images.git@main#subdirectory=test\n",
+      'dependencies = ["lib @ git+https://gitlab.com/a/b@v1.2"]',
+      "x @ git+https://evil.example.com/a/b",
+      "y @ git+ssh://git@github.com/a/private.git",
+    ]);
+    expect(urls).toEqual(["https://github.com/osbuild/images", "https://gitlab.com/a/b"]);
+    const cfg = gitInsteadOfConfig([{ url: urls[0] ?? "", hostDir: "/h", name: "0-images.git" }]);
+    expect(cfg).toContain('[url "file:///workspace/.bumpsmith-cache/git/0-images.git"]');
+    expect(cfg).toContain("insteadOf = https://github.com/osbuild/images.git");
+  });
+});

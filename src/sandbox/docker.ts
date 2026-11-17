@@ -516,7 +516,8 @@ export class DockerSandbox implements Sandbox {
   }
 
   /** Copy a host directory into /workspace (excluding .git and dependency folders). */
-  async copyIn(hostDir: string): Promise<void> {
+  async copyIn(hostDir: string, dest = "/workspace"): Promise<void> {
+    if (dest !== "/workspace") await this.exec(["mkdir", "-p", "--", dest], { timeoutSec: 30 });
     await new Promise<void>((resolve, reject) => {
       const tar = spawn("tar", hostTarCreateArgs(hostDir), {
         env: { ...process.env, COPYFILE_DISABLE: "1" },
@@ -535,7 +536,7 @@ export class DockerSandbox implements Sandbox {
           "-xf",
           "-",
           "-C",
-          "/workspace",
+          dest,
         ],
         { stdio: ["pipe", "ignore", "pipe"] },
       );

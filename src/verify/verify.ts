@@ -75,6 +75,46 @@ export interface Comparison {
   after: boolean | null;
   flaky: boolean;
   regression: boolean;
+  /**
+   * The check failed both times, but test by test: the same tests failed before and after,
+   * and some passed. The upgrade broke nothing those tests can see.
+   */
+  sameFailures?: { failing: string[]; passed: number };
+  /** Tests that passed before the upgrade and fail after it. */
+  newFailures?: string[];
+}
+
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+
+/**
+ * Failing test IDs and the number of passing tests, read from runner output (pytest,
+ * vitest, jest, mocha, TAP / node:test). null when the output is not recognisable.
+ */
+export function parseTestResults(output: string): { failing: Set<string>; passed: number } | null {
+  const text = output.replace(ANSI, "");
+  const failing = new Set<string>();
+  const clean = (s: string) =>
+    s
+      .replace(/\s+\(?\d+(\.\d+)?\s*m?s\)?\s*$/, "")
+      .replace(/\s+-\s.*$/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  for (const line of text.split("\n")) {
+    let m = /^(?:FAILED|ERROR) (\S+)/.exec(line); // pytest -rfE summary
+    if (!m) m = /^\s*(?:FAIL|×|✕|✗)\s+(\S.*\S)\s*$/.exec(line); // vitest / jest
+    if (!m) m = /^\s*● (\S.*›.*)$/.exec(line); // jest failure headers
+    if (!m) m = /^\s*not ok \d+ (?:- )?(.+)$/.exec(line); // TAP, node:test
+    if (!m) m = /^\s{2,}\d+\) (\S.*)$/.exec(line); // mocha
+    if (m?.[1]) failing.add(clean(m[1]));
+  }
+  const counts = [
+    /(\d+) passed/.exec(text),
+    /(\d+) passing/.exec(text),
+    /^# pass (\d+)/m.exec(text),
+    /^ℹ pass (\d+)/m.exec(text),
+  ].filter(Boolean) as RegExpExecArray[];
+  if (!counts.length || !failing.size) return null;
+  return { failing, passed: Math.max(...counts.map((c) => Number(c[1]))) };
 }
 
 export interface Verdict {
@@ -111,13 +151,27 @@ export async function compareWithBaseline(
         }
       }
     }
-    comparisons.push({
+    const cmp: Comparison = {
       name: c.name,
       baseline: b ? b.passed : null,
       after: afterPassed,
       flaky,
       regression: b?.passed === true && afterPassed !== true,
-    });
+    };
+    // Already failing before the upgrade: compare test by test instead of pass/fail.
+    if (c.name === "test" && b && a && !b.passed && !afterPassed && !b.timed_out && !a.timed_out) {
+      const before = parseTestResults(b.output_tail);
+      const now = parseTestResults(a.output_tail);
+      if (before && now) {
+        const added = [...now.failing].filter((t) => !before.failing.has(t));
+        if (added.length) {
+          cmp.newFailures = added.slice(0, 20);
+          cmp.regression = true;
+        } else if (now.passed > 0 && now.passed >= before.passed)
+          cmp.sameFailures = { failing: [...now.failing].slice(0, 20), passed: now.passed };
+      }
+    }
+    comparisons.push(cmp);
   }
   const regressions = comparisons.filter((c) => c.regression).map((c) => c.name);
   return {

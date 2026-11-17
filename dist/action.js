@@ -50359,7 +50359,7 @@ ${lanes.join("\n")}
             writeOutputIsTTY() {
               return process.stdout.isTTY;
             },
-            readFile: readFile11,
+            readFile: readFile12,
             writeFile: writeFile22,
             watchFile: watchFile2,
             watchDirectory,
@@ -50565,7 +50565,7 @@ ${lanes.join("\n")}
               callback
             );
           }
-          function readFile11(fileName, _encoding) {
+          function readFile12(fileName, _encoding) {
             let buffer;
             try {
               buffer = _fs.readFileSync(fileName);
@@ -87248,7 +87248,7 @@ ${lanes.join("\n")}
         const possibleOption = getSpellingSuggestion(unknownOption, diagnostics.optionDeclarations, getOptionName);
         return possibleOption ? createDiagnosticForNodeInSourceFileOrCompilerDiagnostic(sourceFile, node2, diagnostics.unknownDidYouMeanDiagnostic, unknownOptionErrorText || unknownOption, possibleOption.name) : createDiagnosticForNodeInSourceFileOrCompilerDiagnostic(sourceFile, node2, diagnostics.unknownOptionDiagnostic, unknownOptionErrorText || unknownOption);
       }
-      function parseCommandLineWorker(diagnostics, commandLine, readFile11) {
+      function parseCommandLineWorker(diagnostics, commandLine, readFile12) {
         const options = {};
         let watchOptions;
         const fileNames = [];
@@ -87296,7 +87296,7 @@ ${lanes.join("\n")}
           }
         }
         function parseResponseFile(fileName) {
-          const text = tryReadFile(fileName, readFile11 || ((fileName2) => sys.readFile(fileName2)));
+          const text = tryReadFile(fileName, readFile12 || ((fileName2) => sys.readFile(fileName2)));
           if (!isString(text)) {
             errors.push(text);
             return;
@@ -87399,8 +87399,8 @@ ${lanes.join("\n")}
         unknownDidYouMeanDiagnostic: Diagnostics.Unknown_compiler_option_0_Did_you_mean_1,
         optionTypeMismatchDiagnostic: Diagnostics.Compiler_option_0_expects_an_argument
       };
-      function parseCommandLine(commandLine, readFile11) {
-        return parseCommandLineWorker(compilerOptionsDidYouMeanDiagnostics, commandLine, readFile11);
+      function parseCommandLine(commandLine, readFile12) {
+        return parseCommandLineWorker(compilerOptionsDidYouMeanDiagnostics, commandLine, readFile12);
       }
       function getOptionFromName(optionName, allowShort) {
         return getOptionDeclarationFromName(getOptionsNameMap, optionName, allowShort);
@@ -87482,8 +87482,8 @@ ${lanes.join("\n")}
           watchOptionsToExtend
         );
       }
-      function readConfigFile(fileName, readFile11) {
-        const textOrDiagnostic = tryReadFile(fileName, readFile11);
+      function readConfigFile(fileName, readFile12) {
+        const textOrDiagnostic = tryReadFile(fileName, readFile12);
         return isString(textOrDiagnostic) ? parseConfigFileTextToJson(fileName, textOrDiagnostic) : { config: {}, error: textOrDiagnostic };
       }
       function parseConfigFileTextToJson(fileName, jsonText) {
@@ -87498,14 +87498,14 @@ ${lanes.join("\n")}
           error: jsonSourceFile.parseDiagnostics.length ? jsonSourceFile.parseDiagnostics[0] : void 0
         };
       }
-      function readJsonConfigFile(fileName, readFile11) {
-        const textOrDiagnostic = tryReadFile(fileName, readFile11);
+      function readJsonConfigFile(fileName, readFile12) {
+        const textOrDiagnostic = tryReadFile(fileName, readFile12);
         return isString(textOrDiagnostic) ? parseJsonText(fileName, textOrDiagnostic) : { fileName, parseDiagnostics: [textOrDiagnostic] };
       }
-      function tryReadFile(fileName, readFile11) {
+      function tryReadFile(fileName, readFile12) {
         let text;
         try {
-          text = readFile11(fileName);
+          text = readFile12(fileName);
         } catch (e) {
           return createCompilerDiagnostic(Diagnostics.Cannot_read_file_0_Colon_1, fileName, e.message);
         }
@@ -177609,12 +177609,12 @@ ${lanes.join("\n")}
       function createCompilerHost(options, setParentNodes) {
         return createCompilerHostWorker(options, setParentNodes);
       }
-      function createGetSourceFile(readFile11, setParentNodes) {
+      function createGetSourceFile(readFile12, setParentNodes) {
         return (fileName, languageVersionOrOptions, onError) => {
           let text;
           try {
             mark3("beforeIORead");
-            text = readFile11(fileName);
+            text = readFile12(fileName);
             mark3("afterIORead");
             measure("I/O Read", "beforeIORead", "afterIORead");
           } catch (e) {
@@ -178518,7 +178518,7 @@ ${lanes.join("\n")}
           getRedirectFromOutput,
           forEachResolvedProjectReference: forEachResolvedProjectReference2
         });
-        const readFile11 = host.readFile.bind(host);
+        const readFile12 = host.readFile.bind(host);
         (_e = tracing) == null ? void 0 : _e.push(tracing.Phase.Program, "shouldProgramCreateNewSourceFiles", { hasOldProgram: !!oldProgram });
         const shouldCreateNewSourceFile = shouldProgramCreateNewSourceFiles(oldProgram, options);
         (_f = tracing) == null ? void 0 : _f.pop();
@@ -178739,7 +178739,7 @@ ${lanes.join("\n")}
           shouldTransformImportCall,
           emitBuildInfo,
           fileExists,
-          readFile: readFile11,
+          readFile: readFile12,
           directoryExists,
           getSymlinkCache,
           realpath: (_o = host.realpath) == null ? void 0 : _o.bind(host),
@@ -253284,9 +253284,9 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
 
 // src/action.ts
 var import_semver6 = __toESM(require_semver2(), 1);
-import { appendFile, mkdtemp as mkdtemp2, readFile as readFile10, rm as rm3 } from "node:fs/promises";
+import { appendFile, mkdtemp as mkdtemp2, readFile as readFile11, rm as rm3 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { join as join13 } from "node:path";
+import { join as join14 } from "node:path";
 
 // src/config/repo-config.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -276491,7 +276491,9 @@ function prBody(opts) {
   if (job.verdict) {
     L.push("### Verification", "", "| Check | Before | After |", "|---|---|---|");
     for (const c of job.verdict.comparisons)
-      L.push(`| ${c.name} | ${mark(c.baseline)} | ${mark(c.after)}${c.flaky ? " (flaky)" : ""} |`);
+      L.push(
+        `| ${c.name} | ${mark(c.baseline)} | ${mark(c.after)}${c.flaky ? " (flaky)" : ""}${c.sameFailures ? ` (same ${c.sameFailures.failing.length} failing test(s) as before; ${c.sameFailures.passed} pass)` : ""}${c.newFailures ? ` (newly failing: ${c.newFailures.slice(0, 5).join(", ")})` : ""} |`
+      );
     if (job.verdict.preexistingFailures.length)
       L.push(
         "",
@@ -301414,8 +301416,8 @@ function compatibleProvider(preset, model, baseURL, apiKey) {
 var import_semver3 = __toESM(require_semver2(), 1);
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { existsSync as existsSync6 } from "node:fs";
-import { mkdir as mkdir8, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join12, resolve as resolve3 } from "node:path";
+import { mkdir as mkdir9, readFile as readFile10, writeFile as writeFile4 } from "node:fs/promises";
+import { join as join13, resolve as resolve3 } from "node:path";
 
 // src/change/extract.ts
 import { existsSync as existsSync3 } from "node:fs";
@@ -302910,6 +302912,42 @@ function nodeInstallArgv(pm) {
       ];
   }
 }
+var SKIP_DIRS2 = /* @__PURE__ */ new Set(["node_modules", "dist", "build", "out", "coverage", "vendor", "tmp"]);
+var NPM_LOCKS = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
+async function workspaceMembersDeclaring(root, pkg, maxDepth = 4) {
+  const out = [];
+  const walk4 = async (rel, depth) => {
+    if (depth > maxDepth || out.length >= 50) return;
+    let entries;
+    try {
+      entries = await readdir4(join9(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const names = entries.map((e) => e.name);
+    if (rel) {
+      if (NPM_LOCKS.some((l) => names.includes(l))) return;
+      if (names.includes("package.json")) {
+        try {
+          const p = parsePackageJson(await readFile6(join9(root, rel, "package.json"), "utf8"));
+          for (const field of [p.dependencies, p.devDependencies, p.optionalDependencies]) {
+            const range = field?.[pkg];
+            if (range !== void 0 && !/^(workspace:|file:|link:)/.test(range)) {
+              out.push({ dir: rel, range });
+              break;
+            }
+          }
+        } catch {
+        }
+      }
+    }
+    for (const e of entries)
+      if (e.isDirectory() && !e.name.startsWith(".") && !SKIP_DIRS2.has(e.name))
+        await walk4(rel ? `${rel}/${e.name}` : e.name, depth + 1);
+  };
+  await walk4("", 0);
+  return out.sort((a, b) => a.dir.localeCompare(b.dir));
+}
 function parsePackageJson(text, where = "package.json") {
   try {
     return JSON.parse(text.replace(/^\uFEFF/, ""));
@@ -303102,7 +303140,7 @@ function testExtras(texts) {
   return [...names].filter((n) => /^(test|tests|testing|dev|develop|all)$/i.test(n)).sort();
 }
 function pipInstall(opts) {
-  const steps = [`uv venv -q --allow-existing --python ${opts.python} ${VENV}`];
+  const steps = [];
   const pipIn = `uv pip install -q --python ${VENV}`;
   if (opts.reqFiles.length) {
     const all = opts.reqFiles.map((f) => `-r ${q(f)}`).join(" ");
@@ -303118,8 +303156,19 @@ function pipInstall(opts) {
     const target = opts.extras.length ? `.[${opts.extras.join(",")}]` : ".";
     steps.push(`${pipIn} -e ${q(target)}`);
   }
-  if (opts.ensurePytest) steps.push(ENSURE_PYTEST);
-  return sh(steps.join(" && "));
+  const others = SANDBOX_PYTHONS.filter((v) => v !== opts.python).join(" ");
+  const script = [
+    `try_py() { uv venv -q --clear --seed --python "$1" ${VENV} && ${steps.join(" && ")}; }`,
+    `out=$(try_py ${opts.python} 2>&1); rc=$?; printf '%s\\n' "$out"`,
+    `if [ $rc -ne 0 ] && printf '%s' "$out" | grep -qiE 'python version|Python>=|Python<|requires-python|Python ABI|python_requires|cp3[0-9]+'; then`,
+    `  rc=1; for v in ${others}; do echo "bumpsmith: retrying with Python $v"; if try_py "$v"; then rc=0; break; fi; done`,
+    "fi",
+    // Like CI's setup-python environments: setuptools (pkg_resources) is present.
+    `[ $rc -eq 0 ] || exit $rc`,
+    `${VPY} -c "import pkg_resources" >/dev/null 2>&1 || uv pip install -q --python ${VENV} "setuptools<81" || true`,
+    ...opts.ensurePytest ? [ENSURE_PYTEST] : []
+  ].join("\n");
+  return sh(script);
 }
 function installSet(reqFiles) {
   const base = (f) => f.split("/").pop() ?? f;
@@ -303225,7 +303274,11 @@ async function inventoryPython(root) {
   const py = pm === "pip" ? [VPY] : [...runner, "python"];
   const checks = [{ name: "install", argv: installArgv }];
   if (djangoRunner) checks.push({ name: "test", argv: [...py, "manage.py", "test", "--noinput"] });
-  else if (hasTests) checks.push({ name: "test", argv: [...py, "-m", "pytest", "-q", "-x"] });
+  else if (hasTests)
+    checks.push({
+      name: "test",
+      argv: [...py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
+    });
   return {
     root,
     ecosystem: "pypi",
@@ -303336,7 +303389,7 @@ function renderEvidence(job) {
     lines.push("## Verification", "", "| Check | Before | After |", "|---|---|---|");
     for (const c of job.verdict.comparisons)
       lines.push(
-        `| ${c.name} | ${mark2(c.baseline)} | ${mark2(c.after)}${c.flaky ? " (flaky)" : ""} |`
+        `| ${c.name} | ${mark2(c.baseline)} | ${mark2(c.after)}${c.flaky ? " (flaky)" : ""}${c.sameFailures ? ` (same ${c.sameFailures.failing.length} failing test(s) as before; ${c.sameFailures.passed} pass)` : ""}${c.newFailures ? ` (newly failing: ${c.newFailures.slice(0, 5).join(", ")})` : ""} |`
       );
     lines.push("");
     if (job.verdict.preexistingFailures.length)
@@ -304055,7 +304108,8 @@ var DockerSandbox = class _DockerSandbox {
     }
   }
   /** Copy a host directory into /workspace (excluding .git and dependency folders). */
-  async copyIn(hostDir) {
+  async copyIn(hostDir, dest = "/workspace") {
+    if (dest !== "/workspace") await this.exec(["mkdir", "-p", "--", dest], { timeoutSec: 30 });
     await new Promise((resolve4, reject) => {
       const tar = spawn4("tar", hostTarCreateArgs(hostDir), {
         env: { ...process.env, COPYFILE_DISABLE: "1" },
@@ -304074,7 +304128,7 @@ var DockerSandbox = class _DockerSandbox {
           "-xf",
           "-",
           "-C",
-          "/workspace"
+          dest
         ],
         { stdio: ["pipe", "ignore", "pipe"] }
       );
@@ -304135,6 +304189,79 @@ var DockerSandbox = class _DockerSandbox {
 };
 var dockerSandboxFactory = (opts) => DockerSandbox.create(opts);
 
+// src/sandbox/git-deps.ts
+import { mkdir as mkdir8, readFile as readFile9 } from "node:fs/promises";
+import { join as join12 } from "node:path";
+var HOSTS = "github\\.com|gitlab\\.com|bitbucket\\.org|codeberg\\.org";
+var GIT_URL = new RegExp(
+  `git\\+(https://(?:${HOSTS})/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?(?=[@#\\s"';,]|$)`,
+  "g"
+);
+function gitDependencyUrls(texts) {
+  const out = /* @__PURE__ */ new Set();
+  for (const t of texts) for (const m of t.matchAll(GIT_URL)) if (m[1]) out.add(m[1]);
+  return [...out].sort().slice(0, 10);
+}
+async function fetchGitDeps(urls, workDir) {
+  const fetched = [];
+  const failed = [];
+  await mkdir8(workDir, { recursive: true });
+  for (const [i, url2] of urls.entries()) {
+    const name = `${i}-${url2.split("/").slice(-1)[0]?.replace(/[^A-Za-z0-9_.-]/g, "_")}.git`;
+    const hostDir = join12(workDir, name);
+    const r = await run(
+      "git",
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "credential.helper=",
+        "clone",
+        "--bare",
+        "--quiet",
+        `${url2}.git`,
+        hostDir
+      ],
+      {
+        timeoutMs: 5 * 6e4,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/bin/false" }
+      }
+    );
+    if (r.exitCode === 0) fetched.push({ url: url2, hostDir, name });
+    else
+      failed.push(`${url2} (${r.stderr.trim().split("\n").pop()?.slice(0, 120) ?? "clone failed"})`);
+  }
+  return { fetched, failed };
+}
+var SANDBOX_GIT_DIR = "/workspace/.bumpsmith-cache/git";
+function gitInsteadOfConfig(deps) {
+  const lines = ['[protocol "file"]', "	allow = always", "[safe]", "	directory = *"];
+  for (const d of deps) {
+    lines.push(`[url "file://${SANDBOX_GIT_DIR}/${d.name}"]`);
+    for (const v of [d.url, `${d.url}.git`, `${d.url}/`]) lines.push(`	insteadOf = ${v}`);
+  }
+  return `${lines.join("\n")}
+`;
+}
+async function installGitDeps(sb, deps, workDir) {
+  if (!deps.length) return;
+  await sb.copyIn(workDir, SANDBOX_GIT_DIR);
+  await sb.exec(["sh", "-c", 'cat > "$HOME/.gitconfig"'], {
+    input: gitInsteadOfConfig(deps),
+    timeoutSec: 30
+  });
+}
+async function readManifests(root, files) {
+  const out = [];
+  for (const f of files) {
+    try {
+      out.push(await readFile9(join12(root, f), "utf8"));
+    } catch {
+    }
+  }
+  return out;
+}
+
 // src/verify/verify.ts
 var TAIL = 6e3;
 var CHECK_TIMEOUT_SEC = 15 * 60;
@@ -304188,6 +304315,28 @@ async function runChecks(sb, checks, deadline) {
   }
   return results;
 }
+var ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+function parseTestResults(output3) {
+  const text = output3.replace(ANSI, "");
+  const failing = /* @__PURE__ */ new Set();
+  const clean = (s) => s.replace(/\s+\(?\d+(\.\d+)?\s*m?s\)?\s*$/, "").replace(/\s+-\s.*$/, "").replace(/\s+/g, " ").trim();
+  for (const line of text.split("\n")) {
+    let m = /^(?:FAILED|ERROR) (\S+)/.exec(line);
+    if (!m) m = /^\s*(?:FAIL|×|✕|✗)\s+(\S.*\S)\s*$/.exec(line);
+    if (!m) m = /^\s*● (\S.*›.*)$/.exec(line);
+    if (!m) m = /^\s*not ok \d+ (?:- )?(.+)$/.exec(line);
+    if (!m) m = /^\s{2,}\d+\) (\S.*)$/.exec(line);
+    if (m?.[1]) failing.add(clean(m[1]));
+  }
+  const counts = [
+    /(\d+) passed/.exec(text),
+    /(\d+) passing/.exec(text),
+    /^# pass (\d+)/m.exec(text),
+    /^ℹ pass (\d+)/m.exec(text)
+  ].filter(Boolean);
+  if (!counts.length || !failing.size) return null;
+  return { failing, passed: Math.max(...counts.map((c) => Number(c[1]))) };
+}
 async function compareWithBaseline(sb, checks, baseline, after, deadline) {
   const comparisons = [];
   for (const c of checks) {
@@ -304204,13 +304353,26 @@ async function compareWithBaseline(sb, checks, baseline, after, deadline) {
         }
       }
     }
-    comparisons.push({
+    const cmp = {
       name: c.name,
       baseline: b ? b.passed : null,
       after: afterPassed,
       flaky,
       regression: b?.passed === true && afterPassed !== true
-    });
+    };
+    if (c.name === "test" && b && a && !b.passed && !afterPassed && !b.timed_out && !a.timed_out) {
+      const before = parseTestResults(b.output_tail);
+      const now = parseTestResults(a.output_tail);
+      if (before && now) {
+        const added = [...now.failing].filter((t) => !before.failing.has(t));
+        if (added.length) {
+          cmp.newFailures = added.slice(0, 20);
+          cmp.regression = true;
+        } else if (now.passed > 0 && now.passed >= before.passed)
+          cmp.sameFailures = { failing: [...now.failing].slice(0, 20), passed: now.passed };
+      }
+    }
+    comparisons.push(cmp);
   }
   const regressions = comparisons.filter((c) => c.regression).map((c) => c.name);
   return {
@@ -304232,7 +304394,7 @@ function filesFromOutput(output3) {
 
 // src/pipeline.ts
 async function prepareRepo(input3, dir) {
-  const dest = join12(dir, "repo");
+  const dest = join13(dir, "repo");
   if (/^https:\/\//.test(input3.repo)) {
     await runOk(
       "git",
@@ -304271,9 +304433,9 @@ function normaliseSubdir(dir) {
 async function currentVersion(inv, pkg) {
   if (inv.ecosystem === "npm") {
     try {
-      const lock = join12(inv.root, "package-lock.json");
+      const lock = join13(inv.root, "package-lock.json");
       if (existsSync6(lock)) {
-        const j = JSON.parse(await readFile9(lock, "utf8"));
+        const j = JSON.parse(await readFile10(lock, "utf8"));
         const v = j.packages?.[`node_modules/${pkg}`]?.version;
         if (v) return v;
       }
@@ -304326,7 +304488,7 @@ async function privateRegistryHost(repoDir, lockfiles) {
   !/^(github\.com|codeload\.github\.com|.*\.githubusercontent\.com)$/.test(host);
   for (const f of lockfiles) {
     if (f.endsWith(".lockb")) continue;
-    const text = await readFile9(join12(repoDir, f), "utf8");
+    const text = await readFile10(join13(repoDir, f), "utf8");
     for (const m of text.matchAll(/(?:resolved|tarball)["':\s]+"?(https?:\/\/[^/"'\s]+)/g)) {
       const host = new URL(m[1] ?? "http://x").host;
       if (isPrivate(host)) return host;
@@ -304335,7 +304497,7 @@ async function privateRegistryHost(repoDir, lockfiles) {
   for (const f of [".npmrc", ".yarnrc.yml", ".yarnrc"]) {
     let text;
     try {
-      text = await readFile9(join12(repoDir, f), "utf8");
+      text = await readFile10(join13(repoDir, f), "utf8");
     } catch {
       continue;
     }
@@ -304364,13 +304526,15 @@ function installFailureReason(baseline) {
   if (/Could not resolve host: (github\.com|gitlab\.com|bitbucket\.org)|git fetch|git clone/i.test(
     out
   ))
-    return " (a dependency is fetched straight from a git repository, which the sandbox cannot reach; unsupported for now)";
+    return " (a dependency is fetched from a git repository that is private or not on GitHub, GitLab, Bitbucket or Codeberg; the sandbox cannot reach it)";
   if (/No space left on device|ENOSPC/.test(out))
     return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
   if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
   if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
     return " (a package is built from source and needs a system library the sandbox does not have)";
+  if (/no wheels with a matching platform tag|Unsupported platform|EBADPLATFORM/i.test(out))
+    return ` (a pinned package has no build for this machine's CPU (${process.arch}); it installs on x86_64 machines such as GitHub Actions runners)`;
   if (/No solution found when resolving|ResolutionImpossible|unsatisfiable/i.test(out))
     return " (the repository's pinned requirements cannot be resolved together)";
   if (/ERESOLVE|conflicting peer dependency/i.test(out))
@@ -304400,7 +304564,9 @@ function checkFailureReason(baseline) {
 }
 function isVerified(baseline, verdict) {
   if (!baseline.find((c) => c.name === "install")?.passed) return false;
-  return verdict.comparisons.some((c) => c.name !== "install" && c.after === true);
+  return verdict.comparisons.some(
+    (c) => c.name !== "install" && (c.after === true || c.sameFailures !== void 0)
+  );
 }
 function confidenceBand(r) {
   const hasTests = r.baseline.some((c) => c.name === "test");
@@ -304416,8 +304582,8 @@ async function runJob(input3, opts) {
   });
   const started = Date.now();
   const id = opts.jobId ?? `${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:T]/g, "").slice(0, 14)}-${randomUUID3().slice(0, 6)}`;
-  const dir = join12(opts.runsDir ?? join12(process.cwd(), "runs"), id);
-  await mkdir8(dir, { recursive: true });
+  const dir = join13(opts.runsDir ?? join13(process.cwd(), "runs"), id);
+  await mkdir9(dir, { recursive: true });
   const ledger = new Ledger(opts.budgetUsd ?? 8);
   const job = {
     id,
@@ -304438,7 +304604,7 @@ async function runJob(input3, opts) {
     job.usage = ledger.entries;
     job.cost_usd = Number(ledger.totalUsd.toFixed(4));
     job.duration_ms = Date.now() - started;
-    await writeFile4(join12(dir, "job.json"), `${JSON.stringify(job, null, 2)}
+    await writeFile4(join13(dir, "job.json"), `${JSON.stringify(job, null, 2)}
 `);
   };
   let sb = null;
@@ -304454,7 +304620,7 @@ async function runJob(input3, opts) {
     let workspaceMember = false;
     if (sub) {
       workspaceMember = inv.ecosystem === "npm" && !inv.lockfiles.length && ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"].some(
-        (f) => existsSync6(join12(repoRoot, f))
+        (f) => existsSync6(join13(repoRoot, f))
       );
       if (workspaceMember) {
         const rootInv = await inventory(repoRoot, "npm");
@@ -304480,13 +304646,18 @@ async function runJob(input3, opts) {
       else inv.checks.push({ name, argv });
     }
     const eco = input3.ecosystem ?? inv.ecosystem;
-    const from = input3.from ?? await currentVersion(inv, input3.packageName);
+    const members2 = eco === "npm" && !sub && (inv.workspaces.length > 0 || existsSync6(join13(repoDir, "pnpm-workspace.yaml"))) ? await workspaceMembersDeclaring(repoDir, input3.packageName) : [];
+    if (members2.length)
+      job.notes.push(
+        `Workspace members that declare ${input3.packageName}: ${members2.map((m) => m.dir).join(", ")}.`
+      );
+    const from = input3.from ?? await currentVersion(inv, input3.packageName) ?? (members2[0] ? lowestVersion(members2[0].range) : null);
     if (!from) throw new Error(`${input3.packageName} is not a dependency of this repository`);
     job.from = from;
     const privateHost = eco === "npm" ? workspaceMember ? await privateRegistryHost(
       repoRoot,
       ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].filter(
-        (f) => existsSync6(join12(repoRoot, f))
+        (f) => existsSync6(join13(repoRoot, f))
       )
     ) : await privateRegistryHost(repoDir, inv.lockfiles) : null;
     if (privateHost) {
@@ -304498,7 +304669,7 @@ async function runJob(input3, opts) {
     }
     if (eco === "npm") {
       const gitDeps = nonRegistryDependencies(
-        await readFile9(join12(repoDir, "package.json"), "utf8")
+        await readFile10(join13(repoDir, "package.json"), "utf8")
       );
       if (gitDeps.length) {
         job.state = "blocked_policy";
@@ -304569,6 +304740,22 @@ async function runJob(input3, opts) {
         `CI services not run in the sandbox (only official postgres, mysql, mariadb, redis, valkey and mongo images are): ${svc.skipped.join(", ")}.`
       );
     await sb.copyIn(repoRoot);
+    if (eco === "pypi") {
+      const urls = gitDependencyUrls(await readManifests(repoDir, inv.manifests));
+      if (urls.length) {
+        const gitDir = join13(dir, "git-deps");
+        const { fetched, failed: failed2 } = await fetchGitDeps(urls, gitDir);
+        await installGitDeps(sb, fetched, gitDir);
+        if (fetched.length)
+          job.notes.push(
+            `Fetched git dependencies on the host and served them to the sandbox: ${fetched.map((f) => f.url).join(", ")}.`
+          );
+        if (failed2.length)
+          job.notes.push(
+            `Could not fetch git dependencies (private or missing?): ${failed2.join("; ")}.`
+          );
+      }
+    }
     const wd = sub ? `/workspace/${sub}` : void 0;
     log2(`job ${id}: baseline checks`);
     job.baseline = await runChecks(sb, inv.checks, deadline);
@@ -304585,23 +304772,18 @@ async function runJob(input3, opts) {
     const manifest = "package.json";
     const cur = eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
     if (eco === "npm") {
-      const info = npmDepInfo(cur.stdout, input3.packageName);
-      if (!info) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
       const before = new Date(Date.now() - minAge * 864e5);
-      const vendoredBerry = inv.packageManager === "yarn" && (existsSync6(join12(repoDir, ".yarnrc.yml")) || existsSync6(join12(repoRoot, ".yarnrc.yml")));
-      const workspaceRoot = !workspaceMember && !vendoredBerry && (existsSync6(join12(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
-      const npmMember = workspaceMember && inv.packageManager === "npm";
-      const upCwd = npmMember ? void 0 : wd;
-      const memberArgs = npmMember ? ["--workspace", sub] : [];
-      const companions = [];
-      for (const c of npmCompanions(cur.stdout, input3.packageName, from)) {
-        try {
-          const crel = await getRelease("npm", c, input3.to);
-          const cgate = releaseGate(crel, await checkMalicious("npm", c, input3.to), minAge);
-          if (cgate.allowed) companions.push(c);
-        } catch {
-        }
+      const vendoredBerry = inv.packageManager === "yarn" && (existsSync6(join13(repoDir, ".yarnrc.yml")) || existsSync6(join13(repoRoot, ".yarnrc.yml")));
+      const isWorkspaceRoot = existsSync6(join13(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0;
+      const targets = [];
+      if (npmDepInfo(cur.stdout, input3.packageName))
+        targets.push({ dir: sub, member: workspaceMember, text: cur.stdout });
+      for (const m of members2) {
+        const text = (await sb.exec(["cat", "--", "package.json"], { cwd: `/workspace/${m.dir}` })).stdout;
+        targets.push({ dir: m.dir, member: true, text });
       }
+      if (!targets.length) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
+      const extras = [];
       for (const extra of input3.alsoUpgrade ?? []) {
         try {
           const xrel = await getRelease("npm", extra.name, extra.to);
@@ -304610,7 +304792,7 @@ async function runJob(input3, opts) {
             await checkMalicious("npm", extra.name, extra.to),
             minAge
           );
-          if (xgate.allowed) companions.push(`${extra.name}@${extra.to}`);
+          if (xgate.allowed) extras.push(`${extra.name}@${extra.to}`);
           else
             job.notes.push(
               `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`
@@ -304621,42 +304803,76 @@ async function runJob(input3, opts) {
           );
         }
       }
-      if (companions.length)
-        job.notes.push(`Upgraded together with ${input3.packageName}: ${companions.join(", ")}.`);
-      const upArgv = [
-        ...npmUpgradeArgv(
-          inv.packageManager,
-          input3.packageName,
-          input3.to,
-          info,
-          before,
-          workspaceRoot,
-          companions
-        ),
-        ...memberArgs
-      ];
-      const upOpts = { network: true, timeoutSec: 15 * 60, cwd: upCwd };
-      let up = await sb.exec(upArgv, upOpts);
-      if (up.exitCode !== 0 && inv.packageManager === "npm") {
-        const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
-        const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
-        if (peerConflict) {
-          job.notes.push(
-            "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does."
-          );
-          up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
-          if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
-        } else {
-          job.notes.push(
-            "npm could not apply the release-age limit to transitive dependencies (--before); installed without it."
-          );
-          up = await sb.exec(noBefore, upOpts);
+      const gatedCompanions = /* @__PURE__ */ new Map();
+      const companionOk = async (c) => {
+        if (!gatedCompanions.has(c)) {
+          try {
+            const crel = await getRelease("npm", c, input3.to);
+            gatedCompanions.set(
+              c,
+              releaseGate(crel, await checkMalicious("npm", c, input3.to), minAge).allowed
+            );
+          } catch {
+            gatedCompanions.set(c, false);
+          }
         }
+        return gatedCompanions.get(c) === true;
+      };
+      for (const t of targets) {
+        const info = npmDepInfo(t.text, input3.packageName);
+        if (!info) continue;
+        const companions = [];
+        for (const c of npmCompanions(t.text, input3.packageName, from))
+          if (await companionOk(c)) companions.push(c);
+        for (const x of extras) {
+          const name = x.slice(0, x.lastIndexOf("@"));
+          if (npmDepInfo(t.text, name)) companions.push(x);
+        }
+        if (companions.length)
+          job.notes.push(
+            `Upgraded together with ${input3.packageName}${t.dir ? ` in ${t.dir}` : ""}: ${companions.join(", ")}.`
+          );
+        const workspaceRoot = !t.member && !vendoredBerry && isWorkspaceRoot;
+        const npmMember = t.member && inv.packageManager === "npm";
+        const upArgv = [
+          ...npmUpgradeArgv(
+            inv.packageManager,
+            input3.packageName,
+            input3.to,
+            info,
+            before,
+            workspaceRoot,
+            companions
+          ),
+          ...npmMember ? ["--workspace", t.dir] : []
+        ];
+        const upOpts = {
+          network: true,
+          timeoutSec: 15 * 60,
+          cwd: npmMember || !t.dir ? void 0 : `/workspace/${t.dir}`
+        };
+        let up = await sb.exec(upArgv, upOpts);
+        if (up.exitCode !== 0 && inv.packageManager === "npm") {
+          const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
+          const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
+          if (peerConflict) {
+            job.notes.push(
+              "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does."
+            );
+            up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
+            if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
+          } else {
+            job.notes.push(
+              "npm could not apply the release-age limit to transitive dependencies (--before); installed without it."
+            );
+            up = await sb.exec(noBefore, upOpts);
+          }
+        }
+        if (up.exitCode !== 0)
+          throw new Error(
+            `could not install ${input3.packageName}@${input3.to}${t.dir ? ` in ${t.dir}` : ""}: ${(up.stderr || up.stdout).slice(-1500)}`
+          );
       }
-      if (up.exitCode !== 0)
-        throw new Error(
-          `could not install ${input3.packageName}@${input3.to}: ${(up.stderr || up.stdout).slice(-1500)}`
-        );
     } else {
       const extras = [];
       for (const extra of input3.alsoUpgrade ?? []) {
@@ -304707,6 +304923,7 @@ async function runJob(input3, opts) {
     const record2 = job.change_record;
     if (!record2) throw new Error("no Change Record");
     const allow = /* @__PURE__ */ new Set([
+      ...members2.map((m) => `${m.dir}/package.json`),
       ...inv.manifests,
       ...inv.lockfiles,
       ...job.impact.items.map((i) => i.file)
@@ -304784,8 +305001,8 @@ async function runJob(input3, opts) {
     job.verdict = verdict;
     job.edits = [...policy.edits.values()];
     job.tool_log = toolLog;
-    await sb.copyOut(join12(dir, "after"));
-    await snapshot(repoRoot, join12(dir, "before"));
+    await sb.copyOut(join13(dir, "after"));
+    await snapshot(repoRoot, join13(dir, "before"));
     const fullPatch = await computePatch(dir, "before", "after");
     const inSub = (f) => sub ? `${sub}/${f}` : f;
     const keep = /* @__PURE__ */ new Set([
@@ -304807,13 +305024,13 @@ async function runJob(input3, opts) {
       job.notes.push(
         `Excluded files changed by builds or tests, not by the fix: ${excluded.join(", ")}.`
       );
-    await writeFile4(join12(dir, "patch.diff"), patch);
+    await writeFile4(join13(dir, "patch.diff"), patch);
     const files = parsePatch(patch);
     job.patch_lines = files.reduce((n, f) => n + f.added.length + f.removed.length, 0);
     job.state = "reviewing";
     const readSnap = async (side, path5) => {
-      const f = join12(dir, side, path5);
-      return existsSync6(f) ? await readFile9(f, "utf8") : null;
+      const f = join13(dir, side, path5);
+      return existsSync6(f) ? await readFile10(f, "utf8") : null;
     };
     const manifests = await Promise.all(
       files.filter((f) => /(^|\/)package\.json$/.test(f.path)).map(async (f) => ({
@@ -304876,7 +305093,7 @@ async function runJob(input3, opts) {
     if (sb) await sb.destroy();
     job.finished_at = (/* @__PURE__ */ new Date()).toISOString();
     await save();
-    await writeFile4(join12(dir, "evidence.md"), renderEvidence(job));
+    await writeFile4(join13(dir, "evidence.md"), renderEvidence(job));
     log2(
       `job ${id}: ${job.state} (confidence ${job.confidence ?? "n/a"}, $${ledger.totalUsd.toFixed(2)}) -> ${dir}`
     );
@@ -305150,14 +305367,14 @@ async function runAction(d) {
     log(
       `::group::${t.packageName} ${t.from ?? ""} \u2192 ${t.to}${t.rescueOf ? ` (rescuing #${t.rescueOf})` : ""}`
     );
-    const dir = join13(d.workDir, branchSuffix);
-    const checkout = await d.checkout(join13(dir, "repo"), baseSha);
-    const record2 = await d.upgrade(t, join13(dir, "repo"), join13(dir, "runs"), config2);
+    const dir = join14(d.workDir, branchSuffix);
+    const checkout = await d.checkout(join14(dir, "repo"), baseSha);
+    const record2 = await d.upgrade(t, join14(dir, "repo"), join14(dir, "runs"), config2);
     if (checkout.removedSymlinks.length)
       record2.notes.push(
         `${checkout.removedSymlinks.length} symlink(s) pointing outside the repository were ignored.`
       );
-    const patch = await readFile10(join13(dir, "runs", record2.id, "patch.diff"), "utf8").catch(
+    const patch = await readFile11(join14(dir, "runs", record2.id, "patch.diff"), "utf8").catch(
       () => ""
     );
     log("::endgroup::");
@@ -305244,9 +305461,9 @@ async function main() {
     userAgent: "bumpsmith-action",
     log: (m) => warning(m)
   });
-  const payload = process.env.GITHUB_EVENT_PATH ? JSON.parse(await readFile10(process.env.GITHUB_EVENT_PATH, "utf8")) : {};
-  const work = await mkdtemp2(join13(process.env.RUNNER_TEMP ?? tmpdir2(), "bumpsmith-"));
-  process.env.BUMPSMITH_DATA_DIR ??= join13(work, "data");
+  const payload = process.env.GITHUB_EVENT_PATH ? JSON.parse(await readFile11(process.env.GITHUB_EVENT_PATH, "utf8")) : {};
+  const work = await mkdtemp2(join14(process.env.RUNNER_TEMP ?? tmpdir2(), "bumpsmith-"));
+  process.env.BUMPSMITH_DATA_DIR ??= join14(work, "data");
   const maxCost = Number(input2("max-cost-usd", "5")) || 5;
   let rows = [];
   try {

@@ -43,7 +43,7 @@ export function renderEvidence(job: JobRecord): string {
     lines.push("## Verification", "", "| Check | Before | After |", "|---|---|---|");
     for (const c of job.verdict.comparisons)
       lines.push(
-        `| ${c.name as CheckName} | ${mark(c.baseline)} | ${mark(c.after)}${c.flaky ? " (flaky)" : ""} |`,
+        `| ${c.name as CheckName} | ${mark(c.baseline)} | ${mark(c.after)}${c.flaky ? " (flaky)" : ""}${c.sameFailures ? ` (same ${c.sameFailures.failing.length} failing test(s) as before; ${c.sameFailures.passed} pass)` : ""}${c.newFailures ? ` (newly failing: ${c.newFailures.slice(0, 5).join(", ")})` : ""} |`,
       );
     lines.push("");
     if (job.verdict.preexistingFailures.length)

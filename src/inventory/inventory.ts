@@ -125,6 +125,54 @@ export function nodeInstallArgv(pm: PackageManager): string[] {
   }
 }
 
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", "coverage", "vendor", "tmp"]);
+const NPM_LOCKS = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
+
+/**
+ * Workspace members (sub-directories sharing the root lockfile) that declare `pkg`, with the
+ * declared range. Bots open one PR at the root for a package only members declare.
+ */
+export async function workspaceMembersDeclaring(
+  root: string,
+  pkg: string,
+  maxDepth = 4,
+): Promise<{ dir: string; range: string }[]> {
+  const out: { dir: string; range: string }[] = [];
+  const walk = async (rel: string, depth: number): Promise<void> => {
+    if (depth > maxDepth || out.length >= 50) return;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(join(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const names = entries.map((e) => e.name);
+    if (rel) {
+      // A nested project with its own lockfile is not part of the root workspace.
+      if (NPM_LOCKS.some((l) => names.includes(l))) return;
+      if (names.includes("package.json")) {
+        try {
+          const p = parsePackageJson(await readFile(join(root, rel, "package.json"), "utf8"));
+          for (const field of [p.dependencies, p.devDependencies, p.optionalDependencies]) {
+            const range = field?.[pkg];
+            if (range !== undefined && !/^(workspace:|file:|link:)/.test(range)) {
+              out.push({ dir: rel, range });
+              break;
+            }
+          }
+        } catch {
+          // unreadable member manifest: skip it
+        }
+      }
+    }
+    for (const e of entries)
+      if (e.isDirectory() && !e.name.startsWith(".") && !SKIP_DIRS.has(e.name))
+        await walk(rel ? `${rel}/${e.name}` : e.name, depth + 1);
+  };
+  await walk("", 0);
+  return out.sort((a, b) => a.dir.localeCompare(b.dir));
+}
+
 /** package.json text to an object; tolerates a byte-order mark, explains bad JSON. */
 export function parsePackageJson(text: string, where = "package.json"): PackageJson {
   try {
@@ -367,7 +415,7 @@ export function pipInstall(opts: {
   extras: string[];
   ensurePytest: boolean;
 }): string[] {
-  const steps = [`uv venv -q --allow-existing --python ${opts.python} ${VENV}`];
+  const steps: string[] = [];
   const pipIn = `uv pip install -q --python ${VENV}`;
   if (opts.reqFiles.length) {
     const all = opts.reqFiles.map((f) => `-r ${q(f)}`).join(" ");
@@ -385,8 +433,21 @@ export function pipInstall(opts: {
     const target = opts.extras.length ? `.[${opts.extras.join(",")}]` : ".";
     steps.push(`${pipIn} -e ${q(target)}`);
   }
-  if (opts.ensurePytest) steps.push(ENSURE_PYTEST);
-  return sh(steps.join(" && "));
+  // Pins often need a newer (or older) Python than the project declares: when uv says so,
+  // try the other interpreters in the image.
+  const others = SANDBOX_PYTHONS.filter((v) => v !== opts.python).join(" ");
+  const script = [
+    `try_py() { uv venv -q --clear --seed --python "$1" ${VENV} && ${steps.join(" && ")}; }`,
+    `out=$(try_py ${opts.python} 2>&1); rc=$?; printf '%s\\n' "$out"`,
+    `if [ $rc -ne 0 ] && printf '%s' "$out" | grep -qiE 'python version|Python>=|Python<|requires-python|Python ABI|python_requires|cp3[0-9]+'; then`,
+    `  rc=1; for v in ${others}; do echo "bumpsmith: retrying with Python $v"; if try_py "$v"; then rc=0; break; fi; done`,
+    "fi",
+    // Like CI's setup-python environments: setuptools (pkg_resources) is present.
+    `[ $rc -eq 0 ] || exit $rc`,
+    `${VPY} -c "import pkg_resources" >/dev/null 2>&1 || uv pip install -q --python ${VENV} "setuptools<81" || true`,
+    ...(opts.ensurePytest ? [ENSURE_PYTEST] : []),
+  ].join("\n");
+  return sh(script);
 }
 
 /**
@@ -537,7 +598,13 @@ async function inventoryPython(root: string): Promise<Inventory> {
   const py = pm === "pip" ? [VPY] : [...runner, "python"];
   const checks: CheckCommand[] = [{ name: "install", argv: installArgv }];
   if (djangoRunner) checks.push({ name: "test", argv: [...py, "manage.py", "test", "--noinput"] });
-  else if (hasTests) checks.push({ name: "test", argv: [...py, "-m", "pytest", "-q", "-x"] });
+  // All tests, with a summary of failures: a test that already failed before the upgrade
+  // must not hide the others (verification compares test by test).
+  else if (hasTests)
+    checks.push({
+      name: "test",
+      argv: [...py, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"],
+    });
 
   return {
     root,

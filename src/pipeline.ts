@@ -10,7 +10,7 @@ import { buildChangeRecord, EXTRACTOR_PROMPT_VERSION } from "./change/extract.ts
 import { commandArgv, type RepoConfig } from "./config/repo-config.ts";
 import { buildImpactMap } from "./impact/impact.ts";
 import { bumpFile, npmCompanions, npmDepInfo, npmUpgradeArgv } from "./inventory/bump.ts";
-import { type Inventory, inventory } from "./inventory/inventory.ts";
+import { type Inventory, inventory, workspaceMembersDeclaring } from "./inventory/inventory.ts";
 import { Ledger } from "./model/ledger.ts";
 import type { AgentStop, Effort, ModelProvider } from "./model/provider.ts";
 import {
@@ -26,6 +26,12 @@ import { computePatch, filterPatch, parsePatch, snapshot } from "./review/patch.
 import { REVIEWER_PROMPT_VERSION, type ReviewResult, review } from "./review/reviewer.ts";
 import { applyRules, type RuleFinding } from "./review/rules.ts";
 import { dockerSandboxFactory } from "./sandbox/docker.ts";
+import {
+  fetchGitDeps,
+  gitDependencyUrls,
+  installGitDeps,
+  readManifests,
+} from "./sandbox/git-deps.ts";
 import type { Sandbox, SandboxFactory } from "./sandbox/sandbox.ts";
 import { detectServices } from "./sandbox/services.ts";
 import type { ChangeRecord } from "./schemas/change-record.ts";
@@ -287,13 +293,15 @@ export function installFailureReason(baseline: CheckResult[]): string {
       out,
     )
   )
-    return " (a dependency is fetched straight from a git repository, which the sandbox cannot reach; unsupported for now)";
+    return " (a dependency is fetched from a git repository that is private or not on GitHub, GitLab, Bitbucket or Codeberg; the sandbox cannot reach it)";
   if (/No space left on device|ENOSPC/.test(out))
     return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
   if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
   if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
     return " (a package is built from source and needs a system library the sandbox does not have)";
+  if (/no wheels with a matching platform tag|Unsupported platform|EBADPLATFORM/i.test(out))
+    return ` (a pinned package has no build for this machine's CPU (${process.arch}); it installs on x86_64 machines such as GitHub Actions runners)`;
   if (/No solution found when resolving|ResolutionImpossible|unsatisfiable/i.test(out))
     return " (the repository's pinned requirements cannot be resolved together)";
   if (/ERESOLVE|conflicting peer dependency/i.test(out))
@@ -331,7 +339,9 @@ export function checkFailureReason(baseline: CheckResult[]): string | null {
 /** True when the dependencies installed and at least one real check passed after the upgrade. */
 export function isVerified(baseline: CheckResult[], verdict: Verdict): boolean {
   if (!baseline.find((c) => c.name === "install")?.passed) return false;
-  return verdict.comparisons.some((c) => c.name !== "install" && c.after === true);
+  return verdict.comparisons.some(
+    (c) => c.name !== "install" && (c.after === true || c.sameFailures !== undefined),
+  );
 }
 
 export function confidenceBand(r: {
@@ -429,7 +439,21 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       else inv.checks.push({ name: name as CheckName, argv });
     }
     const eco = input.ecosystem ?? inv.ecosystem;
-    const from = input.from ?? (await currentVersion(inv, input.packageName));
+    // A root-level bot PR for a package that workspace members declare: bump every member.
+    const members =
+      eco === "npm" &&
+      !sub &&
+      (inv.workspaces.length > 0 || existsSync(join(repoDir, "pnpm-workspace.yaml")))
+        ? await workspaceMembersDeclaring(repoDir, input.packageName)
+        : [];
+    if (members.length)
+      job.notes.push(
+        `Workspace members that declare ${input.packageName}: ${members.map((m) => m.dir).join(", ")}.`,
+      );
+    const from =
+      input.from ??
+      (await currentVersion(inv, input.packageName)) ??
+      (members[0] ? lowestVersion(members[0].range) : null);
     if (!from) throw new Error(`${input.packageName} is not a dependency of this repository`);
     job.from = from;
 
@@ -537,6 +561,23 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         `CI services not run in the sandbox (only official postgres, mysql, mariadb, redis, valkey and mongo images are): ${svc.skipped.join(", ")}.`,
       );
     await sb.copyIn(repoRoot);
+    // Public git dependencies: fetched by the host, served to the sandbox from a local copy.
+    if (eco === "pypi") {
+      const urls = gitDependencyUrls(await readManifests(repoDir, inv.manifests));
+      if (urls.length) {
+        const gitDir = join(dir, "git-deps");
+        const { fetched, failed } = await fetchGitDeps(urls, gitDir);
+        await installGitDeps(sb, fetched, gitDir);
+        if (fetched.length)
+          job.notes.push(
+            `Fetched git dependencies on the host and served them to the sandbox: ${fetched.map((f) => f.url).join(", ")}.`,
+          );
+        if (failed.length)
+          job.notes.push(
+            `Could not fetch git dependencies (private or missing?): ${failed.join("; ")}.`,
+          );
+      }
+    }
     const wd = sub ? `/workspace/${sub}` : undefined;
     log(`job ${id}: baseline checks`);
     job.baseline = await runChecks(sb, inv.checks, deadline);
@@ -557,34 +598,27 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     const cur =
       eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
     if (eco === "npm") {
-      const info = npmDepInfo(cur.stdout, input.packageName);
-      if (!info) throw new Error(`could not find ${input.packageName} in ${manifest}`);
       const before = new Date(Date.now() - minAge * 86_400_000);
       // "yarn" can be Yarn 1 handing off to a vendored Yarn 2+ (yarnPath in .yarnrc.yml);
       // Yarn 2+ adds to the workspace in cwd and rejects Yarn 1's -W.
       const vendoredBerry =
         inv.packageManager === "yarn" &&
         (existsSync(join(repoDir, ".yarnrc.yml")) || existsSync(join(repoRoot, ".yarnrc.yml")));
-      const workspaceRoot =
-        !workspaceMember &&
-        !vendoredBerry &&
-        (existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
-      // npm adds to a workspace member from the root with --workspace.
-      const npmMember = workspaceMember && inv.packageManager === "npm";
-      const upCwd = npmMember ? undefined : wd;
-      const memberArgs = npmMember ? ["--workspace", sub] : [];
-      // Companions must exist at the target version and pass the same release gate.
-      const companions: string[] = [];
-      for (const c of npmCompanions(cur.stdout, input.packageName, from)) {
-        try {
-          const crel = await getRelease("npm", c, input.to);
-          const cgate = releaseGate(crel, await checkMalicious("npm", c, input.to), minAge);
-          if (cgate.allowed) companions.push(c);
-        } catch {
-          // no such version of the companion; leave it alone
-        }
+      const isWorkspaceRoot =
+        existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0;
+      // Where the package is declared: this directory, and/or workspace members under it.
+      const targets: { dir: string; member: boolean; text: string }[] = [];
+      if (npmDepInfo(cur.stdout, input.packageName))
+        targets.push({ dir: sub, member: workspaceMember, text: cur.stdout });
+      for (const m of members) {
+        const text = (await sb.exec(["cat", "--", "package.json"], { cwd: `/workspace/${m.dir}` }))
+          .stdout;
+        targets.push({ dir: m.dir, member: true, text });
       }
+      if (!targets.length) throw new Error(`could not find ${input.packageName} in ${manifest}`);
+
       // Grouped updates: every extra package must pass the same release gate.
+      const extras: string[] = [];
       for (const extra of input.alsoUpgrade ?? []) {
         try {
           const xrel = await getRelease("npm", extra.name, extra.to);
@@ -593,7 +627,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
             await checkMalicious("npm", extra.name, extra.to),
             minAge,
           );
-          if (xgate.allowed) companions.push(`${extra.name}@${extra.to}`);
+          if (xgate.allowed) extras.push(`${extra.name}@${extra.to}`);
           else
             job.notes.push(
               `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`,
@@ -604,42 +638,80 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           );
         }
       }
-      if (companions.length)
-        job.notes.push(`Upgraded together with ${input.packageName}: ${companions.join(", ")}.`);
-      const upArgv = [
-        ...npmUpgradeArgv(
-          inv.packageManager,
-          input.packageName,
-          input.to,
-          info,
-          before,
-          workspaceRoot,
-          companions,
-        ),
-        ...memberArgs,
-      ];
-      const upOpts = { network: true, timeoutSec: 15 * 60, cwd: upCwd };
-      let up = await sb.exec(upArgv, upOpts);
-      if (up.exitCode !== 0 && inv.packageManager === "npm") {
-        const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
-        const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
-        if (peerConflict) {
-          job.notes.push(
-            "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does.",
-          );
-          up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
-          if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
-        } else {
-          job.notes.push(
-            "npm could not apply the release-age limit to transitive dependencies (--before); installed without it.",
-          );
-          up = await sb.exec(noBefore, upOpts);
+      const gatedCompanions = new Map<string, boolean>();
+      const companionOk = async (c: string) => {
+        if (!gatedCompanions.has(c)) {
+          try {
+            const crel = await getRelease("npm", c, input.to);
+            gatedCompanions.set(
+              c,
+              releaseGate(crel, await checkMalicious("npm", c, input.to), minAge).allowed,
+            );
+          } catch {
+            gatedCompanions.set(c, false); // no such version of the companion
+          }
         }
+        return gatedCompanions.get(c) === true;
+      };
+
+      for (const t of targets) {
+        const info = npmDepInfo(t.text, input.packageName);
+        if (!info) continue;
+        // Companions must exist at the target version and pass the same release gate;
+        // grouped extras move only where this manifest already declares them.
+        const companions: string[] = [];
+        for (const c of npmCompanions(t.text, input.packageName, from))
+          if (await companionOk(c)) companions.push(c);
+        for (const x of extras) {
+          const name = x.slice(0, x.lastIndexOf("@"));
+          if (npmDepInfo(t.text, name)) companions.push(x);
+        }
+        if (companions.length)
+          job.notes.push(
+            `Upgraded together with ${input.packageName}${t.dir ? ` in ${t.dir}` : ""}: ${companions.join(", ")}.`,
+          );
+        const workspaceRoot = !t.member && !vendoredBerry && isWorkspaceRoot;
+        // npm adds to a workspace member from the root with --workspace.
+        const npmMember = t.member && inv.packageManager === "npm";
+        const upArgv = [
+          ...npmUpgradeArgv(
+            inv.packageManager,
+            input.packageName,
+            input.to,
+            info,
+            before,
+            workspaceRoot,
+            companions,
+          ),
+          ...(npmMember ? ["--workspace", t.dir] : []),
+        ];
+        const upOpts = {
+          network: true,
+          timeoutSec: 15 * 60,
+          cwd: npmMember || !t.dir ? undefined : `/workspace/${t.dir}`,
+        };
+        let up = await sb.exec(upArgv, upOpts);
+        if (up.exitCode !== 0 && inv.packageManager === "npm") {
+          const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
+          const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
+          if (peerConflict) {
+            job.notes.push(
+              "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does.",
+            );
+            up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
+            if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
+          } else {
+            job.notes.push(
+              "npm could not apply the release-age limit to transitive dependencies (--before); installed without it.",
+            );
+            up = await sb.exec(noBefore, upOpts);
+          }
+        }
+        if (up.exitCode !== 0)
+          throw new Error(
+            `could not install ${input.packageName}@${input.to}${t.dir ? ` in ${t.dir}` : ""}: ${(up.stderr || up.stdout).slice(-1500)}`,
+          );
       }
-      if (up.exitCode !== 0)
-        throw new Error(
-          `could not install ${input.packageName}@${input.to}: ${(up.stderr || up.stdout).slice(-1500)}`,
-        );
     } else {
       // Every manifest that declares the package moves together (requirements*.txt,
       // requirements*.in, pyproject.toml); one stale file would reinstall the old version.
@@ -698,6 +770,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
 
     // Fix loop (FIX-1..8)
     const allow = new Set<string>([
+      ...members.map((m) => `${m.dir}/package.json`),
       ...inv.manifests,
       ...inv.lockfiles,
       ...job.impact.items.map((i) => i.file),

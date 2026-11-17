@@ -32,7 +32,8 @@ export interface Sandbox {
   exec(argv: string[], opts?: ExecOptions): Promise<ExecResult>;
   /** Run a check, restoring package.json afterwards if the check's scripts rewrote it. */
   execCheck(argv: string[], opts?: ExecOptions & { guardManifest?: boolean }): Promise<ExecResult>;
-  copyIn(hostDir: string): Promise<void>;
+  /** Copy a host directory into the sandbox (default /workspace). */
+  copyIn(hostDir: string, dest?: string): Promise<void>;
   copyOut(hostDir: string): Promise<void>;
   destroy(): Promise<void>;
 }
