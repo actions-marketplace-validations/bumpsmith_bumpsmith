@@ -182,6 +182,38 @@ export function parsePackageJson(text: string, where = "package.json"): PackageJ
   }
 }
 
+/**
+ * Code generation the repository runs after install (its own postinstall script, Prisma
+ * client generation). Dependency install scripts stay disabled; this is the repository's
+ * own code, the same trust as its tests. Failures are reported, not fatal.
+ */
+export function withCodegen(
+  install: string[],
+  pm: PackageManager,
+  root: string,
+  pkg: PackageJson,
+): string[] {
+  const steps: string[] = [];
+  const post = pkg.scripts?.postinstall;
+  if (post) steps.push(`${pm === "yarn-berry" ? "yarn-berry" : pm} run postinstall`);
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const prismaSchema = ["prisma/schema.prisma", "schema.prisma", "prisma/schema"].some((f) =>
+    existsSync(join(root, f)),
+  );
+  if (("prisma" in deps || "@prisma/client" in deps) && prismaSchema && !/prisma/.test(post ?? ""))
+    steps.push(
+      pm === "npm"
+        ? "npx --no-install prisma generate"
+        : `${pm === "yarn-berry" ? "yarn-berry" : pm} exec prisma generate`,
+    );
+  if (!steps.length) return install;
+  const quoted = install.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+  const gen = steps
+    .map((st) => `{ ${st} || echo "bumpsmith: '${st}' failed; continuing"; }`)
+    .join(" && ");
+  return ["sh", "-c", `${quoted} && ${gen}`];
+}
+
 async function inventoryNode(
   root: string,
   pkg: PackageJson,
@@ -197,7 +229,9 @@ async function inventoryNode(
   ].filter((f) => existsSync(join(root, f)));
   const scripts = pkg.scripts ?? {};
   const hasTypeScript = existsSync(join(root, "tsconfig.json"));
-  const checks: CheckCommand[] = [{ name: "install", argv: nodeInstallArgv(pm) }];
+  const checks: CheckCommand[] = [
+    { name: "install", argv: withCodegen(nodeInstallArgv(pm), pm, root, pkg) },
+  ];
   if (scripts.build) checks.push({ name: "build", argv: nodeRunScript(pm, "build") });
   if (scripts.typecheck) checks.push({ name: "typecheck", argv: nodeRunScript(pm, "typecheck") });
   else if (hasTypeScript)

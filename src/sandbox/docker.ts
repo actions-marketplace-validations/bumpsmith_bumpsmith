@@ -71,7 +71,12 @@ export const NODE_IMAGES: Record<22 | 24, string> = {
 type ImageKind = "node" | "python" | "mirror";
 
 async function imageTag(kind: ImageKind, buildArgs: string[]): Promise<string> {
-  const files = kind === "mirror" ? ["Dockerfile", "mirror.mjs"] : ["Dockerfile"];
+  const files =
+    kind === "mirror"
+      ? ["Dockerfile", "mirror.mjs"]
+      : kind === "python"
+        ? ["Dockerfile", "git-wrapper.sh"]
+        : ["Dockerfile"];
   const h = createHash("sha256");
   for (const f of files) h.update(await readFile(join(SANDBOX_DIR, kind, f)));
   h.update(buildArgs.join("\n"));

@@ -25,6 +25,10 @@ ENV CI=1 \
     PIPENV_NOSPIN=1 \
     PDM_CHECK_UPDATE=false \
     PATH=/workspace/.bumpsmith-cache/venv/bin:$PATH
+# Git dependencies are served from shallow local copies (src/sandbox/git-deps.ts); this
+# wrapper lets `git fetch` accept their shallow history (--update-shallow).
+COPY git-wrapper.sh /usr/local/bin/git
+RUN chmod 755 /usr/local/bin/git && git --version
 USER 10001:10001
 WORKDIR /workspace
 CMD ["sleep", "infinity"]

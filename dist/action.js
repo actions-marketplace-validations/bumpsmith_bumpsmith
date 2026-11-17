@@ -303012,6 +303012,23 @@ function parsePackageJson(text, where = "package.json") {
     throw new Error(`${where} is not valid JSON (${err.message.slice(0, 120)})`);
   }
 }
+function withCodegen(install, pm, root, pkg) {
+  const steps = [];
+  const post = pkg.scripts?.postinstall;
+  if (post) steps.push(`${pm === "yarn-berry" ? "yarn-berry" : pm} run postinstall`);
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const prismaSchema = ["prisma/schema.prisma", "schema.prisma", "prisma/schema"].some(
+    (f) => existsSync4(join9(root, f))
+  );
+  if (("prisma" in deps || "@prisma/client" in deps) && prismaSchema && !/prisma/.test(post ?? ""))
+    steps.push(
+      pm === "npm" ? "npx --no-install prisma generate" : `${pm === "yarn-berry" ? "yarn-berry" : pm} exec prisma generate`
+    );
+  if (!steps.length) return install;
+  const quoted = install.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+  const gen = steps.map((st) => `{ ${st} || echo "bumpsmith: '${st}' failed; continuing"; }`).join(" && ");
+  return ["sh", "-c", `${quoted} && ${gen}`];
+}
 async function inventoryNode(root, pkg, pmOverride) {
   const pm = pmOverride ?? detectNodePm(root, pkg);
   const lockfiles = [
@@ -303023,7 +303040,9 @@ async function inventoryNode(root, pkg, pmOverride) {
   ].filter((f) => existsSync4(join9(root, f)));
   const scripts = pkg.scripts ?? {};
   const hasTypeScript = existsSync4(join9(root, "tsconfig.json"));
-  const checks = [{ name: "install", argv: nodeInstallArgv(pm) }];
+  const checks = [
+    { name: "install", argv: withCodegen(nodeInstallArgv(pm), pm, root, pkg) }
+  ];
   if (scripts.build) checks.push({ name: "build", argv: nodeRunScript(pm, "build") });
   if (scripts.typecheck) checks.push({ name: "typecheck", argv: nodeRunScript(pm, "typecheck") });
   else if (hasTypeScript)
@@ -303807,7 +303826,7 @@ var NODE_IMAGES = {
   24: "node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54"
 };
 async function imageTag(kind, buildArgs) {
-  const files = kind === "mirror" ? ["Dockerfile", "mirror.mjs"] : ["Dockerfile"];
+  const files = kind === "mirror" ? ["Dockerfile", "mirror.mjs"] : kind === "python" ? ["Dockerfile", "git-wrapper.sh"] : ["Dockerfile"];
   const h = createHash4("sha256");
   for (const f of files) h.update(await readFile8(join11(SANDBOX_DIR, kind, f)));
   h.update(buildArgs.join("\n"));
