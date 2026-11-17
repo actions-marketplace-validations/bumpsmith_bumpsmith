@@ -276894,6 +276894,15 @@ function costUsd(model, u) {
 }
 
 // src/model/provider.ts
+var SignInError = class extends Error {
+  constructor(provider2, detail) {
+    super(
+      `${provider2} sign-in expired or missing; sign in again (${provider2 === "codex" ? "codex login" : "claude, then /login"}) and re-run: ${detail.slice(0, 200)}`
+    );
+    this.name = "SignInError";
+  }
+};
+var SIGN_IN_RE = /Failed to authenticate|OAuth (session|token) (has )?expired|could not be refreshed|not logged in|please (run )?\/?login/i;
 var UsageLimitError = class extends Error {
   constructor(detail) {
     super(`usage limit reached: ${detail.slice(0, 300)}`);
@@ -302927,7 +302936,7 @@ async function inventoryPython(root) {
     for (const m of block.matchAll(/["']([A-Za-z0-9_.\-[\]]+)\s*([^"']*)["']/g))
       if (m[1]) deps[m[1].replace(/\[.*\]/, "").toLowerCase()] = (m[2] ?? "").trim();
   }
-  const installArgv = pm === "uv" ? ["uv", "sync", "--all-extras"] : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? ["pip", "install", ...reqFiles.flatMap((f) => ["-r", f])] : ["pip", "install", "-e", ".[test]"];
+  const installArgv = pm === "uv" ? ["uv", "sync", "--all-extras"] : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(reqFiles) : ["pip", "install", "-e", ".[test]"];
   const hasTests = files.includes("tests") || files.includes("test") || /pytest/.test(pyproject ?? "") || "pytest" in deps;
   const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
   const checks = [{ name: "install", argv: installArgv }];
@@ -302947,6 +302956,15 @@ async function inventoryPython(root) {
     workspaces: [],
     agentsMd: await read(join9(root, "AGENTS.md"))
   };
+}
+function pipViaUv(reqFiles) {
+  return [
+    "sh",
+    "-c",
+    'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt',
+    "sh",
+    ...reqFiles
+  ];
 }
 async function inventory(root) {
   const pkgText = await read(join9(root, "package.json"));
@@ -304812,8 +304830,9 @@ async function runBench(opts) {
       },
       { provider: opts.provider, runsDir, budgetUsd: opts.budgetUsd, log: opts.log }
     );
-    if (job.error?.startsWith("UsageLimitError")) {
-      opts.log(`stopping: model usage limit reached at ${t.id}; re-run the rest with --only`);
+    if (job.error?.startsWith("UsageLimitError") || job.error?.startsWith("SignInError")) {
+      const why = job.error.startsWith("SignInError") ? "sign-in expired" : "model usage limit reached";
+      opts.log(`stopping: ${why} at ${t.id}; re-run the rest with --only`);
       break;
     }
     const outcome = {
@@ -321937,6 +321956,10 @@ var ClaudeCodeProvider = class {
       );
       const line = r.stdout.trim().split("\n").reverse().find((l) => l.startsWith("{"));
       if (!line) {
+        if (SIGN_IN_RE.test(`${r.stdout}
+${r.stderr}`))
+          throw new SignInError("claude", `${r.stdout}
+${r.stderr}`.trim());
         if (USAGE_LIMIT_RE.test(`${r.stdout}
 ${r.stderr}`))
           throw new UsageLimitError(`${r.stdout}
@@ -321945,6 +321968,7 @@ ${r.stderr}`.trim());
       }
       const res = JSON.parse(line);
       const text = res.result ?? "";
+      if (text.length < 400 && SIGN_IN_RE.test(text)) throw new SignInError("claude", text);
       if (text.length < 400 && /hit your .{0,40}limit/i.test(text)) throw new UsageLimitError(text);
       if (res.is_error && USAGE_LIMIT_RE.test(text)) throw new UsageLimitError(text);
       return res;
@@ -322150,6 +322174,7 @@ var CodexProvider = class {
       const text = await readFile12(outFile, "utf8").catch(() => "");
       const all = `${r.stderr}
 ${events.error ?? ""}`;
+      if (!text && SIGN_IN_RE.test(all)) throw new SignInError("codex", all.trim());
       if (!text && USAGE_LIMIT_RE.test(all)) throw new UsageLimitError(all.trim());
       if (!text)
         throw new Error(

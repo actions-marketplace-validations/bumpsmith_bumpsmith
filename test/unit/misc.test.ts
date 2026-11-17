@@ -234,3 +234,13 @@ describe("PyPI source repository", () => {
     );
   });
 });
+
+describe("subscription sign-in detection", () => {
+  it("recognises an expired sign-in but not ordinary errors", async () => {
+    const { SIGN_IN_RE } = await import("../../src/model/provider.ts");
+    expect(
+      SIGN_IN_RE.test("Failed to authenticate: OAuth session expired and could not be refreshed"),
+    ).toBe(true);
+    expect(SIGN_IN_RE.test("TypeError: cannot read properties of undefined")).toBe(false);
+  });
+});

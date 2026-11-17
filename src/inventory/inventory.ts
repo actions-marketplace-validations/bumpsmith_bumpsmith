@@ -201,7 +201,7 @@ async function inventoryPython(root: string): Promise<Inventory> {
       : pm === "poetry"
         ? ["poetry", "install", "--no-interaction"]
         : reqFiles.length
-          ? ["pip", "install", ...reqFiles.flatMap((f) => ["-r", f])]
+          ? pipViaUv(reqFiles)
           : ["pip", "install", "-e", ".[test]"];
   const hasTests =
     files.includes("tests") ||
@@ -230,6 +230,22 @@ async function inventoryPython(root: string): Promise<Inventory> {
 }
 
 /** Detect ecosystem, package manager, dependencies and check commands (INV-1, INV-4). */
+/**
+ * Resolve requirements with uv (seconds, and a fast failure on conflicts), then let pip
+ * install exactly that list without resolving again. Plain `pip install -r` can backtrack
+ * through hundreds of versions for many minutes on large requirement files. pip still does
+ * the install, so packages land where pip puts them (a user install in the sandbox).
+ */
+export function pipViaUv(reqFiles: string[]): string[] {
+  return [
+    "sh",
+    "-c",
+    'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt',
+    "sh",
+    ...reqFiles,
+  ];
+}
+
 export async function inventory(root: string): Promise<Inventory> {
   const pkgText = await read(join(root, "package.json"));
   if (pkgText) return inventoryNode(root, JSON.parse(pkgText) as PackageJson);

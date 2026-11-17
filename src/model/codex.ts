@@ -14,7 +14,7 @@ import type {
   StructuredRequest,
   StructuredResult,
 } from "./provider.ts";
-import { USAGE_LIMIT_RE, UsageLimitError } from "./provider.ts";
+import { SIGN_IN_RE, SignInError, USAGE_LIMIT_RE, UsageLimitError } from "./provider.ts";
 
 /**
  * Runs the user's own Codex CLI (`codex exec`) signed in with their own ChatGPT plan. For
@@ -141,6 +141,7 @@ export class CodexProvider implements ModelProvider {
       const events = parseEvents(r.stdout);
       const text = await readFile(outFile, "utf8").catch(() => "");
       const all = `${r.stderr}\n${events.error ?? ""}`;
+      if (!text && SIGN_IN_RE.test(all)) throw new SignInError("codex", all.trim());
       if (!text && USAGE_LIMIT_RE.test(all)) throw new UsageLimitError(all.trim());
       if (!text)
         throw new Error(

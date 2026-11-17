@@ -48,6 +48,19 @@ export interface ModelProvider {
   runAgent(req: AgentRequest): Promise<AgentResult>;
 }
 
+/** The subscription sign-in expired or is missing; every later call fails the same way. */
+export class SignInError extends Error {
+  constructor(provider: string, detail: string) {
+    super(
+      `${provider} sign-in expired or missing; sign in again (${provider === "codex" ? "codex login" : "claude, then /login"}) and re-run: ${detail.slice(0, 200)}`,
+    );
+    this.name = "SignInError";
+  }
+}
+
+export const SIGN_IN_RE =
+  /Failed to authenticate|OAuth (session|token) (has )?expired|could not be refreshed|not logged in|please (run )?\/?login/i;
+
 /** The subscription or account usage limit was reached; retrying now only burns tasks. */
 export class UsageLimitError extends Error {
   constructor(detail: string) {

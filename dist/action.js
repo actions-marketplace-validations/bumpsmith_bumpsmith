@@ -302894,7 +302894,7 @@ async function inventoryPython(root) {
     for (const m of block.matchAll(/["']([A-Za-z0-9_.\-[\]]+)\s*([^"']*)["']/g))
       if (m[1]) deps[m[1].replace(/\[.*\]/, "").toLowerCase()] = (m[2] ?? "").trim();
   }
-  const installArgv = pm === "uv" ? ["uv", "sync", "--all-extras"] : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? ["pip", "install", ...reqFiles.flatMap((f) => ["-r", f])] : ["pip", "install", "-e", ".[test]"];
+  const installArgv = pm === "uv" ? ["uv", "sync", "--all-extras"] : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(reqFiles) : ["pip", "install", "-e", ".[test]"];
   const hasTests = files.includes("tests") || files.includes("test") || /pytest/.test(pyproject ?? "") || "pytest" in deps;
   const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
   const checks = [{ name: "install", argv: installArgv }];
@@ -302914,6 +302914,15 @@ async function inventoryPython(root) {
     workspaces: [],
     agentsMd: await read(join9(root, "AGENTS.md"))
   };
+}
+function pipViaUv(reqFiles) {
+  return [
+    "sh",
+    "-c",
+    'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt',
+    "sh",
+    ...reqFiles
+  ];
 }
 async function inventory(root) {
   const pkgText = await read(join9(root, "package.json"));

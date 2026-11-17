@@ -21,6 +21,8 @@ import {
   type ModelProvider,
   RefusalError,
   type Role,
+  SIGN_IN_RE,
+  SignInError,
   type StructuredRequest,
   type StructuredResult,
   USAGE_LIMIT_RE,
@@ -143,6 +145,8 @@ export class ClaudeCodeProvider implements ModelProvider {
         .reverse()
         .find((l) => l.startsWith("{"));
       if (!line) {
+        if (SIGN_IN_RE.test(`${r.stdout}\n${r.stderr}`))
+          throw new SignInError("claude", `${r.stdout}\n${r.stderr}`.trim());
         if (USAGE_LIMIT_RE.test(`${r.stdout}\n${r.stderr}`))
           throw new UsageLimitError(`${r.stdout}\n${r.stderr}`.trim());
         throw new Error(`claude produced no JSON (exit ${r.exitCode}): ${r.stderr.slice(-800)}`);
@@ -150,6 +154,7 @@ export class ClaudeCodeProvider implements ModelProvider {
       const res = JSON.parse(line) as ClaudeResult;
       // The CLI reports a closed limit as a short result, sometimes with subtype "success".
       const text = res.result ?? "";
+      if (text.length < 400 && SIGN_IN_RE.test(text)) throw new SignInError("claude", text);
       if (text.length < 400 && /hit your .{0,40}limit/i.test(text)) throw new UsageLimitError(text);
       if (res.is_error && USAGE_LIMIT_RE.test(text)) throw new UsageLimitError(text);
       return res;

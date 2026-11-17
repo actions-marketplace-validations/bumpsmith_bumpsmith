@@ -58,9 +58,13 @@ export async function runBench(opts: {
       },
       { provider: opts.provider, runsDir, budgetUsd: opts.budgetUsd, log: opts.log },
     );
-    if (job.error?.startsWith("UsageLimitError")) {
-      // Not the task's fault: stop instead of burning the remaining tasks against a closed limit.
-      opts.log(`stopping: model usage limit reached at ${t.id}; re-run the rest with --only`);
+    if (job.error?.startsWith("UsageLimitError") || job.error?.startsWith("SignInError")) {
+      // Not the task's fault: stop instead of burning the remaining tasks against a closed
+      // limit or an expired sign-in.
+      const why = job.error.startsWith("SignInError")
+        ? "sign-in expired"
+        : "model usage limit reached";
+      opts.log(`stopping: ${why} at ${t.id}; re-run the rest with --only`);
       break;
     }
     const outcome: TaskOutcome = {
