@@ -1,0 +1,596 @@
+{
+  "provider": "claude-code",
+  "model": "claude-opus-5-5",
+  "first_run_summary": {
+    "tasks": 24,
+    "attempted": 17,
+    "solved": 14,
+    "solve_rate": 0.824,
+    "states": {
+      "blocked_policy": 2,
+      "ready": 14,
+      "failed_infra": 7,
+      "needs_human": 1
+    },
+    "rule_blocks": 1,
+    "total_cost_usd": 9.7,
+    "cost_per_solved_usd": 0.69,
+    "median_minutes": 2.9
+  },
+  "outcomes": [
+    {
+      "task": "thomasschafer__dependabot-review-sandbox__1",
+      "pr_url": "https://github.com/thomasschafer/dependabot-review-sandbox/pull/1",
+      "package": "lru-cache",
+      "upgrade": "6.0.0 -> 11.5.3",
+      "state": "ready",
+      "confidence": "high",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.1681,
+      "minutes": 0.8,
+      "job_id": "20261117004606-be75dc",
+      "error": null,
+      "notes": [],
+      "baseline": {
+        "install": true,
+        "test": true
+      }
+    },
+    {
+      "task": "chaynHQ__bloom-frontend__2028",
+      "pr_url": "https://github.com/chaynHQ/bloom-frontend/pull/2028",
+      "package": "@types/node",
+      "upgrade": "24.19.2 -> 26.6.6",
+      "state": "ready",
+      "confidence": "medium",
+      "solved": true,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.0428,
+      "minutes": 6.6,
+      "job_id": "20261117004657-56997e",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: tsconfig.tsbuildinfo."
+      ],
+      "baseline": {
+        "install": true,
+        "build": false,
+        "typecheck": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "pipetboy2001__CBRverse__72",
+      "pr_url": "https://github.com/pipetboy2001/CBRverse/pull/72",
+      "package": "eslint-plugin-react-hooks",
+      "upgrade": "5.2.0 -> 7.1.1",
+      "state": "ready",
+      "confidence": "high",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.3702,
+      "minutes": 3.7,
+      "job_id": "20261117005331-c7b2f0",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: dist/assets/bootstrap-icons-BHUGvtHM.woff, dist/assets/bootstrap-icons-DJdhg9lH.woff2, dist/assets/index-3JxWC9ZO.js, dist/assets/index-CVZuGUaz.css, dist/assets/pdf.worker.min-CIqJB0yW.mjs, dist/assets/pdfProcessor-DYLN9QaF.js, dist/index.html, dist/lib/README.md, dist/lib/jszip.js, dist/lib/libunrar.js, dist/lib/libunrar.js.mem, dist/lib/libuntar.js, dist/lib/uncompress.js, dist/logo.svg, dist/vite.svg, tsconfig.app.tsbuildinfo, tsconfig.node.tsbuildinfo."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "butlerx__wetty__589",
+      "pr_url": "https://github.com/butlerx/wetty/pull/589",
+      "package": "find-up",
+      "upgrade": "5.0.0 -> 8.0.0",
+      "state": "ready",
+      "confidence": "medium",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.1887,
+      "minutes": 4.3,
+      "job_id": "20261117005711-5921de",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: build/buffer.d.ts, build/buffer.js, build/buffer.js.map, build/client/dev.js, build/client/dev.js.map, build/client/favicon.ico, build/client/wetty.css, build/client/wetty.css.map, build/client/wetty.js, build/client/wetty.js.map, build/client/xterm_config/functionality.js, build/client/xterm_config/index.html, build/client/xterm_config/style.css, build/client/xterm_config/xterm_advanced_options.js, build/client/xterm_config/xterm_color_theme.js, build/client/xterm_config/xterm_defaults.js, build/client/xterm_config/xterm_general_options.js, build/main.d.ts, build/main.js, build/main.js.map, build/server/command/address.d.ts, build/server/command/address.js, build/server/command/address.js.map, build/server/command/login.d.ts, build/server/command/login.js, build/server/command/login.js.map, build/server/command/ssh.d.ts, build/server/command/ssh.js, build/server/command/ssh.js.map, build/server/command.d.ts, build/server/command.js, build/server/command.js.map, build/server/flowcontrol.d.ts, build/server/flowcontrol.js, build/server/flowcontrol.js.map, build/server/login.d.ts, build/server/login.js, build/server/login.js.map, build/server/metrics.d.ts, build/server/metrics.js, build/server/metrics.js.map, build/server/shared/shell.d.ts, build/server/shared/shell.js, build/server/shared/shell.js.map, build/server/shared/shell.spec.d.ts, build/server/shared/shell.spec.js, build/server/shared/shell.spec.js.map, build/server/shared/xterm.d.ts, build/server/shared/xterm.js, build/server/shared/xterm.js.map, build/server/socketServer/assets.d.ts, build/server/socketServer/assets.js, build/server/socketServer/assets.js.map, build/server/socketServer/html.d.ts, build/server/socketServer/html.js, build/server/socketServer/html.js.map, build/server/socketServer/metrics.d.ts, build/server/socketServer/metrics.js, build/server/socketServer/metrics.js.map, build/server/socketServer/middleware.d.ts, build/server/socketServer/middleware.js, build/server/socketServer/middleware.js.map, build/server/socketServer/security.d.ts, build/server/socketServer/security.js, build/server/socketServer/security.js.map, build/server/socketServer/shared/path.d.ts, build/server/socketServer/shared/path.js, build/server/socketServer/shared/path.js.map, build/server/socketServer/socket.d.ts, build/server/socketServer/socket.js, build/server/socketServer/socket.js.map, build/server/socketServer/ssl.d.ts, build/server/socketServer/ssl.js, build/server/socketServer/ssl.js.map, build/server/socketServer.d.ts, build/server/socketServer.js, build/server/socketServer.js.map, build/server/spawn/env.d.ts, build/server/spawn/env.js, build/server/spawn/env.js.map, build/server/spawn.d.ts, build/server/spawn.js, build/server/spawn.js.map, build/server.d.ts, build/server.js, build/server.js.map, build/shared/config.d.ts, build/shared/config.js, build/shared/config.js.map, build/shared/defaults.d.ts, build/shared/defaults.js, build/shared/defaults.js.map, build/shared/env.d.ts, build/shared/env.js, build/shared/env.js.map, build/shared/interfaces.d.ts, build/shared/interfaces.js, build/shared/interfaces.js.map, build/shared/logger.d.ts, build/shared/logger.js, build/shared/logger.js.map, tsconfig.browser.tsbuildinfo, tsconfig.node.tsbuildinfo."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "zpyoung__pando__50",
+      "pr_url": "https://github.com/zpyoung/pando/pull/50",
+      "package": "globby",
+      "upgrade": "14.1.0 -> 16.2.0",
+      "state": "ready",
+      "confidence": "high",
+      "solved": true,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.3486,
+      "minutes": 2.9,
+      "job_id": "20261117010132-69612f",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: dist/src/commands/add.d.ts, dist/src/commands/add.d.ts.map, dist/src/commands/add.js, dist/src/commands/add.js.map, dist/src/commands/branch/backup.d.ts, dist/src/commands/branch/backup.d.ts.map, dist/src/commands/branch/backup.js, dist/src/commands/branch/backup.js.map, dist/src/commands/branch/restore.d.ts, dist/src/commands/branch/restore.d.ts.map, dist/src/commands/branch/restore.js, dist/src/commands/branch/restore.js.map, dist/src/commands/clean.d.ts, dist/src/commands/clean.d.ts.map, dist/src/commands/clean.js, dist/src/commands/clean.js.map, dist/src/commands/config/init.d.ts, dist/src/commands/config/init.d.ts.map, dist/src/commands/config/init.js, dist/src/commands/config/init.js.map, dist/src/commands/config/show.d.ts, dist/src/commands/config/show.d.ts.map, dist/src/commands/config/show.js, dist/src/commands/config/show.js.map, dist/src/commands/health.d.ts, dist/src/commands/health.d.ts.map, dist/src/commands/health.js, dist/src/commands/health.js.map, dist/src/commands/list.d.ts, dist/src/commands/list.d.ts.map, dist/src/commands/list.js, dist/src/commands/list.js.map, dist/src/commands/remove.d.ts, dist/src/commands/remove.d.ts.map, dist/src/commands/remove.js, dist/src/commands/remove.js.map, dist/src/commands/symlink.d.ts, dist/src/commands/symlink.d.ts.map, dist/src/commands/symlink.js, dist/src/commands/symlink.js.map, dist/src/config/env.d.ts, dist/src/config/env.d.ts.map, dist/src/config/env.js, dist/src/config/env.js.map, dist/src/config/loader.d.ts, dist/src/config/loader.d.ts.map, dist/src/config/loader.js, dist/src/config/loader.js.map, dist/src/config/schema.d.ts, dist/src/config/schema.d.ts.map, dist/src/config/schema.js, dist/src/config/schema.js.map, dist/src/index.d.ts, dist/src/index.d.ts.map, dist/src/index.js, dist/src/index.js.map, dist/src/utils/branch-backups.d.ts, dist/src/utils/branch-backups.d.ts.map, dist/src/utils/branch-backups.js, dist/src/utils/branch-backups.js.map, dist/src/utils/commandDetails.d.ts, dist/src/utils/commandDetails.d.ts.map, dist/src/utils/commandDetails.js, dist/src/utils/commandDetails.js.map, dist/src/utils/common-flags.d.ts, dist/src/utils/common-flags.d.ts.map, dist/src/utils/common-flags.js, dist/src/utils/common-flags.js.map, dist/src/utils/configTrust.d.ts, dist/src/utils/configTrust.d.ts.map, dist/src/utils/configTrust.js, dist/src/utils/configTrust.js.map, dist/src/utils/errors.d.ts, dist/src/utils/errors.d.ts.map, dist/src/utils/errors.js, dist/src/utils/errors.js.map, dist/src/utils/fileOps.d.ts, dist/src/utils/fileOps.d.ts.map, dist/src/utils/fileOps.js, dist/src/utils/fileOps.js.map, dist/src/utils/git.d.ts, dist/src/utils/git.d.ts.map, dist/src/utils/git.js, dist/src/utils/git.js.map, dist/src/utils/postCommands.d.ts, dist/src/utils/postCommands.d.ts.map, dist/src/utils/postCommands.js, dist/src/utils/postCommands.js.map, dist/src/utils/rsyncProgress.d.ts, dist/src/utils/rsyncProgress.d.ts.map, dist/src/utils/rsyncProgress.js, dist/src/utils/rsyncProgress.js.map, dist/src/utils/validation.d.ts, dist/src/utils/validation.d.ts.map, dist/src/utils/validation.js, dist/src/utils/validation.js.map, dist/src/utils/worktreeSetup.d.ts, dist/src/utils/worktreeSetup.d.ts.map, dist/src/utils/worktreeSetup.js, dist/src/utils/worktreeSetup.js.map, dist/tsconfig.tsbuildinfo."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "microsoft__monosize__209",
+      "pr_url": "https://github.com/microsoft/monosize/pull/209",
+      "package": "pretty-bytes",
+      "upgrade": "6.0.0 -> 7.1.0",
+      "state": "ready",
+      "confidence": "medium",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.3989,
+      "minutes": 2.2,
+      "job_id": "20261117065233-339143",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: .nx/workspace-data/file-map.json, .nx/workspace-data/lockfile-dependencies.hash, .nx/workspace-data/lockfile-nodes.hash, .nx/workspace-data/nx_files.nxt, .nx/workspace-data/parsed-lock-file.dependencies.json, .nx/workspace-data/parsed-lock-file.nodes.json, .nx/workspace-data/project-graph.json, .nx/workspace-data/project-graph.lock, .nx/workspace-data/source-maps.json, .nx/workspace-data/tsc-13991073429437061962.hash, .nx/workspace-data/tsconfig-files.hash, .yarn/install-state.gz, tsconfig.tsbuildinfo."
+      ],
+      "baseline": {
+        "install": true,
+        "build": false,
+        "typecheck": true,
+        "lint": false,
+        "test": false
+      }
+    },
+    {
+      "task": "strapi__sdk-plugin__148",
+      "pr_url": "https://github.com/strapi/sdk-plugin/pull/148",
+      "package": "boxen",
+      "upgrade": "5.1.2 -> 8.0.1",
+      "state": "ready",
+      "confidence": "low",
+      "solved": true,
+      "overlap_with_human": 0.8333333333333334,
+      "rule_blocks": 0,
+      "cost_usd": 0.3842,
+      "minutes": 2.7,
+      "job_id": "20261117010500-9df1fb",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: dist/admin-B9WPeVPi.mjs, dist/admin-B9WPeVPi.mjs.map, dist/admin-YRh2Fd8-.js, dist/admin-YRh2Fd8-.js.map, dist/cli.js, dist/cli.js.map, dist/cli.mjs, dist/cli.mjs.map, dist/editorConfig-CuNkwaTi.mjs, dist/editorConfig-CuNkwaTi.mjs.map, dist/editorConfig-DS8M6TFK.js, dist/editorConfig-DS8M6TFK.js.map, dist/eslint-CMT-ywGG.js, dist/eslint-CMT-ywGG.js.map, dist/eslint-CwhyVRy_.mjs, dist/eslint-CwhyVRy_.mjs.map, dist/index-Ayj84_Ik.js, dist/index-Ayj84_Ik.js.map, dist/index-C6Hxpw8f.js, dist/index-C6Hxpw8f.js.map, dist/index-CKo3JCTh.js, dist/index-CKo3JCTh.js.map, dist/index-DHZJvOls.js, dist/index-DHZJvOls.js.map, dist/index-DaugOcaS.mjs, dist/index-DaugOcaS.mjs.map, dist/index-EREfoXQ7.mjs, dist/index-EREfoXQ7.mjs.map, dist/index-NjvyQrl7.mjs, dist/index-NjvyQrl7.mjs.map, dist/index-nRktZzAe.mjs, dist/index-nRktZzAe.mjs.map, dist/javascript-Bwy7GFQx.mjs, dist/javascript-Bwy7GFQx.mjs.map, dist/javascript-c6C6Dqmz.js, dist/javascript-c6C6Dqmz.js.map, dist/prettier-CbJxRiXe.js, dist/prettier-CbJxRiXe.js.map, dist/prettier-CdnEI3H1.mjs, dist/prettier-CdnEI3H1.mjs.map, dist/server-Df7QXG0m.js, dist/server-Df7QXG0m.js.map, dist/server-HRdrgnHY.mjs, dist/server-HRdrgnHY.mjs.map, dist/typescript-Bp8qR_to.mjs, dist/typescript-Bp8qR_to.mjs.map, dist/typescript-BvlDiJqU.js, dist/typescript-BvlDiJqU.js.map, dist/vite-config-CUOLsiYd.js, dist/vite-config-CUOLsiYd.js.map, dist/vite-config-P0oJlcOg.mjs, dist/vite-config-P0oJlcOg.mjs.map, dist/watch-4sWyZXY7.mjs, dist/watch-4sWyZXY7.mjs.map, dist/watch-B8b1r6Tu.js, dist/watch-B8b1r6Tu.js.map."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": true
+      }
+    },
+    {
+      "task": "neonpixels-studio__markpost-cli__244",
+      "pr_url": "https://github.com/neonpixels-studio/markpost-cli/pull/244",
+      "package": "conf",
+      "upgrade": "15.1.0 -> 16.0.0",
+      "state": "ready",
+      "confidence": "high",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.5699,
+      "minutes": 3.1,
+      "job_id": "20261117010741-f60655",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: dist/commands/config.d.ts, dist/commands/config.js, dist/commands/events.d.ts, dist/commands/events.js, dist/commands/export.d.ts, dist/commands/export.js, dist/commands/get.d.ts, dist/commands/get.js, dist/commands/push.d.ts, dist/commands/push.js, dist/commands/records.d.ts, dist/commands/records.js, dist/commands/settings.d.ts, dist/commands/settings.js, dist/commands/sources.d.ts, dist/commands/sources.js, dist/commands/tokens.d.ts, dist/commands/tokens.js, dist/index.d.ts, dist/index.js, dist/libs/api.d.ts, dist/libs/api.js, dist/libs/config.d.ts, dist/libs/config.js, dist/libs/errors.d.ts, dist/libs/errors.js, dist/libs/events.d.ts, dist/libs/events.js, dist/libs/export.d.ts, dist/libs/export.js, dist/libs/files.d.ts, dist/libs/files.js, dist/libs/frontmatter.d.ts, dist/libs/frontmatter.js, dist/libs/markdown.d.ts, dist/libs/markdown.js, dist/libs/output.d.ts, dist/libs/output.js, dist/libs/paths.d.ts, dist/libs/paths.js, dist/libs/records.d.ts, dist/libs/records.js, dist/libs/scheduler.d.ts, dist/libs/scheduler.js, dist/libs/settings.d.ts, dist/libs/settings.js, dist/libs/sources.d.ts, dist/libs/sources.js, dist/libs/terminal.d.ts, dist/libs/terminal.js, dist/libs/tokens.d.ts, dist/libs/tokens.js, dist/libs/usage.d.ts, dist/libs/usage.js, dist/types/api.types.d.ts, dist/types/api.types.js, dist/types/events.types.d.ts, dist/types/events.types.js, dist/types/records.types.d.ts, dist/types/records.types.js, dist/types/settings.types.d.ts, dist/types/settings.types.js, dist/types/sources.types.d.ts, dist/types/sources.types.js, dist/types/tokens.types.d.ts, dist/types/tokens.types.js, dist/types/vendor/markpost-api.types.d.ts, dist/types/vendor/markpost-api.types.js."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "linagora__twake-calendar-frontend__1959",
+      "pr_url": "https://github.com/linagora/twake-calendar-frontend/pull/1959",
+      "package": "ky",
+      "upgrade": "1.14.3 -> 2.2.0",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 1.5132,
+      "minutes": 41.9,
+      "job_id": "20261117011046-d33aca",
+      "error": null,
+      "notes": [
+        "Time budget nearly used up before round 3; stopping.",
+        "Excluded files changed by builds or tests, not by the fix: apps/private/dist/.env.example.js, apps/private/dist/appList.example.js, apps/private/dist/assets/images/svg/app-chat.svg, apps/private/dist/assets/images/svg/app-drive.svg, apps/private/dist/assets/images/svg/app-mail.svg, apps/private/dist/calendar-text.svg, apps/private/dist/calendar.svg, apps/private/dist/dotlottie-player.wasm, apps/private/dist/embed/overlay.html, apps/private/dist/favicon.ico, apps/private/dist/fonts/CalSans-SemiBold.woff2, apps/private/dist/fonts/InterVariable.ttf, apps/private/dist/fonts/Roboto-VariableFont_wdth,wght.ttf, apps/private/dist/fonts/fonts.css, apps/private/dist/index.html, apps/private/dist/loadercalendar.lottie, apps/private/dist/manifest.appdata, apps/private/dist/public-link-preview.png, apps/private/dist/robots.txt, apps/private/dist/screenshot.png, apps/private/dist/static/css/index.291d5343e9.css, apps/private/dist/static/image/installFlagshipAppQrCode.3c85854d64.png, apps/private/dist/static/js/date.15136ff862.js, apps/private/dist/static/js/date.15136ff862.js.LICENSE.txt, apps/private/dist/static/js/fullcalendar.aa965f1b83.js, apps/private/dist/static/js/index.4992f6c076.js, apps/private/dist/static/js/lib-react.24e327087b.js, apps/private/dist/static/js/lib-react.24e327087b.js.LICENSE.txt, apps/private/dist/static/js/lib-router.7dcdd54959.js, apps/private/dist/static/js/lib-router.7dcdd54959.js.LICENSE.txt, apps/private/dist/static/js/mui.b0d0ae713e.js, apps/private/dist/static/js/mui.b0d0ae713e.js.LICENSE.txt, apps/private/dist/static/js/sentry.425d9afd04.js, apps/private/dist/static/js/sentry.425d9afd04.js.LICENSE.txt, apps/private/dist/static/js/z.7e102d2cee.js, apps/private/dist/static/js/z.7e102d2cee.js.LICENSE.txt, apps/private/dist/static/svg/drive-logotype.a2c8260a90.svg, apps/private/dist/static/svg/twake-workplace.992fab5c28.svg, apps/public/dist/.env.example.js, apps/public/dist/appList.example.js, apps/public/dist/assets/images/svg/app-chat.svg, apps/public/dist/assets/images/svg/app-drive.svg, apps/public/dist/assets/images/svg/app-mail.svg, apps/public/dist/calendar-text.svg, apps/public/dist/calendar.svg, apps/public/dist/dotlottie-player.wasm, apps/public/dist/embed/overlay.html, apps/public/dist/favicon.ico, apps/public/dist/fonts/CalSans-SemiBold.woff2, apps/public/dist/fonts/InterVariable.ttf, apps/public/dist/fonts/Roboto-VariableFont_wdth,wght.ttf, apps/public/dist/fonts/fonts.css, apps/public/dist/index.html, apps/public/dist/loadercalendar.lottie, apps/public/dist/manifest.appdata, apps/public/dist/public-link-preview.png, apps/public/dist/robots.txt, apps/public/dist/screenshot.png, apps/public/dist/static/css/index.40d7af82d6.css, apps/public/dist/static/image/installFlagshipAppQrCode.3c85854d64.png, apps/public/dist/static/js/d.cd3bbc6982.js, apps/public/dist/static/js/d.cd3bbc6982.js.LICENSE.txt, apps/public/dist/static/js/date.4bab2521be.js, apps/public/dist/static/js/date.4bab2521be.js.LICENSE.txt, apps/public/dist/static/js/index.76f8f16771.js, apps/public/dist/static/js/lib-react.54ef4504d6.js, apps/public/dist/static/js/lib-react.54ef4504d6.js.LICENSE.txt, apps/public/dist/static/js/lib-router.5fa71a88df.js, apps/public/dist/static/js/lib-router.5fa71a88df.js.LICENSE.txt, apps/public/dist/static/js/mui.029df074fe.js, apps/public/dist/static/js/mui.029df074fe.js.LICENSE.txt, apps/public/dist/static/js/sentry.5144da6fa4.js, apps/public/dist/static/js/sentry.5144da6fa4.js.LICENSE.txt, apps/public/dist/static/svg/drive-logotype.a2c8260a90.svg, apps/public/dist/static/svg/twake-workplace.992fab5c28.svg, coverage/clover.xml, coverage/coverage-final.json, coverage/lcov-report/__test__/utils/Renderwithproviders.tsx.html, coverage/lcov-report/__test__/utils/browserWestOfUtc.ts.html, coverage/lcov-report/__test__/utils/index.html, coverage/lcov-report/__test__/utils/jCalFromIcs.ts.html, coverage/lcov-report/__test__/utils/markdownStub.ts.html, coverage/lcov-report/__test__/utils/styleStub.ts.html, coverage/lcov-report/__test__/utils/svgComponentStub.tsx.html, coverage/lcov-report/apps/private/src/components/Attendees/AttendeeActions.tsx.html, coverage/lcov-report/apps/private/src/components/Attendees/index.html, coverage/lcov-report/apps/private/src/components/Attendees/useCheckInternalUser.ts.html, coverage/lcov-report/apps/private/src/components/Calendar/CalendarController.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/CalendarLayout.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/CalendarSelection.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/EmbeddedCalendar.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/PrintSchedule/PrintScheduleModal.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/PrintSchedule/index.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/DesktopSidebar.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/MobileSidebar.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/SideBar.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/SidebarCommonContent.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/TabletSidebar.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/ViewSwitcher.tsx.html, coverage/lcov-report/apps/private/src/components/Calendar/Sidebar/index.html, coverage/lcov-report/apps/private/src/components/Calendar/hooks/index.html, coverage/lcov-report/apps/private/src/components/Calendar/hooks/useManageCalendarSelection.ts.html, coverage/lcov-report/apps/private/src/components/Calendar/hooks/useVisibleBookingLinks.ts.html, coverage/lcov-report/apps/private/src/components/Calendar/index.html, coverage/lcov-report/apps/private/src/features/User/HandleLogin.tsx.html, coverage/lcov-report/apps/private/src/features/User/LoginCallback.tsx.html, coverage/lcov-report/apps/private/src/features/User/index.html, coverage/lcov-report/apps/private/src/features/booking/CreateAppointmentModal.tsx.html, coverage/lcov-report/apps/private/src/features/booking/EditAppointmentModal.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/AppointmentModalExpandedFields.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/AppointmentModalForm.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/BookingStatusSwitch.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/ColorField.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/HeaderRightAction.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/ModalActions.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/RegularHoursField/RegularHoursRow.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/RegularHoursField/RegularHoursTypes.ts.html, coverage/lcov-report/apps/private/src/features/booking/components/RegularHoursField/index.html, coverage/lcov-report/apps/private/src/features/booking/components/RegularHoursField/index.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/TimeSlotSelectField/DesktopTimeSlotSelectField.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/TimeSlotSelectField/MobileTimeSlotSelectField.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/TimeSlotSelectField/index.html, coverage/lcov-report/apps/private/src/features/booking/components/TimeSlotSelectField/index.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/TimeSlotSelectField/index.type.ts.html, coverage/lcov-report/apps/private/src/features/booking/components/TimezoneSelectField.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/TitleField.tsx.html, coverage/lcov-report/apps/private/src/features/booking/components/index.html, coverage/lcov-report/apps/private/src/features/booking/hooks/index.html, coverage/lcov-report/apps/private/src/features/booking/hooks/useAppointmentForm.ts.html, coverage/lcov-report/apps/private/src/features/booking/hooks/useRegularHours.ts.html, coverage/lcov-report/apps/private/src/features/booking/hooks/useResolveBookingLinkEntities.ts.html, coverage/lcov-report/apps/private/src/features/booking/index.html, coverage/lcov-report/apps/private/src/features/booking/utils/index.html, coverage/lcov-report/apps/private/src/features/booking/utils/index.ts.html, coverage/lcov-report/apps/public/src/components/Attendees/AttendeeActions.tsx.html, coverage/lcov-report/apps/public/src/components/Attendees/index.html, coverage/lcov-report/apps/public/src/components/Booking/BookingHeader/BookingMetaInfo.tsx.html, coverage/lcov-report/apps/public/src/components/Booking/BookingHeader/index.html, coverage/lcov-report/apps/public/src/components/Booking/BookingTimeSlotSection.tsx.html, coverage/lcov-report/apps/public/src/components/Booking/LayoutConstants.ts.html, coverage/lcov-report/apps/public/src/components/Booking/index.html, coverage/lcov-report/apps/public/src/components/EventPreview/BookedEventPreview.tsx.html, coverage/lcov-report/apps/public/src/components/EventPreview/index.html, coverage/lcov-report/apps/public/src/components/PublicLanguageSelector.tsx.html, coverage/lcov-report/apps/public/src/components/PublicLayout.tsx.html, coverage/lcov-report/apps/public/src/components/PublicLoadError/PublicLoadError.tsx.html, coverage/lcov-report/apps/public/src/components/PublicLoadError/index.html, coverage/lcov-report/apps/public/src/components/PublicLoadError/index.ts.html, coverage/lcov-report/apps/public/src/components/index.html, coverage/lcov-report/apps/public/src/context/PublicLanguageContext.tsx.html, coverage/lcov-report/apps/public/src/context/index.html, coverage/lcov-report/apps/public/src/features/EventPreview/components/EventPreviewShared.tsx.html, coverage/lcov-report/apps/public/src/features/EventPreview/components/index.html, coverage/lcov-report/apps/public/src/features/EventPreview/hooks/index.html, coverage/lcov-report/apps/public/src/features/EventPreview/hooks/useEventDetailError.ts.html, coverage/lcov-report/apps/public/src/features/EventPreview/hooks/useFetchEventDetail.tsx.html, coverage/lcov-report/apps/public/src/features/EventPreview/hooks/useParseToken.tsx.html, coverage/lcov-report/apps/public/src/features/booking/BookingDao.ts.html, coverage/lcov-report/apps/public/src/features/booking/components/BookingDialog.tsx.html, coverage/lcov-report/apps/public/src/features/booking/components/BookingErrorBoundary.tsx.html, coverage/lcov-report/apps/public/src/features/booking/components/BookingSuccessDialog.tsx.html, coverage/lcov-report/apps/public/src/features/booking/components/StaticDateTimeSummary.tsx.html, coverage/lcov-report/apps/public/src/features/booking/components/index.html, coverage/lcov-report/apps/public/src/features/booking/hooks/index.html, coverage/lcov-report/apps/public/src/features/booking/hooks/useBookingData.ts.html, coverage/lcov-report/apps/public/src/features/booking/index.html, coverage/lcov-report/apps/public/src/features/booking/utils/index.html, coverage/lcov-report/apps/public/src/features/booking/utils/timezoneReferenceDate.ts.html, coverage/lcov-report/base.css, coverage/lcov-report/block-navigation.js, coverage/lcov-report/common/src/app/createAppSlice.ts.html, coverage/lcov-report/common/src/app/hooks.ts.html, coverage/lcov-report/common/src/app/index.html, coverage/lcov-report/common/src/app/loadingSlice.ts.html, coverage/lcov-report/common/src/app/selectors/index.html, coverage/lcov-report/common/src/app/selectors/selectCalendars.tsx.html, coverage/lcov-report/common/src/app/selectors/selectPlatformURL.ts.html, coverage/lcov-report/common/src/app/store.ts.html, coverage/lcov-report/common/src/components/Attendees/AttendeeAvatar.tsx.html, coverage/lcov-report/common/src/components/Attendees/AttendeeChip.tsx.html, coverage/lcov-report/common/src/components/Attendees/AttendeeOptionsList.tsx.html, coverage/lcov-report/common/src/components/Attendees/AttendeePopover.tsx.html, coverage/lcov-report/common/src/components/Attendees/AttendeeSearch.tsx.html, coverage/lcov-report/common/src/components/Attendees/FreeBusyIndicator.tsx.html, coverage/lcov-report/common/src/components/Attendees/PeopleSearch.tsx.html, coverage/lcov-report/common/src/components/Attendees/PeopleSearchInput.tsx.html, coverage/lcov-report/common/src/components/Attendees/ResourceIcon.tsx.html, coverage/lcov-report/common/src/components/Attendees/ResourceSearch.tsx.html, coverage/lcov-report/common/src/components/Attendees/index.html, coverage/lcov-report/common/src/components/Attendees/useFreeBusy.ts.html, coverage/lcov-report/common/src/components/Attendees/usePasteHandler.ts.html, coverage/lcov-report/common/src/components/Attendees/usePeopleSearchState.ts.html, coverage/lcov-report/common/src/components/Attendees/useResourcesFreeBusy.ts.html, coverage/lcov-report/common/src/components/Attendees/useUserSearch.ts.html, coverage/lcov-report/common/src/components/Calendar/AccessTab.tsx.html, coverage/lcov-report/common/src/components/Calendar/BookingLinkOverlay.tsx.html, coverage/lcov-report/common/src/components/Calendar/BookingLinkSelectorMenu/index.html, coverage/lcov-report/common/src/components/Calendar/BookingLinkSelectorMenu/index.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarAccessRights/AccessSelector.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarAccessRights/index.html, coverage/lcov-report/common/src/components/Calendar/CalendarAccessRights/index.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarColorPicker.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarGrid.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarItemList.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarModal.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarName.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarSelector.tsx.html, coverage/lcov-report/common/src/components/Calendar/CalendarSelectorMenu/index.html, coverage/lcov-report/common/src/components/Calendar/CalendarSelectorMenu/index.tsx.html, coverage/lcov-report/common/src/components/Calendar/DayCellContent.tsx.html, coverage/lcov-report/common/src/components/Calendar/DeleteCalendarDialog.tsx.html, coverage/lcov-report/common/src/components/Calendar/EventSaveFeedback.tsx.html, coverage/lcov-report/common/src/components/Calendar/ImportTab.tsx.html, coverage/lcov-report/common/src/components/Calendar/MiniCalendar.tsx.html, coverage/lcov-report/common/src/components/Calendar/MobileTempSearchInput.tsx.html, coverage/lcov-report/common/src/components/Calendar/MoreLinkContent.tsx.html, coverage/lcov-report/common/src/components/Calendar/NoEventsContent.tsx.html, coverage/lcov-report/common/src/components/Calendar/OwnerCaption.tsx.html, coverage/lcov-report/common/src/components/Calendar/RegisterCalendars/CalendarSearchResults.tsx.html, coverage/lcov-report/common/src/components/Calendar/RegisterCalendars/SearchCalendarsDialog.tsx.html, coverage/lcov-report/common/src/components/Calendar/RegisterCalendars/SplittedSearchInput.tsx.html, coverage/lcov-report/common/src/components/Calendar/RegisterCalendars/index.html, coverage/lcov-report/common/src/components/Calendar/RegisterCalendars/index.tsx.html, coverage/lcov-report/common/src/components/Calendar/ResetSecretUrlDialog.tsx.html, coverage/lcov-report/common/src/components/Calendar/ResourceAdmins.tsx.html, coverage/lcov-report/common/src/components/Calendar/SelectSeparator.tsx.html, coverage/lcov-report/common/src/components/Calendar/SettingsTab.tsx.html, coverage/lcov-report/common/src/components/Calendar/TempCalendarsInput.tsx.html, coverage/lcov-report/common/src/components/Calendar/TempSearchDialog.tsx.html, coverage/lcov-report/common/src/components/Calendar/ViewMoreEvents.tsx.html, coverage/lcov-report/common/src/components/Calendar/WeekNumberContent.tsx.html, coverage/lcov-report/common/src/components/Calendar/handlers/eventHandlers.ts.html, coverage/lcov-report/common/src/components/Calendar/handlers/index.html, coverage/lcov-report/common/src/components/Calendar/handlers/mouseHandlers.ts.html, coverage/lcov-report/common/src/components/Calendar/handlers/viewHandlers.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/index.html, coverage/lcov-report/common/src/components/Calendar/hooks/useBookingLinks.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useCalendarControllerHooks.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useCalendarEventHandlers.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useCalendarGridState.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useCalendarViewHandlers.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useDraftEvent.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useEventSaveFeedback.tsx.html, coverage/lcov-report/common/src/components/Calendar/hooks/useFindUpcommingEvent.tsx.html, coverage/lcov-report/common/src/components/Calendar/hooks/useOpenEventFromUrl.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useOpenNewEventFromUrl.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useOpenSavedEventPreview.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/usePreserveScrollPositionInScheduleView.tsx.html, coverage/lcov-report/common/src/components/Calendar/hooks/useSwipeNavigation.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useTempSearch.ts.html, coverage/lcov-report/common/src/components/Calendar/hooks/useTouchListener.tsx.html, coverage/lcov-report/common/src/components/Calendar/index.html, coverage/lcov-report/common/src/components/Calendar/utils/bookingLinkOverlayUtils.ts.html, coverage/lcov-report/common/src/components/Calendar/utils/calendarUtils.ts.html, coverage/lcov-report/common/src/components/Calendar/utils/constants.ts.html, coverage/lcov-report/common/src/components/Calendar/utils/createEventRange.ts.html, coverage/lcov-report/common/src/components/Calendar/utils/index.html, coverage/lcov-report/common/src/components/Calendar/utils/isWithinRange.ts.html, coverage/lcov-report/common/src/components/Calendar/utils/tempSearchUtil.ts.html, coverage/lcov-report/common/src/components/DateTimePicker/TwakeLocalizationProvider.tsx.html, coverage/lcov-report/common/src/components/DateTimePicker/index.html, coverage/lcov-report/common/src/components/DateTimePicker/index.ts.html, coverage/lcov-report/common/src/components/Debug/DebugModeToggle.tsx.html, coverage/lcov-report/common/src/components/Debug/index.html, coverage/lcov-report/common/src/components/Dialog/ConfirmDiscardChangesDialog.tsx.html, coverage/lcov-report/common/src/components/Dialog/ResponsiveDialog.tsx.html, coverage/lcov-report/common/src/components/Dialog/index.html, coverage/lcov-report/common/src/components/Dialog/index.ts.html, coverage/lcov-report/common/src/components/Dialog/useDynamicPosition.ts.html, coverage/lcov-report/common/src/components/Error/Error.tsx.html, coverage/lcov-report/common/src/components/Error/ErrorSnackbar.tsx.html, coverage/lcov-report/common/src/components/Error/EventErrorHandler.ts.html, coverage/lcov-report/common/src/components/Error/index.html, coverage/lcov-report/common/src/components/Event/AddDescButton.tsx.html, coverage/lcov-report/common/src/components/Event/EditModeDialog.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/BookingLinkEventChip.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/DesktopEventChipSchedule.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/ErrorEventChip.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/EventChip.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/EventChipSchedule.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/EventChipUtils.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/MobileEventChipSchedule.tsx.html, coverage/lcov-report/common/src/components/Event/EventChip/index.html, coverage/lcov-report/common/src/components/Event/EventChip/scheduleEventRange.ts.html, coverage/lcov-report/common/src/components/Event/EventFormFieldPersonalSettings.tsx.html, coverage/lcov-report/common/src/components/Event/EventFormFields.tsx.html, coverage/lcov-report/common/src/components/Event/EventFormFields.types.ts.html, coverage/lcov-report/common/src/components/Event/EventRepeat.tsx.html, coverage/lcov-report/common/src/components/Event/InfoRow.tsx.html, coverage/lcov-report/common/src/components/Event/WeekDaySelector.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/AllDayDateLayout.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/CompactDateTimeLayout.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DatePickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DateTimeError.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DateTimeExpanded.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DateTimeFields.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DateTimeLayoutContent.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DateTimeSubPanels.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DesktopDatePickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/DesktopTimePickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/ExpandedDateTimeLayout.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/InvalidTimeInputContext.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/TimePickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/TouchDatePickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/TouchTimePickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/dateTimePickerSlotProps.ts.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/index.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/useDateTimeHandlers.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/useDateTimeLayout.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeFields/useDisplayFlags.tsx.html, coverage/lcov-report/common/src/components/Event/components/DateTimeSummary.tsx.html, coverage/lcov-report/common/src/components/Event/components/EditableTimeField.tsx.html, coverage/lcov-report/common/src/components/Event/components/EventFormFieldsExpanded.tsx.html, coverage/lcov-report/common/src/components/Event/components/EventFormFieldsSpecific.tsx.html, coverage/lcov-report/common/src/components/Event/components/FieldWithLabel.tsx.html, coverage/lcov-report/common/src/components/Event/components/ReadOnlyPickerField.tsx.html, coverage/lcov-report/common/src/components/Event/components/SectionPreviewRow.tsx.html, coverage/lcov-report/common/src/components/Event/components/VideoLink.tsx.html, coverage/lcov-report/common/src/components/Event/components/index.html, coverage/lcov-report/common/src/components/Event/eventHandlers/eventHandlers.ts.html, coverage/lcov-report/common/src/components/Event/eventHandlers/index.html, coverage/lcov-report/common/src/components/Event/fields/AttachmentField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/CalendarSelectField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/EventDateTimeField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/EventFormAttachments.tsx.html, coverage/lcov-report/common/src/components/Event/fields/FreeBusyField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/LocationField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/NotificationField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/OrganizerSelectField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/TitleField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/VideoConferenceField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/VisibilityField.tsx.html, coverage/lcov-report/common/src/components/Event/fields/index.html, coverage/lcov-report/common/src/components/Event/hooks/index.html, coverage/lcov-report/common/src/components/Event/hooks/useAllDayToggle.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useAutoEndTime.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useAutoFocusTitle.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useAutoScrollToUpcommingEvent.tsx.html, coverage/lcov-report/common/src/components/Event/hooks/useBuildInitialValues.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useCalendarPreviewSync.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useDateTimeSplit.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useEventFormValues.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useEventLocation.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useFilterEventAttendees.ts.html, coverage/lcov-report/common/src/components/Event/hooks/useVideoConference.ts.html, coverage/lcov-report/common/src/components/Event/index.html, coverage/lcov-report/common/src/components/Event/utils/attendeeBadgeUtils.tsx.html, coverage/lcov-report/common/src/components/Event/utils/calendarRefreshUtils.ts.html, coverage/lcov-report/common/src/components/Event/utils/dateRangeUtils.ts.html, coverage/lcov-report/common/src/components/Event/utils/dateRules.ts.html, coverage/lcov-report/common/src/components/Event/utils/dateTimeFormatters.ts.html, coverage/lcov-report/common/src/components/Event/utils/dateTimeHelpers.ts.html, coverage/lcov-report/common/src/components/Event/utils/detectUrls.tsx.html, coverage/lcov-report/common/src/components/Event/utils/eventAccessibleLabel.ts.html, coverage/lcov-report/common/src/components/Event/utils/eventInitialValuesHelpers.ts.html, coverage/lcov-report/common/src/components/Event/utils/eventUtils.tsx.html, coverage/lcov-report/common/src/components/Event/utils/followStartWeekday.ts.html, coverage/lcov-report/common/src/components/Event/utils/formValidation.ts.html, coverage/lcov-report/common/src/components/Event/utils/formValueWeekday.ts.html, coverage/lcov-report/common/src/components/Event/utils/index.html, coverage/lcov-report/common/src/components/Event/utils/initialValues/attendeeResolvers.ts.html, coverage/lcov-report/common/src/components/Event/utils/initialValues/dateResolvers.ts.html, coverage/lcov-report/common/src/components/Event/utils/initialValues/index.html, coverage/lcov-report/common/src/components/Event/utils/initialValues/permissionResolvers.ts.html, coverage/lcov-report/common/src/components/Event/utils/initialValues/recurrenceResolvers.ts.html, coverage/lcov-report/common/src/components/EventPreview/AttachementPreview/AttachementChip.tsx.html, coverage/lcov-report/common/src/components/EventPreview/AttachementPreview/index.html, coverage/lcov-report/common/src/components/EventPreview/AttachementPreview/index.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventDetailsRows.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventPreviewActionMenu.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventPreviewAttendees.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventPreviewDetails.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventPreviewHeader.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventPreviewModal.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventPreviewTitleRow.tsx.html, coverage/lcov-report/common/src/components/EventPreview/EventTimeSubtitle.tsx.html, coverage/lcov-report/common/src/components/EventPreview/PrivateEventPreview.tsx.html, coverage/lcov-report/common/src/components/EventPreview/index.html, coverage/lcov-report/common/src/components/EventPreview/index.ts.html, coverage/lcov-report/common/src/components/EventPreview/useEventPreviewState.ts.html, coverage/lcov-report/common/src/components/EventPreview/useEventUpdateModalReopen.ts.html, coverage/lcov-report/common/src/components/EventPreview/useTeamOrganizer.ts.html, coverage/lcov-report/common/src/components/EventPreview/utils/formatDate.ts.html, coverage/lcov-report/common/src/components/EventPreview/utils/formatEnd.ts.html, coverage/lcov-report/common/src/components/EventPreview/utils/index.html, coverage/lcov-report/common/src/components/EventPreview/utils/makeAttendeePreview.ts.html, coverage/lcov-report/common/src/components/EventPreview/utils/makeRecurrenceString.ts.html, coverage/lcov-report/common/src/components/EventPreview/utils/parseDuration.ts.html, coverage/lcov-report/common/src/components/HeaderLogo.tsx.html, coverage/lcov-report/common/src/components/Loading/SnackBarAlert.tsx.html, coverage/lcov-report/common/src/components/Loading/index.html, coverage/lcov-report/common/src/components/Menubar/DesktopMenubar.tsx.html, coverage/lcov-report/common/src/components/Menubar/EventSearchBar.tsx.html, coverage/lcov-report/common/src/components/Menubar/KeyboardShortcutsDialog.tsx.html, coverage/lcov-report/common/src/components/Menubar/Menubar.tsx.html, coverage/lcov-report/common/src/components/Menubar/MobileEventSearchBar.tsx.html, coverage/lcov-report/common/src/components/Menubar/MobileMenuBar.tsx.html, coverage/lcov-report/common/src/components/Menubar/MobileSearchDialog.tsx.html, coverage/lcov-report/common/src/components/Menubar/MobileSearchFieldText.tsx.html, coverage/lcov-report/common/src/components/Menubar/SelectView.tsx.html, coverage/lcov-report/common/src/components/Menubar/SettingsButton.tsx.html, coverage/lcov-report/common/src/components/Menubar/TabletMenubar.tsx.html, coverage/lcov-report/common/src/components/Menubar/components/DatePickerMobile.tsx.html, coverage/lcov-report/common/src/components/Menubar/components/MonthSelector.tsx.html, coverage/lcov-report/common/src/components/Menubar/components/NavigationControls.tsx.html, coverage/lcov-report/common/src/components/Menubar/components/SmallNavigationControls.tsx.html, coverage/lcov-report/common/src/components/Menubar/components/index.html, coverage/lcov-report/common/src/components/Menubar/components/useNavigationLabels.ts.html, coverage/lcov-report/common/src/components/Menubar/index.html, coverage/lcov-report/common/src/components/Menubar/navigateCalendar.ts.html, coverage/lcov-report/common/src/components/Menubar/periodLabel.ts.html, coverage/lcov-report/common/src/components/Menubar/useMobileSearch.ts.html, coverage/lcov-report/common/src/components/MobileSelector/index.html, coverage/lcov-report/common/src/components/MobileSelector/index.tsx.html, coverage/lcov-report/common/src/components/SkipLink/SkipLink.tsx.html, coverage/lcov-report/common/src/components/SkipLink/index.html, coverage/lcov-report/common/src/components/Timezone/LargeTimeZoneSelector.tsx.html, coverage/lcov-report/common/src/components/Timezone/SmallTimeZoneSelector.tsx.html, coverage/lcov-report/common/src/components/Timezone/TimezoneAutocomplete.tsx.html, coverage/lcov-report/common/src/components/Timezone/TimezoneChangeAlert.tsx.html, coverage/lcov-report/common/src/components/Timezone/TimezoneListItem.tsx.html, coverage/lcov-report/common/src/components/Timezone/TimezoneSelector.tsx.html, coverage/lcov-report/common/src/components/Timezone/hooks/index.html, coverage/lcov-report/common/src/components/Timezone/hooks/useDetectedTimeZoneSync.ts.html, coverage/lcov-report/common/src/components/Timezone/hooks/useTimeZoneList.ts.html, coverage/lcov-report/common/src/components/Timezone/index.html, coverage/lcov-report/common/src/components/Tooltip/index.html, coverage/lcov-report/common/src/components/Tooltip/index.tsx.html, coverage/lcov-report/common/src/components/TwakeBarHeader/TwakeBarHeader.tsx.html, coverage/lcov-report/common/src/components/TwakeBarHeader/index.html, coverage/lcov-report/common/src/components/index.html, coverage/lcov-report/common/src/ds/Avatar/Avatar.tsx.html, coverage/lcov-report/common/src/ds/Avatar/index.html, coverage/lcov-report/common/src/ds/Dialog/Dialog.tsx.html, coverage/lcov-report/common/src/ds/Dialog/index.html, coverage/lcov-report/common/src/ds/ListItemText/ListItemText.tsx.html, coverage/lcov-report/common/src/ds/ListItemText/index.html, coverage/lcov-report/common/src/ds/Switch/Switch.tsx.html, coverage/lcov-report/common/src/ds/Switch/index.html, coverage/lcov-report/common/src/features/Calendars/CalendarDAO.ts.html, coverage/lcov-report/common/src/features/Calendars/CalendarSlice.ts.html, coverage/lcov-report/common/src/features/Calendars/hooks/index.html, coverage/lcov-report/common/src/features/Calendars/hooks/useDefaultCalendarId.ts.html, coverage/lcov-report/common/src/features/Calendars/hooks/useUserPersonalCalendars.ts.html, coverage/lcov-report/common/src/features/Calendars/index.html, coverage/lcov-report/common/src/features/Calendars/listeners/index.html, coverage/lcov-report/common/src/features/Calendars/listeners/postMutationRefresh.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/addEventReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/clearErrorReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/clearFetchCacheReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/createCalendarReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/emptyEventsCalReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/index.html, coverage/lcov-report/common/src/features/Calendars/reducers/index.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/removeEventReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/removeTempCalReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/setCalendarErrorReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/setIsMobileSearchOpenReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/updateCalColorReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/reducers/updateEventLocalReducer.ts.html, coverage/lcov-report/common/src/features/Calendars/services/addCalendarResourceAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/addSharedCalendarAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/createCalendarAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/deleteEventAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/deleteEventInstanceAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/getCalendarDetailAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/getCalendarsListAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/getEventAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/getEventByUidAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/getTempCalendarsListAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/helpers.ts.html, coverage/lcov-report/common/src/features/Calendars/services/importEventFromFileAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/index.html, coverage/lcov-report/common/src/features/Calendars/services/index.ts.html, coverage/lcov-report/common/src/features/Calendars/services/moveEventAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/patchACLCalendarAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/patchCalendarAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/putEventAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/refreshCalendar.ts.html, coverage/lcov-report/common/src/features/Calendars/services/removeCalendarAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/updateDelegationCalendarAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/updateEventInstanceAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/services/updateSeriesAsync.ts.html, coverage/lcov-report/common/src/features/Calendars/transformers/index.html, coverage/lcov-report/common/src/features/Calendars/transformers/index.ts.html, coverage/lcov-report/common/src/features/Calendars/transformers/makeAddSharedCalendarBody.ts.html, coverage/lcov-report/common/src/features/Calendars/transformers/makePostCalendarBody.ts.html, coverage/lcov-report/common/src/features/Calendars/transformers/makeProppatchCalendarBody.ts.html, coverage/lcov-report/common/src/features/Calendars/types/CalendarApiTypes.ts.html, coverage/lcov-report/common/src/features/Calendars/types/VcalendarProperties.ts.html, coverage/lcov-report/common/src/features/Calendars/types/index.html, coverage/lcov-report/common/src/features/Calendars/useCalendarLoader.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/calendarDavPath.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/calendarPermissions.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/expandEventFunction.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/extractCalendarEvents.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/index.html, coverage/lcov-report/common/src/features/Calendars/utils/normalizeCalendar.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/oldestSyncToken.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/processSyncTokenUpdates.ts.html, coverage/lcov-report/common/src/features/Calendars/utils/restoreSeriesRepetition.ts.html, coverage/lcov-report/common/src/features/Embed/embeddedCalendar.ts.html, coverage/lcov-report/common/src/features/Embed/index.html, coverage/lcov-report/common/src/features/Embed/spaceOverlay/SpaceOverlay.tsx.html, coverage/lcov-report/common/src/features/Embed/spaceOverlay/connectSpaceOverlay.ts.html, coverage/lcov-report/common/src/features/Embed/spaceOverlay/index.html, coverage/lcov-report/common/src/features/Embed/spaceOverlay/index.ts.html, coverage/lcov-report/common/src/features/Embed/twakeSpace.ts.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/AttendanceValidation.tsx.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/CounterProposalSection.tsx.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/EventCounterModal.tsx.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/RSVPButton.tsx.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/RSVPSection.tsx.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/handleRSVPClick.tsx.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/index.html, coverage/lcov-report/common/src/features/Events/AttendanceValidation/useAttendanceValidationAuthorization.ts.html, coverage/lcov-report/common/src/features/Events/EventActions.tsx.html, coverage/lcov-report/common/src/features/Events/EventDao.ts.html, coverage/lcov-report/common/src/features/Events/EventModal.tsx.html, coverage/lcov-report/common/src/features/Events/EventSettingsUpdateModal.tsx.html, coverage/lcov-report/common/src/features/Events/EventUpdateModal.tsx.html, coverage/lcov-report/common/src/features/Events/FreeBusyApi.ts.html, coverage/lcov-report/common/src/features/Events/FreeBusyDao.ts.html, coverage/lcov-report/common/src/features/Events/ImportAlert.tsx.html, coverage/lcov-report/common/src/features/Events/VideoConferenceDao.ts.html, coverage/lcov-report/common/src/features/Events/createEventContext.ts.html, coverage/lcov-report/common/src/features/Events/eventDeepLinkUtils.ts.html, coverage/lcov-report/common/src/features/Events/eventSaveFeedbackSlice.ts.html, coverage/lcov-report/common/src/features/Events/formHelpers.ts.html, coverage/lcov-report/common/src/features/Events/hooks/index.html, coverage/lcov-report/common/src/features/Events/hooks/submitCreateHelpers/createAction.ts.html, coverage/lcov-report/common/src/features/Events/hooks/submitCreateHelpers/index.html, coverage/lcov-report/common/src/features/Events/hooks/submitUpdateHelpers/index.html, coverage/lcov-report/common/src/features/Events/hooks/submitUpdateHelpers/performUpdateAction.ts.html, coverage/lcov-report/common/src/features/Events/hooks/submitUpdateHelpers/updateActions.ts.html, coverage/lcov-report/common/src/features/Events/hooks/submitUpdateHelpers/utils.ts.html, coverage/lcov-report/common/src/features/Events/hooks/useEditableInitialValues.ts.html, coverage/lcov-report/common/src/features/Events/hooks/useMasterEvent.ts.html, coverage/lcov-report/common/src/features/Events/hooks/useSubmitCreateEvent.ts.html, coverage/lcov-report/common/src/features/Events/hooks/useSubmitUpdateEvent.ts.html, coverage/lcov-report/common/src/features/Events/hooks/useUnsavedChangesGuard.ts.html, coverage/lcov-report/common/src/features/Events/index.html, coverage/lcov-report/common/src/features/Events/keepStoredSchedule.ts.html, coverage/lcov-report/common/src/features/Events/newEventDeepLinkUtils.ts.html, coverage/lcov-report/common/src/features/Events/transformers/index.html, coverage/lcov-report/common/src/features/Events/transformers/index.ts.html, coverage/lcov-report/common/src/features/Events/transformers/makeCounterProposalPayload.ts.html, coverage/lcov-report/common/src/features/Events/transformers/makeDeleteEventInstanceJCal.ts.html, coverage/lcov-report/common/src/features/Events/transformers/makeEventWithOverrides.ts.html, coverage/lcov-report/common/src/features/Events/transformers/makeSearchEventParam.ts.html, coverage/lcov-report/common/src/features/Events/transformers/makeSeriesJCal.ts.html, coverage/lcov-report/common/src/features/Events/transformers/parseFetchedEvent.ts.html, coverage/lcov-report/common/src/features/Events/transformers/recurrenceInstant.ts.html, coverage/lcov-report/common/src/features/Events/transformers/seriesVtimezones.ts.html, coverage/lcov-report/common/src/features/Events/transformers/storedRrule.ts.html, coverage/lcov-report/common/src/features/Events/transformers/updateEventPartstatJCal.ts.html, coverage/lcov-report/common/src/features/Events/transformers/updateSeriesPartstatJCal.ts.html, coverage/lcov-report/common/src/features/Events/updateEventHelpers/index.html, coverage/lcov-report/common/src/features/Events/updateEventHelpers/moveEventBetweenCalendars.ts.html, coverage/lcov-report/common/src/features/Events/updateEventHelpers/updateAttendeesAfterTimeChange.ts.html, coverage/lcov-report/common/src/features/Events/useEventOrganizer.ts.html, coverage/lcov-report/common/src/features/Events/useEventSettingsUpdateModal.tsx.html, coverage/lcov-report/common/src/features/Events/useEventUpdateModal.tsx.html, coverage/lcov-report/common/src/features/Events/utils/alignStartToWeekdays.ts.html, coverage/lcov-report/common/src/features/Events/utils/buildDelegatedEventURL.ts.html, coverage/lcov-report/common/src/features/Events/utils/calendarEventToJCal.ts.html, coverage/lcov-report/common/src/features/Events/utils/combineMasterDateWithFormTime.ts.html, coverage/lcov-report/common/src/features/Events/utils/detectRecurringEventChanges.ts.html, coverage/lcov-report/common/src/features/Events/utils/formatDateToICal.ts.html, coverage/lcov-report/common/src/features/Events/utils/index.html, coverage/lcov-report/common/src/features/Events/utils/index.ts.html, coverage/lcov-report/common/src/features/Events/utils/inferTimezoneFromValue.ts.html, coverage/lcov-report/common/src/features/Events/utils/jCalUtils.ts.html, coverage/lcov-report/common/src/features/Events/utils/makeTimezone.ts.html, coverage/lcov-report/common/src/features/Events/utils/makeVevent.ts.html, coverage/lcov-report/common/src/features/Events/utils/normalizeRepetition.ts.html, coverage/lcov-report/common/src/features/Events/utils/normalizeTimezone.ts.html, coverage/lcov-report/common/src/features/Events/utils/occurrenceKey.ts.html, coverage/lcov-report/common/src/features/Events/utils/parseCalendarEvent.ts.html, coverage/lcov-report/common/src/features/Events/utils/shiftByday.ts.html, coverage/lcov-report/common/src/features/Events/utils/wkstUtils.ts.html, coverage/lcov-report/common/src/features/Search/AttendeesFilter.tsx.html, coverage/lcov-report/common/src/features/Search/DesktopResultItem.tsx.html, coverage/lcov-report/common/src/features/Search/DesktopSearchResultsPage.tsx.html, coverage/lcov-report/common/src/features/Search/KeywordsFilter.tsx.html, coverage/lcov-report/common/src/features/Search/MobileFilterPicker.tsx.html, coverage/lcov-report/common/src/features/Search/MobileSearchResultsPage.tsx.html, coverage/lcov-report/common/src/features/Search/OrganizersFilter.tsx.html, coverage/lcov-report/common/src/features/Search/ResultsList.tsx.html, coverage/lcov-report/common/src/features/Search/SearchDAO.ts.html, coverage/lcov-report/common/src/features/Search/SearchInFilter.tsx.html, coverage/lcov-report/common/src/features/Search/SearchResultsHeading.tsx.html, coverage/lcov-report/common/src/features/Search/SearchResultsPage.tsx.html, coverage/lcov-report/common/src/features/Search/SearchSlice.ts.html, coverage/lcov-report/common/src/features/Search/calendarColorUtils.ts.html, coverage/lcov-report/common/src/features/Search/index.html, coverage/lcov-report/common/src/features/Search/listSearchResultsComponents.tsx.html, coverage/lcov-report/common/src/features/Search/mobileSearchResultsComponents.tsx.html, coverage/lcov-report/common/src/features/Search/searchResultsComponents.tsx.html, coverage/lcov-report/common/src/features/Search/searchUtils.ts.html, coverage/lcov-report/common/src/features/Search/services/index.html, coverage/lcov-report/common/src/features/Search/services/index.ts.html, coverage/lcov-report/common/src/features/Search/services/searchEventsAsync.ts.html, coverage/lcov-report/common/src/features/Search/transformers/index.html, coverage/lcov-report/common/src/features/Search/transformers/index.ts.html, coverage/lcov-report/common/src/features/Search/useEventPreview.ts.html, coverage/lcov-report/common/src/features/Settings/CalendarEventsSettings.tsx.html, coverage/lcov-report/common/src/features/Settings/ColorSchemeSync.tsx.html, coverage/lcov-report/common/src/features/Settings/DesktopSettingsPage.tsx.html, coverage/lcov-report/common/src/features/Settings/GeneralSettings.tsx.html, coverage/lcov-report/common/src/features/Settings/LanguageSelector/DesktopLanguageSelector.tsx.html, coverage/lcov-report/common/src/features/Settings/LanguageSelector/MobileLanguageSelector.tsx.html, coverage/lcov-report/common/src/features/Settings/LanguageSelector/index.html, coverage/lcov-report/common/src/features/Settings/LanguageSelector/index.tsx.html, coverage/lcov-report/common/src/features/Settings/MobileSettingsPage.tsx.html, coverage/lcov-report/common/src/features/Settings/NotificationSettings.tsx.html, coverage/lcov-report/common/src/features/Settings/SettingErrorSnackbars.tsx.html, coverage/lcov-report/common/src/features/Settings/SettingsHeader.tsx.html, coverage/lcov-report/common/src/features/Settings/SettingsPage.tsx.html, coverage/lcov-report/common/src/features/Settings/SettingsSlice.ts.html, coverage/lcov-report/common/src/features/Settings/ThemeSelector.tsx.html, coverage/lcov-report/common/src/features/Settings/TimezoneSelector/MobileTimezoneSelector.tsx.html, coverage/lcov-report/common/src/features/Settings/TimezoneSelector/index.html, coverage/lcov-report/common/src/features/Settings/TimezoneSelector/index.tsx.html, coverage/lcov-report/common/src/features/Settings/WorkingDaysSettings.tsx.html, coverage/lcov-report/common/src/features/Settings/businessHoursDays.ts.html, coverage/lcov-report/common/src/features/Settings/constants.ts.html, coverage/lcov-report/common/src/features/Settings/hooks/index.html, coverage/lcov-report/common/src/features/Settings/hooks/useLanguageChange.ts.html, coverage/lcov-report/common/src/features/Settings/hooks/useWorkingDaysChange.ts.html, coverage/lcov-report/common/src/features/Settings/index.html, coverage/lcov-report/common/src/features/Tdrive/components/PickerSkeleton.tsx.html, coverage/lcov-report/common/src/features/Tdrive/components/TdriveButton.tsx.html, coverage/lcov-report/common/src/features/Tdrive/components/TdrivePickerDialog.tsx.html, coverage/lcov-report/common/src/features/Tdrive/components/index.html, coverage/lcov-report/common/src/features/Tdrive/helpers/index.html, coverage/lcov-report/common/src/features/Tdrive/helpers/isTdrivePickerAvailable.ts.html, coverage/lcov-report/common/src/features/Tdrive/hooks/index.html, coverage/lcov-report/common/src/features/Tdrive/hooks/useTdrivePicker.ts.html, coverage/lcov-report/common/src/features/User/EntityDAO.ts.html, coverage/lcov-report/common/src/features/User/ResourceDAO.ts.html, coverage/lcov-report/common/src/features/User/UserDao.ts.html, coverage/lcov-report/common/src/features/User/UserSlice.ts.html, coverage/lcov-report/common/src/features/User/index.html, coverage/lcov-report/common/src/features/User/models/attendee.ts.html, coverage/lcov-report/common/src/features/User/models/index.html, coverage/lcov-report/common/src/features/User/services/getOpenPaasUserDataAsync.ts.html, coverage/lcov-report/common/src/features/User/services/index.html, coverage/lcov-report/common/src/features/User/services/index.ts.html, coverage/lcov-report/common/src/features/User/services/updateUserConfigurationsAsync.ts.html, coverage/lcov-report/common/src/features/User/transformers/index.html, coverage/lcov-report/common/src/features/User/transformers/index.ts.html, coverage/lcov-report/common/src/features/User/transformers/makeConfigurationBody.ts.html, coverage/lcov-report/common/src/features/User/transformers/makeResourceToUserData.ts.html, coverage/lcov-report/common/src/features/User/transformers/makeSearchUserParam.ts.html, coverage/lcov-report/common/src/features/User/type/OpenPaasUserData.ts.html, coverage/lcov-report/common/src/features/User/type/index.html, coverage/lcov-report/common/src/features/User/useInitializeApp.ts.html, coverage/lcov-report/common/src/features/User/userDataTypes.ts.html, coverage/lcov-report/common/src/features/booking/BookingDao.ts.html, coverage/lcov-report/common/src/features/booking/BookingLinksSlice.ts.html, coverage/lcov-report/common/src/features/booking/index.html, coverage/lcov-report/common/src/features/booking/services/deleteBookingLinkThunk.ts.html, coverage/lcov-report/common/src/features/booking/services/index.html, coverage/lcov-report/common/src/features/booking/services/listBookingLinksThunk.ts.html, coverage/lcov-report/common/src/features/booking/services/updateBookingLinkThunk.ts.html, coverage/lcov-report/common/src/hooks/index.html, coverage/lcov-report/common/src/hooks/useCalendarShortcuts.ts.html, coverage/lcov-report/common/src/hooks/useDebugMode.ts.html, coverage/lcov-report/common/src/hooks/useDebugModeShortcut.ts.html, coverage/lcov-report/common/src/hooks/useDocumentLanguage.ts.html, coverage/lcov-report/common/src/hooks/useDocumentTitle.ts.html, coverage/lcov-report/common/src/hooks/usePlatformSignIn.ts.html, coverage/lcov-report/common/src/hooks/useResponsiveInputSize.tsx.html, coverage/lcov-report/common/src/locales/de.json.html, coverage/lcov-report/common/src/locales/en.json.html, coverage/lcov-report/common/src/locales/es.json.html, coverage/lcov-report/common/src/locales/fr.json.html, coverage/lcov-report/common/src/locales/index.html, coverage/lcov-report/common/src/locales/it.json.html, coverage/lcov-report/common/src/locales/ru.json.html, coverage/lcov-report/common/src/locales/vi.json.html, coverage/lcov-report/common/src/static/images/drive-logotype.svg.html, coverage/lcov-report/common/src/static/images/icon-camera.svg.html, coverage/lcov-report/common/src/static/images/index.html, coverage/lcov-report/common/src/static/index.html, coverage/lcov-report/common/src/static/noResult-logo.svg.html, coverage/lcov-report/common/src/theme/dialogPaddingStyles.tsx.html, coverage/lcov-report/common/src/theme/index.html, coverage/lcov-report/common/src/theme/makeCalendarOverrides.tsx.html, coverage/lcov-report/common/src/theme/typography.ts.html, coverage/lcov-report/common/src/types/Attachment.ts.html, coverage/lcov-report/common/src/types/CalendarTypes.ts.html, coverage/lcov-report/common/src/types/EmailAddress.ts.html, coverage/lcov-report/common/src/types/Repetition.ts.html, coverage/lcov-report/common/src/types/SearchResponseItem.ts.html, coverage/lcov-report/common/src/types/VAlarm.ts.html, coverage/lcov-report/common/src/types/Valarms.ts.html, coverage/lcov-report/common/src/types/index.html, coverage/lcov-report/common/src/utils/CalendarRangeManager.ts.html, coverage/lcov-report/common/src/utils/EventDescriptionBuilder.tsx.html, coverage/lcov-report/common/src/utils/accessRightToDavProp.tsx.html, coverage/lcov-report/common/src/utils/apiUtils.ts.html, coverage/lcov-report/common/src/utils/assertThunkSuccess.ts.html, coverage/lcov-report/common/src/utils/avatarUtils.ts.html, coverage/lcov-report/common/src/utils/buildFamilyName.ts.html, coverage/lcov-report/common/src/utils/dateUtils.ts.html, coverage/lcov-report/common/src/utils/debugMode.ts.html, coverage/lcov-report/common/src/utils/defaultColors.tsx.html, coverage/lcov-report/common/src/utils/errorUtils.ts.html, coverage/lcov-report/common/src/utils/eventFormTempStorage.ts.html, coverage/lcov-report/common/src/utils/expandHexColor.ts.html, coverage/lcov-report/common/src/utils/extractCalendarHrefs.ts.html, coverage/lcov-report/common/src/utils/extractEventBaseUuid.ts.html, coverage/lcov-report/common/src/utils/findCalendarById.ts.html, coverage/lcov-report/common/src/utils/getAccessiblePair.tsx.html, coverage/lcov-report/common/src/utils/getCalendarOwnerAttendee.ts.html, coverage/lcov-report/common/src/utils/getEffectiveEmail.ts.html, coverage/lcov-report/common/src/utils/handleCopyLink.ts.html, coverage/lcov-report/common/src/utils/hasNoAttendees.ts.html, coverage/lcov-report/common/src/utils/hashRoute.ts.html, coverage/lcov-report/common/src/utils/index.html, coverage/lcov-report/common/src/utils/index.ts.html, coverage/lcov-report/common/src/utils/isEventFormDirty.ts.html, coverage/lcov-report/common/src/utils/isEventOrganiser.ts.html, coverage/lcov-report/common/src/utils/isSafeUrl.ts.html, coverage/lcov-report/common/src/utils/isValidEmail.tsx.html, coverage/lcov-report/common/src/utils/makeDisplayName.ts.html, coverage/lcov-report/common/src/utils/normalizeAlarmTrigger.ts.html, coverage/lcov-report/common/src/utils/normalizeEmail.tsx.html, coverage/lcov-report/common/src/utils/normalizeIdentity.ts.html, coverage/lcov-report/common/src/utils/preventFloatNumber.ts.html, coverage/lcov-report/common/src/utils/printSchedule/buildPrintPeriods.ts.html, coverage/lcov-report/common/src/utils/printSchedule/dayjsSetup.ts.html, coverage/lcov-report/common/src/utils/printSchedule/index.html, coverage/lcov-report/common/src/utils/printSchedule/index.ts.html, coverage/lcov-report/common/src/utils/printSchedule/layout.ts.html, coverage/lcov-report/common/src/utils/printSchedule/renderPrintDocument.ts.html, coverage/lcov-report/common/src/utils/printSchedule/sandboxPrintDocument.ts.html, coverage/lcov-report/common/src/utils/printSchedule/selectPrintEvents.ts.html, coverage/lcov-report/common/src/utils/renameDefault.ts.html, coverage/lcov-report/common/src/utils/safeColor.ts.html, coverage/lcov-report/common/src/utils/sanitizeUtils.ts.html, coverage/lcov-report/common/src/utils/scrubSensitiveData.ts.html, coverage/lcov-report/common/src/utils/sdkSession.ts.html, coverage/lcov-report/common/src/utils/storage/getVisibleBookingLinks.ts.html, coverage/lcov-report/common/src/utils/storage/index.html, coverage/lcov-report/common/src/utils/storage/setSelectedCalendars.ts.html, coverage/lcov-report/common/src/utils/storage/setVisibleBookingLinks.ts.html, coverage/lcov-report/common/src/utils/storage/useSelectedCalendars.ts.html, coverage/lcov-report/common/src/utils/textUtils.ts.html, coverage/lcov-report/common/src/utils/timezone-data.ts.html, coverage/lcov-report/common/src/utils/timezone.ts.html, coverage/lcov-report/common/src/utils/timezoneLookup.ts.html, coverage/lcov-report/common/src/utils/translateErrorMessage.ts.html, coverage/lcov-report/common/src/utils/urlUtils.ts.html, coverage/lcov-report/common/src/utils/userUtils.ts.html, coverage/lcov-report/common/src/utils/videoConferenceUtils.ts.html, coverage/lcov-report/common/src/utils/visuallyHidden.ts.html, coverage/lcov-report/common/src/websocket/WebSocketGate.tsx.html, coverage/lcov-report/common/src/websocket/WebSocketStatusSnackbar.tsx.html, coverage/lcov-report/common/src/websocket/hooks/index.html, coverage/lcov-report/common/src/websocket/hooks/useCalendarMessageHandler.tsx.html, coverage/lcov-report/common/src/websocket/hooks/useCalendarRegistrationPaths.tsx.html, coverage/lcov-report/common/src/websocket/hooks/useWebSocketRegistrations.tsx.html, coverage/lcov-report/common/src/websocket/index.html, coverage/lcov-report/common/src/websocket/messaging/index.html, coverage/lcov-report/common/src/websocket/messaging/index.ts.html, coverage/lcov-report/common/src/websocket/messaging/parseCalendarPath.ts.html, coverage/lcov-report/common/src/websocket/messaging/parseImportResults.ts.html, coverage/lcov-report/common/src/websocket/messaging/parseMessage.ts.html, coverage/lcov-report/common/src/websocket/messaging/updateCalendars.ts.html, coverage/lcov-report/common/src/websocket/operations/index.html, coverage/lcov-report/common/src/websocket/operations/index.ts.html, coverage/lcov-report/common/src/websocket/operations/registerToCalendars.ts.html, coverage/lcov-report/common/src/websocket/operations/syncCalendarRegistrations.ts.html, coverage/lcov-report/common/src/websocket/operations/unregisterToCalendars.ts.html, coverage/lcov-report/common/src/websocket/protocols/index.html, coverage/lcov-report/common/src/websocket/protocols/index.ts.html, coverage/lcov-report/favicon.png, coverage/lcov-report/index.html, coverage/lcov-report/prettify.css, coverage/lcov-report/prettify.js, coverage/lcov-report/sort-arrow-sprite.png, coverage/lcov-report/sorter.js, coverage/lcov.info."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": true,
+        "test": false
+      }
+    },
+    {
+      "task": "carlosmezquita__snoojote__46",
+      "pr_url": "https://github.com/carlosmezquita/snoojote/pull/46",
+      "package": "node-cron",
+      "upgrade": "3.0.3 -> 4.6.0",
+      "state": "ready",
+      "confidence": "medium",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.4089,
+      "minutes": 8.3,
+      "job_id": "20261117015240-08339c",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: config/bot.config.json."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": false,
+        "test": true
+      }
+    },
+    {
+      "task": "TimUx__fw-webinar__115",
+      "pr_url": "https://github.com/TimUx/fw-webinar/pull/115",
+      "package": "helmet",
+      "upgrade": "7.2.0 -> 8.3.0",
+      "state": "failed_infra",
+      "confidence": null,
+      "solved": false,
+      "overlap_with_human": null,
+      "rule_blocks": 0,
+      "cost_usd": 0,
+      "minutes": 0.2,
+      "job_id": "20261117020056-d2c293",
+      "error": "Error: could not install helmet@8.3.0: n-table-cell@3.31.2\nnpm error   node_modules/@tiptap/extension-table-cell\nnpm error     @tiptap/extension-table-cell@\"^3.31.2\" from the root project\nnpm error   peer @tiptap/extension-table@\"^3.15.3\" from @tiptap/extension-table-header@3.15.3\nnpm error   node_modules/@tiptap/extension-table-header\nnpm error     @tiptap/extension-table-header@\"^3.15.3\" from the root project\nnpm error   1 more (the root project)\nnpm error\nnpm error Could not resolve dependency:\nnpm error peer @tiptap/extension-table@\"3.31.3\" from @tiptap/extension-table-row@3.31.3\nnpm error node_modules/@tiptap/extension-table-row\nnpm error   @tiptap/extension-table-row@\"^3.31.3\" from the root project\nnpm error\nnpm error Conflicting peer dependency: @tiptap/extension-table@3.31.3\nnpm error node_modules/@tiptap/extension-table\nnpm error   peer @tiptap/extension-table@\"3.31.3\" from @tiptap/extension-table-row@3.31.3\nnpm error   node_modules/@tiptap/extension-table-row\nnpm error     @tiptap/extension-table-row@\"^3.31.3\" from the root project\nnpm error\nnpm error Fix the upstream dependency conflict, or retry\nnpm error this command with --force or --legacy-peer-deps\nnpm error to accept an incorrect (and potentially broken) dependency resolution.\nnpm error\nnpm error\nnpm error For a full report see:\nnpm error /workspace/.bumpsmith-cache/npm/_logs/2026-11-17T02_01_09_774Z-eresolve-report.txt\nnpm error A complete log of this run can be found in: /workspace/.bumpsmith-cache/npm/_logs/2026-11-17T02_01_09_774Z-debug-0.log\n",
+      "notes": [
+        "Baseline install failed; running in limited mode (static checks only, draft output).",
+        "npm could not apply the release-age limit to transitive dependencies (--before); installed without it."
+      ],
+      "baseline": {
+        "install": false
+      }
+    },
+    {
+      "task": "keldaanCommunity__pokemonAutoChess__4174",
+      "pr_url": "https://github.com/keldaanCommunity/pokemonAutoChess/pull/4174",
+      "package": "firebase-admin",
+      "upgrade": "13.10.0 -> 14.5.0",
+      "state": "failed_infra",
+      "confidence": null,
+      "solved": false,
+      "overlap_with_human": null,
+      "rule_blocks": 0,
+      "cost_usd": 0,
+      "minutes": 13.9,
+      "job_id": "20261117020110-3cb2c0",
+      "error": "Error: git -c core.hooksPath=/dev/null clone --no-recurse-submodules --filter=blob:none https://github.com/keldaanCommunity/pokemonAutoChess.git bench/runs/20261117020110-3cb2c0/repo exited 137: Cloning into 'bench/runs/20261117020110-3cb2c0/repo'...\n",
+      "notes": [],
+      "baseline": {}
+    },
+    {
+      "task": "gemivnet__tripsheet__2",
+      "pr_url": "https://github.com/gemivnet/tripsheet/pull/2",
+      "package": "esbuild",
+      "upgrade": "0.27.7 -> 0.28.1",
+      "state": "ready",
+      "confidence": "low",
+      "solved": true,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.3989,
+      "minutes": 2.5,
+      "job_id": "20261117021501-f3abb1",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: .yarn/install-state.gz, .yarnrc.yml, dist/ai/chat.d.ts, dist/ai/chat.js, dist/ai/chat.js.map, dist/ai/client.d.ts, dist/ai/client.js, dist/ai/client.js.map, dist/ai/deriveTz.d.ts, dist/ai/deriveTz.js, dist/ai/deriveTz.js.map, dist/ai/parsePdf.d.ts, dist/ai/parsePdf.js, dist/ai/parsePdf.js.map, dist/ai/suggest.d.ts, dist/ai/suggest.js, dist/ai/suggest.js.map, dist/audit.d.ts, dist/audit.js, dist/audit.js.map, dist/auth/hash.d.ts, dist/auth/hash.js, dist/auth/hash.js.map, dist/auth/middleware.d.ts, dist/auth/middleware.js, dist/auth/middleware.js.map, dist/auth/routes.d.ts, dist/auth/routes.js, dist/auth/routes.js.map, dist/boot-backfill.d.ts, dist/boot-backfill.js, dist/boot-backfill.js.map, dist/boot-scan.d.ts, dist/boot-scan.js, dist/boot-scan.js.map, dist/config.d.ts, dist/config.js, dist/config.js.map, dist/db/index.d.ts, dist/db/index.js, dist/db/index.js.map, dist/db/migrate.d.ts, dist/db/migrate.js, dist/db/migrate.js.map, dist/db/migrations/0001_init.sql, dist/db/migrations/0002_doc_links_and_trip_meta.sql, dist/db/migrations/0003_item_timezone.sql, dist/db/migrations/0004_item_attributes.sql, dist/db/migrations/0005_participants.sql, dist/db/migrations/0006_trip_slug.sql, dist/entrypoint.d.ts, dist/entrypoint.js, dist/entrypoint.js.map, dist/itemKinds/airlines.d.ts, dist/itemKinds/airlines.js, dist/itemKinds/airlines.js.map, dist/itemKinds/iataTz.d.ts, dist/itemKinds/iataTz.js, dist/itemKinds/iataTz.js.map, dist/itemKinds/index.d.ts, dist/itemKinds/index.js, dist/itemKinds/index.js.map, dist/prompts/chat.md, dist/prompts/parse-pdf.md, dist/prompts/suggest.md, dist/routes/activity.d.ts, dist/routes/activity.js, dist/routes/activity.js.map, dist/routes/ai.d.ts, dist/routes/ai.js, dist/routes/ai.js.map, dist/routes/comments.d.ts, dist/routes/comments.js, dist/routes/comments.js.map, dist/routes/dev.d.ts, dist/routes/dev.js, dist/routes/dev.js.map, dist/routes/participants.d.ts, dist/routes/participants.js, dist/routes/participants.js.map, dist/routes/pdfTemplate.d.ts, dist/routes/pdfTemplate.js, dist/routes/pdfTemplate.js.map, dist/routes/suggestions.d.ts, dist/routes/suggestions.js, dist/routes/suggestions.js.map, dist/routes/trips.d.ts, dist/routes/trips.js, dist/routes/trips.js.map, dist/routes/uploads.d.ts, dist/routes/uploads.js, dist/routes/uploads.js.map, dist/server.d.ts, dist/server.js, dist/server.js.map, dist/slug.d.ts, dist/slug.js, dist/slug.js.map, dist/types.d.ts, dist/types.js, dist/types.js.map, web/dist/app.js, web/dist/index.html, web/dist/styles.css."
+      ],
+      "baseline": {
+        "install": true,
+        "build": true,
+        "typecheck": true,
+        "lint": false,
+        "test": true
+      }
+    },
+    {
+      "task": "tldr-pages__tldr-node-client__633",
+      "pr_url": "https://github.com/tldr-pages/tldr-node-client/pull/633",
+      "package": "nock",
+      "upgrade": "14.0.17 -> 15.0.6",
+      "state": "ready",
+      "confidence": "medium",
+      "solved": true,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.2996,
+      "minutes": 1.5,
+      "job_id": "20261117021730-83d6b0",
+      "error": null,
+      "notes": [],
+      "baseline": {
+        "install": true,
+        "typecheck": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "nearform__mercurius-apollo-registry__167",
+      "pr_url": "https://github.com/nearform/mercurius-apollo-registry/pull/167",
+      "package": "sinon",
+      "upgrade": "18.0.1 -> 22.1.0",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.8599,
+      "minutes": 3.3,
+      "job_id": "20261117021859-c477fb",
+      "error": null,
+      "notes": [],
+      "baseline": {
+        "install": true,
+        "lint": true,
+        "test": true
+      }
+    },
+    {
+      "task": "AloneRider-pixel__ai-quality-platform__5",
+      "pr_url": "https://github.com/AloneRider-pixel/ai-quality-platform/pull/5",
+      "package": "httpx",
+      "upgrade": "0.26.0 -> 0.28.1",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.2728,
+      "minutes": 12.9,
+      "job_id": "20261117022216-164503",
+      "error": null,
+      "notes": [
+        "Baseline install failed; running in limited mode (static checks only, draft output).",
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": false
+      }
+    },
+    {
+      "task": "philipphoehn__flopyarcade__58",
+      "pr_url": "https://github.com/philipphoehn/flopyarcade/pull/58",
+      "package": "numpy",
+      "upgrade": "1.22.0 -> 2.2.6",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.5155,
+      "minutes": 7.8,
+      "job_id": "20261117023508-d6b84f",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: flopyarcade.egg-info/PKG-INFO, flopyarcade.egg-info/SOURCES.txt, flopyarcade.egg-info/dependency_links.txt, flopyarcade.egg-info/entry_points.txt, flopyarcade.egg-info/requires.txt, flopyarcade.egg-info/top_level.txt.",
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": true,
+        "test": false
+      }
+    },
+    {
+      "task": "rhizomatics__homeassistant-repl__33",
+      "pr_url": "https://github.com/rhizomatics/homeassistant-repl/pull/33",
+      "package": "pandas",
+      "upgrade": "2.3.3 -> 3.1.1",
+      "state": "ready",
+      "confidence": "medium",
+      "solved": true,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.4095,
+      "minutes": 5,
+      "job_id": "20261117024255-64bbea",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: .coverage, cov.xml, htmlcov/.gitignore, htmlcov/class_index.html, htmlcov/coverage_html_cb_15cffcd0.js, htmlcov/favicon_32_cb_c827f16f.png, htmlcov/function_index.html, htmlcov/index.html, htmlcov/keybd_closed_cb_900cfef5.png, htmlcov/status.json, htmlcov/style_cb_4667309f.css, htmlcov/z_415ec6c96d6323ff___init___py.html, htmlcov/z_415ec6c96d6323ff___main___py.html, htmlcov/z_415ec6c96d6323ff_api_objtree_py.html, htmlcov/z_415ec6c96d6323ff_apirepl_py.html, htmlcov/z_415ec6c96d6323ff_cli_py.html, htmlcov/z_415ec6c96d6323ff_client_py.html, htmlcov/z_415ec6c96d6323ff_complete_py.html, htmlcov/z_415ec6c96d6323ff_completer_py.html, htmlcov/z_415ec6c96d6323ff_config_py.html, htmlcov/z_415ec6c96d6323ff_editor_py.html, htmlcov/z_415ec6c96d6323ff_local_help_py.html, htmlcov/z_415ec6c96d6323ff_local_session_py.html, htmlcov/z_415ec6c96d6323ff_plugin_py.html, htmlcov/z_415ec6c96d6323ff_plugins_py.html, htmlcov/z_415ec6c96d6323ff_render_py.html, htmlcov/z_415ec6c96d6323ff_repl_py.html, htmlcov/z_415ec6c96d6323ff_rest_py.html, htmlcov/z_415ec6c96d6323ff_shellhelp_py.html, htmlcov/z_415ec6c96d6323ff_sql_py.html, htmlcov/z_701c15cd65eb51aa___init___py.html, htmlcov/z_701c15cd65eb51aa_button_py.html, htmlcov/z_701c15cd65eb51aa_complete_py.html, htmlcov/z_701c15cd65eb51aa_config_flow_py.html, htmlcov/z_701c15cd65eb51aa_const_py.html, htmlcov/z_701c15cd65eb51aa_objtree_py.html, htmlcov/z_701c15cd65eb51aa_paths_py.html, htmlcov/z_701c15cd65eb51aa_session_py.html, htmlcov/z_701c15cd65eb51aa_sql_py.html, htmlcov/z_701c15cd65eb51aa_websocket_api_py.html, junit/test-results.xml."
+      ],
+      "baseline": {
+        "install": true,
+        "test": true
+      }
+    },
+    {
+      "task": "freedomofpress__pressfreedomtracker.us__2243",
+      "pr_url": "https://github.com/freedomofpress/pressfreedomtracker.us/pull/2243",
+      "package": "marshmallow",
+      "upgrade": "3.26.2 -> 4.3.0",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 1,
+      "rule_blocks": 0,
+      "cost_usd": 0.8015,
+      "minutes": 4.2,
+      "job_id": "20261117070110-bc23bb",
+      "error": null,
+      "notes": [
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": true,
+        "test": false
+      }
+    },
+    {
+      "task": "arduino__report-size-deltas__175",
+      "pr_url": "https://github.com/arduino/report-size-deltas/pull/175",
+      "package": "black",
+      "upgrade": "24.3.0 -> 26.3.1",
+      "state": "blocked_policy",
+      "confidence": null,
+      "solved": false,
+      "overlap_with_human": null,
+      "rule_blocks": 0,
+      "cost_usd": 0,
+      "minutes": 0.1,
+      "job_id": "20261117024828-20be4c",
+      "error": null,
+      "notes": [
+        "listed as malicious: GHSA-cg8m-r9f2-5wm2"
+      ],
+      "baseline": {}
+    },
+    {
+      "task": "pincerhq__pincer__395",
+      "pr_url": "https://github.com/pincerhq/pincer/pull/395",
+      "package": "mypy",
+      "upgrade": "1.20.2 -> 2.4.1",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.0549,
+      "minutes": 0.6,
+      "job_id": "20261117024833-9c7601",
+      "error": null,
+      "notes": [
+        "Baseline install failed; running in limited mode (static checks only, draft output).",
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": false
+      }
+    },
+    {
+      "task": "jorgenosberg__docstra__47",
+      "pr_url": "https://github.com/jorgenosberg/docstra/pull/47",
+      "package": "fastapi",
+      "upgrade": "0.136.3 -> 0.141.1",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.366,
+      "minutes": 11.8,
+      "job_id": "20261117024909-209644",
+      "error": null,
+      "notes": [
+        "Baseline install failed; running in limited mode (static checks only, draft output).",
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": false
+      }
+    },
+    {
+      "task": "python__bench_runner__470",
+      "pr_url": "https://github.com/python/bench_runner/pull/470",
+      "package": "rich",
+      "upgrade": "14.0.0 -> 15.0.0",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.2896,
+      "minutes": 1.5,
+      "job_id": "20261117065708-32d022",
+      "error": null,
+      "notes": [
+        "Excluded files changed by builds or tests, not by the fix: bench_runner.egg-info/PKG-INFO, bench_runner.egg-info/SOURCES.txt, bench_runner.egg-info/dependency_links.txt, bench_runner.egg-info/requires.txt, bench_runner.egg-info/top_level.txt.",
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": true,
+        "test": false
+      }
+    },
+    {
+      "task": "openaleph__ftm-analyze__702",
+      "pr_url": "https://github.com/openaleph/ftm-analyze/pull/702",
+      "package": "structlog",
+      "upgrade": "24.4.0 -> 26.1.0",
+      "state": "needs_human",
+      "confidence": "low",
+      "solved": false,
+      "overlap_with_human": 0,
+      "rule_blocks": 0,
+      "cost_usd": 0.0671,
+      "minutes": 1.3,
+      "job_id": "20261117065839-7cf2fa",
+      "error": null,
+      "notes": [
+        "Baseline install failed; running in limited mode (static checks only, draft output).",
+        "Excluded files changed by builds or tests, not by the fix: .poetry/.gitignore, .poetry/plugins/config.toml, .poetry/plugins/poetry.lock.",
+        "Not verified: no build, typecheck or test passed in the sandbox after the upgrade (see Verification). Opened for a human to check."
+      ],
+      "baseline": {
+        "install": false
+      }
+    }
+  ],
+  "summary": {
+    "tasks": 24,
+    "attempted": 22,
+    "ready": 12,
+    "solve_rate_attempted": 0.545,
+    "solve_rate_all": 0.5,
+    "states": {
+      "ready": 12,
+      "needs_human": 9,
+      "failed_infra": 2,
+      "blocked_policy": 1
+    },
+    "ready_confidence": {
+      "high": 4,
+      "medium": 6,
+      "low": 2
+    },
+    "ready_full_overlap": 7,
+    "ready_partial_overlap": 1,
+    "ready_zero_overlap": 4,
+    "total_cost_usd": 8.73,
+    "cost_per_ready": 0.73,
+    "median_minutes": 3.3
+  }
+}

@@ -22,7 +22,10 @@ A human always merges. Bumpsmith never pushes to your default branch.
 > On 27 real merged Dependabot upgrades where a human had to fix code, Bumpsmith produced
 > a verified fix for 21 of the 22 it could run (5 used private registries or git
 > dependencies), at about $1 of model cost per fix. Those tasks were also used to improve
-> Bumpsmith, so expect a lower rate on new repositories; a held-out benchmark is next.
+> Bumpsmith. On a **held-out** set of 24 upgrades (15 npm, 9 PyPI) from other repositories,
+> it produced a verified fix for 12 of the 22 it could run, refused one malicious release,
+> and sent the rest to a human with the reason. Details and caveats:
+> [bench/RESULTS.md](bench/RESULTS.md).
 
 ## Quick start: GitHub Action
 
