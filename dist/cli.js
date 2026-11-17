@@ -547,7 +547,7 @@ var require_parse = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/parse.js"(exports, module) {
     "use strict";
     var SemVer = require_semver();
-    var parse5 = (version2, options, throwErrors = false) => {
+    var parse6 = (version2, options, throwErrors = false) => {
       if (version2 instanceof SemVer) {
         return version2;
       }
@@ -560,7 +560,7 @@ var require_parse = __commonJS({
         throw er;
       }
     };
-    module.exports = parse5;
+    module.exports = parse6;
   }
 });
 
@@ -568,9 +568,9 @@ var require_parse = __commonJS({
 var require_valid = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/valid.js"(exports, module) {
     "use strict";
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var valid = (version2, options) => {
-      const v = parse5(version2, options);
+      const v = parse6(version2, options);
       return v ? v.version : null;
     };
     module.exports = valid;
@@ -581,9 +581,9 @@ var require_valid = __commonJS({
 var require_clean = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/clean.js"(exports, module) {
     "use strict";
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var clean = (version2, options) => {
-      const s = parse5(version2.trim().replace(/^[=v]+/, ""), options);
+      const s = parse6(version2.trim().replace(/^[=v]+/, ""), options);
       return s ? s.version : null;
     };
     module.exports = clean;
@@ -618,10 +618,10 @@ var require_inc = __commonJS({
 var require_diff = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/diff.js"(exports, module) {
     "use strict";
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var diff = (version1, version2) => {
-      const v1 = parse5(version1, null, true);
-      const v2 = parse5(version2, null, true);
+      const v1 = parse6(version1, null, true);
+      const v2 = parse6(version2, null, true);
       const comparison = v1.compare(v2);
       if (comparison === 0) {
         return null;
@@ -692,9 +692,9 @@ var require_patch = __commonJS({
 var require_prerelease = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/prerelease.js"(exports, module) {
     "use strict";
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var prerelease = (version2, options) => {
-      const parsed = parse5(version2, options);
+      const parsed = parse6(version2, options);
       return parsed && parsed.prerelease.length ? parsed.prerelease : null;
     };
     module.exports = prerelease;
@@ -880,7 +880,7 @@ var require_coerce = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/coerce.js"(exports, module) {
     "use strict";
     var SemVer = require_semver();
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var { safeRe: re2, t } = require_re();
     var coerce = (version2, options) => {
       if (version2 instanceof SemVer) {
@@ -915,7 +915,7 @@ var require_coerce = __commonJS({
       const patch = match[4] || "0";
       const prerelease = options.includePrerelease && match[5] ? `-${match[5]}` : "";
       const build2 = options.includePrerelease && match[6] ? `+${match[6]}` : "";
-      return parse5(`${major2}.${minor}.${patch}${prerelease}${build2}`, options);
+      return parse6(`${major2}.${minor}.${patch}${prerelease}${build2}`, options);
     };
     module.exports = coerce;
   }
@@ -925,7 +925,7 @@ var require_coerce = __commonJS({
 var require_truncate = __commonJS({
   "node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/truncate.js"(exports, module) {
     "use strict";
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var constants3 = require_constants();
     var SemVer = require_semver();
     var truncate = (version2, truncation, options) => {
@@ -937,7 +937,7 @@ var require_truncate = __commonJS({
     };
     var cloneInputVersion = (version2, options) => {
       const versionStringToParse = version2 instanceof SemVer ? version2.version : version2;
-      return parse5(versionStringToParse, options);
+      return parse6(versionStringToParse, options);
     };
     var doTruncation = (version2, truncation) => {
       if (isPrerelease(truncation)) {
@@ -2172,7 +2172,7 @@ var require_semver2 = __commonJS({
     var constants3 = require_constants();
     var SemVer = require_semver();
     var identifiers = require_identifiers();
-    var parse5 = require_parse();
+    var parse6 = require_parse();
     var valid = require_valid();
     var clean = require_clean();
     var inc = require_inc();
@@ -2211,7 +2211,7 @@ var require_semver2 = __commonJS({
     var simplifyRange = require_simplify();
     var subset = require_subset();
     module.exports = {
-      parse: parse5,
+      parse: parse6,
       valid,
       clean,
       inc,
@@ -3504,9 +3504,9 @@ ${indent}`) + "'";
         return quotedString(value, ctx);
       }
       const indent = ctx.indent || (ctx.forceBlockIndent || containsDocumentMarker(value) ? "  " : "");
-      const literal2 = blockQuote === "literal" ? true : blockQuote === "folded" || type === Scalar.Scalar.BLOCK_FOLDED ? false : type === Scalar.Scalar.BLOCK_LITERAL ? true : !lineLengthOverLimit(value, lineWidth, indent.length);
+      const literal3 = blockQuote === "literal" ? true : blockQuote === "folded" || type === Scalar.Scalar.BLOCK_FOLDED ? false : type === Scalar.Scalar.BLOCK_LITERAL ? true : !lineLengthOverLimit(value, lineWidth, indent.length);
       if (!value)
-        return literal2 ? "|\n" : ">\n";
+        return literal3 ? "|\n" : ">\n";
       let chomp;
       let endStart;
       for (endStart = value.length; endStart > 0; --endStart) {
@@ -3555,7 +3555,7 @@ ${indent}`) + "'";
         if (onComment)
           onComment();
       }
-      if (!literal2) {
+      if (!literal3) {
         const foldedValue = value.replace(/\n+/g, "\n$&").replace(/(?:^|\n)([\t ].*)(?:([\n\t ]*)\n(?![\n\t ]))?/g, "$1$2").replace(/\n+/g, `$&${indent}`);
         let literalFallback = false;
         const foldOptions = getFoldOptions(ctx, true);
@@ -9491,7 +9491,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse5(src, reviver, options) {
+    function parse6(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -9532,7 +9532,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse5;
+    exports.parse = parse6;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument2;
     exports.stringify = stringify3;
@@ -18932,10 +18932,10 @@ async function setupSkills(ctx) {
   for (const skill of session.agent.skills) {
     try {
       const version2 = await client.beta.skills.versions.retrieve(skill.version, { skill_id: skill.skill_id });
-      let dirname5 = path2.basename(version2.name.trim());
-      if (dirname5 === "" || dirname5 === "." || dirname5 === "..")
-        dirname5 = skill.skill_id;
-      const dest = path2.resolve(skillsRoot, dirname5);
+      let dirname6 = path2.basename(version2.name.trim());
+      if (dirname6 === "" || dirname6 === "." || dirname6 === "..")
+        dirname6 = skill.skill_id;
+      const dest = path2.resolve(skillsRoot, dirname6);
       if (dest !== skillsRoot && !dest.startsWith(skillsRoot + path2.sep)) {
         log2.warn("skill name escapes the skills dir; skipping", {
           component: "agent-tool-context",
@@ -44021,7 +44021,7 @@ var require_typescript = __commonJS({
         walkUpParenthesizedTypesAndGetParentAndChild: () => walkUpParenthesizedTypesAndGetParentAndChild,
         whitespaceOrMapCommentRegExp: () => whitespaceOrMapCommentRegExp,
         writeCommentRange: () => writeCommentRange,
-        writeFile: () => writeFile8,
+        writeFile: () => writeFile9,
         writeFileEnsuringDirectories: () => writeFileEnsuringDirectories,
         zipWith: () => zipWith
       });
@@ -50360,7 +50360,7 @@ ${lanes.join("\n")}
             writeOutputIsTTY() {
               return process.stdout.isTTY;
             },
-            readFile: readFile14,
+            readFile: readFile15,
             writeFile: writeFile22,
             watchFile: watchFile2,
             watchDirectory,
@@ -50566,7 +50566,7 @@ ${lanes.join("\n")}
               callback
             );
           }
-          function readFile14(fileName, _encoding) {
+          function readFile15(fileName, _encoding) {
             let buffer;
             try {
               buffer = _fs.readFileSync(fileName);
@@ -54347,9 +54347,9 @@ ${lanes.join("\n")}
               tokenValue = "" + parseInt(tokenValue, 8);
               tokenFlags |= 32;
               const withMinus = token === 41;
-              const literal2 = (withMinus ? "-" : "") + "0o" + (+tokenValue).toString(8);
+              const literal3 = (withMinus ? "-" : "") + "0o" + (+tokenValue).toString(8);
               if (withMinus) start2--;
-              error210(Diagnostics.Octal_literals_are_not_allowed_Use_the_syntax_0, start2, pos - start2, literal2);
+              error210(Diagnostics.Octal_literals_are_not_allowed_Use_the_syntax_0, start2, pos - start2, literal3);
               return 9;
             }
           } else {
@@ -62741,7 +62741,7 @@ ${lanes.join("\n")}
         sourceFilePath = isSourceFileInCommonSourceDirectory ? sourceFilePath.substring(commonSourceDirectory.length) : sourceFilePath;
         return combinePaths(newDirPath, sourceFilePath);
       }
-      function writeFile8(host, diagnostics, fileName, text, writeByteOrderMark, sourceFiles, data) {
+      function writeFile9(host, diagnostics, fileName, text, writeByteOrderMark, sourceFiles, data) {
         host.writeFile(
           fileName,
           text,
@@ -69057,18 +69057,18 @@ ${lanes.join("\n")}
         function updateIndexSignature(node2, modifiers, parameters, type) {
           return node2.parameters !== parameters || node2.type !== type || node2.modifiers !== modifiers ? finishUpdateBaseSignatureDeclaration(createIndexSignature(modifiers, parameters, type), node2) : node2;
         }
-        function createTemplateLiteralTypeSpan(type, literal2) {
+        function createTemplateLiteralTypeSpan(type, literal3) {
           const node2 = createBaseNode(
             205
             /* TemplateLiteralTypeSpan */
           );
           node2.type = type;
-          node2.literal = literal2;
+          node2.literal = literal3;
           node2.transformFlags = 1;
           return node2;
         }
-        function updateTemplateLiteralTypeSpan(node2, type, literal2) {
-          return node2.type !== type || node2.literal !== literal2 ? update(createTemplateLiteralTypeSpan(type, literal2), node2) : node2;
+        function updateTemplateLiteralTypeSpan(node2, type, literal3) {
+          return node2.type !== type || node2.literal !== literal3 ? update(createTemplateLiteralTypeSpan(type, literal3), node2) : node2;
         }
         function createKeywordTypeNode(kind) {
           return createToken(kind);
@@ -69398,17 +69398,17 @@ ${lanes.join("\n")}
         function updateMappedTypeNode(node2, readonlyToken, typeParameter, nameType, questionToken, type, members2) {
           return node2.readonlyToken !== readonlyToken || node2.typeParameter !== typeParameter || node2.nameType !== nameType || node2.questionToken !== questionToken || node2.type !== type || node2.members !== members2 ? update(createMappedTypeNode(readonlyToken, typeParameter, nameType, questionToken, type, members2), node2) : node2;
         }
-        function createLiteralTypeNode(literal2) {
+        function createLiteralTypeNode(literal3) {
           const node2 = createBaseNode(
             202
             /* LiteralType */
           );
-          node2.literal = literal2;
+          node2.literal = literal3;
           node2.transformFlags = 1;
           return node2;
         }
-        function updateLiteralTypeNode(node2, literal2) {
-          return node2.literal !== literal2 ? update(createLiteralTypeNode(literal2), node2) : node2;
+        function updateLiteralTypeNode(node2, literal3) {
+          return node2.literal !== literal3 ? update(createLiteralTypeNode(literal3), node2) : node2;
         }
         function createObjectBindingPattern(elements) {
           const node2 = createBaseNode(
@@ -70141,18 +70141,18 @@ ${lanes.join("\n")}
         function updateMetaProperty(node2, name) {
           return node2.name !== name ? update(createMetaProperty(node2.keywordToken, name), node2) : node2;
         }
-        function createTemplateSpan(expression, literal2) {
+        function createTemplateSpan(expression, literal3) {
           const node2 = createBaseNode(
             240
             /* TemplateSpan */
           );
           node2.expression = expression;
-          node2.literal = literal2;
+          node2.literal = literal3;
           node2.transformFlags |= propagateChildFlags(node2.expression) | propagateChildFlags(node2.literal) | 1024;
           return node2;
         }
-        function updateTemplateSpan(node2, expression, literal2) {
-          return node2.expression !== expression || node2.literal !== literal2 ? update(createTemplateSpan(expression, literal2), node2) : node2;
+        function updateTemplateSpan(node2, expression, literal3) {
+          return node2.expression !== expression || node2.literal !== literal3 ? update(createTemplateSpan(expression, literal3), node2) : node2;
         }
         function createSemicolonClassElement() {
           const node2 = createBaseNode(
@@ -84442,12 +84442,12 @@ ${lanes.join("\n")}
                   }
                 }
                 if (children) {
-                  const literal2 = finishNode(factory2.createJSDocTypeLiteral(
+                  const literal3 = finishNode(factory2.createJSDocTypeLiteral(
                     children,
                     typeExpression.type.kind === 189
                     /* ArrayType */
                   ), pos);
-                  return finishNode(factory2.createJSDocTypeExpression(literal2), pos);
+                  return finishNode(factory2.createJSDocTypeExpression(literal3), pos);
                 }
               }
             }
@@ -87249,7 +87249,7 @@ ${lanes.join("\n")}
         const possibleOption = getSpellingSuggestion(unknownOption, diagnostics.optionDeclarations, getOptionName);
         return possibleOption ? createDiagnosticForNodeInSourceFileOrCompilerDiagnostic(sourceFile, node2, diagnostics.unknownDidYouMeanDiagnostic, unknownOptionErrorText || unknownOption, possibleOption.name) : createDiagnosticForNodeInSourceFileOrCompilerDiagnostic(sourceFile, node2, diagnostics.unknownOptionDiagnostic, unknownOptionErrorText || unknownOption);
       }
-      function parseCommandLineWorker(diagnostics, commandLine, readFile14) {
+      function parseCommandLineWorker(diagnostics, commandLine, readFile15) {
         const options = {};
         let watchOptions;
         const fileNames = [];
@@ -87297,7 +87297,7 @@ ${lanes.join("\n")}
           }
         }
         function parseResponseFile(fileName) {
-          const text = tryReadFile(fileName, readFile14 || ((fileName2) => sys.readFile(fileName2)));
+          const text = tryReadFile(fileName, readFile15 || ((fileName2) => sys.readFile(fileName2)));
           if (!isString(text)) {
             errors.push(text);
             return;
@@ -87400,8 +87400,8 @@ ${lanes.join("\n")}
         unknownDidYouMeanDiagnostic: Diagnostics.Unknown_compiler_option_0_Did_you_mean_1,
         optionTypeMismatchDiagnostic: Diagnostics.Compiler_option_0_expects_an_argument
       };
-      function parseCommandLine(commandLine, readFile14) {
-        return parseCommandLineWorker(compilerOptionsDidYouMeanDiagnostics, commandLine, readFile14);
+      function parseCommandLine(commandLine, readFile15) {
+        return parseCommandLineWorker(compilerOptionsDidYouMeanDiagnostics, commandLine, readFile15);
       }
       function getOptionFromName(optionName, allowShort) {
         return getOptionDeclarationFromName(getOptionsNameMap, optionName, allowShort);
@@ -87483,8 +87483,8 @@ ${lanes.join("\n")}
           watchOptionsToExtend
         );
       }
-      function readConfigFile(fileName, readFile14) {
-        const textOrDiagnostic = tryReadFile(fileName, readFile14);
+      function readConfigFile(fileName, readFile15) {
+        const textOrDiagnostic = tryReadFile(fileName, readFile15);
         return isString(textOrDiagnostic) ? parseConfigFileTextToJson(fileName, textOrDiagnostic) : { config: {}, error: textOrDiagnostic };
       }
       function parseConfigFileTextToJson(fileName, jsonText) {
@@ -87499,14 +87499,14 @@ ${lanes.join("\n")}
           error: jsonSourceFile.parseDiagnostics.length ? jsonSourceFile.parseDiagnostics[0] : void 0
         };
       }
-      function readJsonConfigFile(fileName, readFile14) {
-        const textOrDiagnostic = tryReadFile(fileName, readFile14);
+      function readJsonConfigFile(fileName, readFile15) {
+        const textOrDiagnostic = tryReadFile(fileName, readFile15);
         return isString(textOrDiagnostic) ? parseJsonText(fileName, textOrDiagnostic) : { fileName, parseDiagnostics: [textOrDiagnostic] };
       }
-      function tryReadFile(fileName, readFile14) {
+      function tryReadFile(fileName, readFile15) {
         let text;
         try {
-          text = readFile14(fileName);
+          text = readFile15(fileName);
         } catch (e) {
           return createCompilerDiagnostic(Diagnostics.Cannot_read_file_0_Colon_1, fileName, e.message);
         }
@@ -94994,25 +94994,25 @@ ${lanes.join("\n")}
       }
       function isExportsOrModuleExportsOrAlias(sourceFile, node2) {
         let i = 0;
-        const q = createQueue();
-        q.enqueue(node2);
-        while (!q.isEmpty() && i < 100) {
+        const q2 = createQueue();
+        q2.enqueue(node2);
+        while (!q2.isEmpty() && i < 100) {
           i++;
-          node2 = q.dequeue();
+          node2 = q2.dequeue();
           if (isExportsIdentifier(node2) || isModuleExportsAccessExpression(node2)) {
             return true;
           } else if (isIdentifier(node2)) {
             const symbol2 = lookupSymbolForName(sourceFile, node2.escapedText);
             if (!!symbol2 && !!symbol2.valueDeclaration && isVariableDeclaration(symbol2.valueDeclaration) && !!symbol2.valueDeclaration.initializer) {
               const init = symbol2.valueDeclaration.initializer;
-              q.enqueue(init);
+              q2.enqueue(init);
               if (isAssignmentExpression(
                 init,
                 /*excludeCompoundAssignment*/
                 true
               )) {
-                q.enqueue(init.left);
-                q.enqueue(init.right);
+                q2.enqueue(init.left);
+                q2.enqueue(init.right);
               }
             }
           }
@@ -106674,10 +106674,10 @@ ${lanes.join("\n")}
           if (parentAccess && canHaveFlowNode(parentAccess) && parentAccess.flowNode) {
             const propName = getDestructuringPropertyName(node2);
             if (propName) {
-              const literal2 = setTextRange(parseNodeFactory.createStringLiteral(propName), node2);
+              const literal3 = setTextRange(parseNodeFactory.createStringLiteral(propName), node2);
               const lhsExpr = isLeftHandSideExpression(parentAccess) ? parentAccess : parseNodeFactory.createParenthesizedExpression(parentAccess);
-              const result = setTextRange(parseNodeFactory.createElementAccessExpression(lhsExpr, literal2), node2);
-              setParent(literal2, result);
+              const result = setTextRange(parseNodeFactory.createElementAccessExpression(lhsExpr, literal3), node2);
+              setParent(literal3, result);
               setParent(result, node2);
               if (lhsExpr !== parentAccess) {
                 setParent(lhsExpr, result);
@@ -122749,13 +122749,13 @@ ${lanes.join("\n")}
             }
             return type;
           }
-          function narrowTypeByTypeof(type, typeOfExpr, operator, literal2, assumeTrue) {
+          function narrowTypeByTypeof(type, typeOfExpr, operator, literal3, assumeTrue) {
             if (operator === 36 || operator === 38) {
               assumeTrue = !assumeTrue;
             }
             const target = getReferenceCandidate(typeOfExpr.expression);
             if (!isMatchingReference(reference, target)) {
-              if (strictNullChecks && optionalChainContainsReference(target, reference) && assumeTrue === (literal2.text !== "undefined")) {
+              if (strictNullChecks && optionalChainContainsReference(target, reference) && assumeTrue === (literal3.text !== "undefined")) {
                 type = getAdjustedTypeWithFacts(
                   type,
                   2097152
@@ -122764,16 +122764,16 @@ ${lanes.join("\n")}
               }
               const propertyAccess = getDiscriminantPropertyAccess(target, type);
               if (propertyAccess) {
-                return narrowTypeByDiscriminant(type, propertyAccess, (t) => narrowTypeByLiteralExpression(t, literal2, assumeTrue));
+                return narrowTypeByDiscriminant(type, propertyAccess, (t) => narrowTypeByLiteralExpression(t, literal3, assumeTrue));
               }
               return type;
             }
-            return narrowTypeByLiteralExpression(type, literal2, assumeTrue);
+            return narrowTypeByLiteralExpression(type, literal3, assumeTrue);
           }
-          function narrowTypeByLiteralExpression(type, literal2, assumeTrue) {
-            return assumeTrue ? narrowTypeByTypeName(type, literal2.text) : getAdjustedTypeWithFacts(
+          function narrowTypeByLiteralExpression(type, literal3, assumeTrue) {
+            return assumeTrue ? narrowTypeByTypeName(type, literal3.text) : getAdjustedTypeWithFacts(
               type,
-              typeofNEFacts.get(literal2.text) || 32768
+              typeofNEFacts.get(literal3.text) || 32768
               /* TypeofNEHostObject */
             );
           }
@@ -124467,19 +124467,19 @@ ${lanes.join("\n")}
           });
         }
         function getThisTypeOfObjectLiteralFromContextualType(containingLiteral, contextualType) {
-          let literal2 = containingLiteral;
+          let literal3 = containingLiteral;
           let type = contextualType;
           while (type) {
             const thisType = getThisTypeFromContextualType(type);
             if (thisType) {
               return thisType;
             }
-            if (literal2.parent.kind !== 304) {
+            if (literal3.parent.kind !== 304) {
               break;
             }
-            literal2 = literal2.parent.parent;
+            literal3 = literal3.parent.parent;
             type = getApparentTypeOfContextualType(
-              literal2,
+              literal3,
               /*contextFlags*/
               void 0
             );
@@ -158822,8 +158822,8 @@ ${lanes.join("\n")}
           }
           if (node2.kind === 11) {
             const singleQuote = node2.singleQuote !== void 0 ? node2.singleQuote : !isStringDoubleQuoted(node2, currentSourceFile);
-            const literal2 = factory2.createStringLiteral(tryDecodeEntities(node2.text) || node2.text, singleQuote);
-            return setTextRange(literal2, node2);
+            const literal3 = factory2.createStringLiteral(tryDecodeEntities(node2.text) || node2.text, singleQuote);
+            return setTextRange(literal3, node2);
           }
           if (node2.kind === 295) {
             if (node2.expression === void 0) {
@@ -164546,9 +164546,9 @@ ${lanes.join("\n")}
           return factory2.createOmittedExpression();
         }
         function createInstruction(instruction) {
-          const literal2 = factory2.createNumericLiteral(instruction);
-          addSyntheticTrailingComment(literal2, 3, getInstructionName(instruction));
-          return literal2;
+          const literal3 = factory2.createNumericLiteral(instruction);
+          addSyntheticTrailingComment(literal3, 3, getInstructionName(instruction));
+          return literal3;
         }
         function createInlineBreak(label, location) {
           Debug.assertLessThan(0, label, "Invalid label");
@@ -171999,7 +171999,7 @@ ${lanes.join("\n")}
             return;
           }
           const buildInfo = host.getBuildInfo() || { version: version2 };
-          writeFile8(
+          writeFile9(
             host,
             emitterDiagnostics,
             buildInfoPath,
@@ -172211,7 +172211,7 @@ ${lanes.join("\n")}
             }
             if (sourceMapFilePath) {
               const sourceMap = sourceMapGenerator.toString();
-              writeFile8(
+              writeFile9(
                 host,
                 emitterDiagnostics,
                 sourceMapFilePath,
@@ -172226,7 +172226,7 @@ ${lanes.join("\n")}
           }
           const text = writer.getText();
           const data = { sourceMapUrlPos, diagnostics: transform22.diagnostics };
-          writeFile8(host, emitterDiagnostics, jsFilePath, text, !!compilerOptions.emitBOM, sourceFiles, data);
+          writeFile9(host, emitterDiagnostics, jsFilePath, text, !!compilerOptions.emitBOM, sourceFiles, data);
           writer.clear();
           return !data.skippedDtsWrite;
         }
@@ -177610,12 +177610,12 @@ ${lanes.join("\n")}
       function createCompilerHost(options, setParentNodes) {
         return createCompilerHostWorker(options, setParentNodes);
       }
-      function createGetSourceFile(readFile14, setParentNodes) {
+      function createGetSourceFile(readFile15, setParentNodes) {
         return (fileName, languageVersionOrOptions, onError) => {
           let text;
           try {
             mark3("beforeIORead");
-            text = readFile14(fileName);
+            text = readFile15(fileName);
             mark3("afterIORead");
             measure("I/O Read", "beforeIORead", "afterIORead");
           } catch (e) {
@@ -178059,8 +178059,8 @@ ${lanes.join("\n")}
         resolvedModule: void 0,
         resolvedTypeReferenceDirective: void 0
       };
-      function getModuleResolutionName(literal2) {
-        return literal2.text;
+      function getModuleResolutionName(literal3) {
+        return literal3.text;
       }
       var moduleResolutionNameAndModeGetter = {
         getName: getModuleResolutionName,
@@ -178519,7 +178519,7 @@ ${lanes.join("\n")}
           getRedirectFromOutput,
           forEachResolvedProjectReference: forEachResolvedProjectReference2
         });
-        const readFile14 = host.readFile.bind(host);
+        const readFile15 = host.readFile.bind(host);
         (_e = tracing) == null ? void 0 : _e.push(tracing.Phase.Program, "shouldProgramCreateNewSourceFiles", { hasOldProgram: !!oldProgram });
         const shouldCreateNewSourceFile = shouldProgramCreateNewSourceFiles(oldProgram, options);
         (_f = tracing) == null ? void 0 : _f.pop();
@@ -178740,7 +178740,7 @@ ${lanes.join("\n")}
           shouldTransformImportCall,
           emitBuildInfo,
           fileExists,
-          readFile: readFile14,
+          readFile: readFile15,
           directoryExists,
           getSymlinkCache,
           realpath: (_o = host.realpath) == null ? void 0 : _o.bind(host),
@@ -189664,10 +189664,10 @@ ${lanes.join("\n")}
                 return resolver.serializeExistingTypeNode(context2, node2);
               }
               const specifier = rewriteModuleSpecifier2(node2, node2.argument.literal);
-              const literal2 = specifier === node2.argument.literal ? reuseNode(context2, node2.argument.literal) : specifier;
+              const literal3 = specifier === node2.argument.literal ? reuseNode(context2, node2.argument.literal) : specifier;
               return factory.updateImportTypeNode(
                 node2,
-                literal2 === node2.argument.literal ? reuseNode(context2, node2.argument) : factory.createLiteralTypeNode(literal2),
+                literal3 === node2.argument.literal ? reuseNode(context2, node2.argument) : factory.createLiteralTypeNode(literal3),
                 visitNode(node2.attributes, visitExistingNodeTreeSymbols, isImportAttributes),
                 visitNode(node2.qualifier, visitExistingNodeTreeSymbols, isEntityName),
                 visitNodes2(node2.typeArguments, visitExistingNodeTreeSymbols, isTypeNode),
@@ -189710,9 +189710,9 @@ ${lanes.join("\n")}
                 return factory.updateComputedPropertyName(node2, result);
               } else {
                 const computedPropertyNameType = resolver.serializeTypeOfExpression(context2, node2.expression);
-                let literal2;
+                let literal3;
                 if (isLiteralTypeNode(computedPropertyNameType)) {
-                  literal2 = computedPropertyNameType.literal;
+                  literal3 = computedPropertyNameType.literal;
                 } else {
                   const evaluated = resolver.evaluateEntityNameExpression(node2.expression);
                   const literalNode = typeof evaluated.value === "string" ? factory.createStringLiteral(
@@ -189730,15 +189730,15 @@ ${lanes.join("\n")}
                     }
                     return node2;
                   }
-                  literal2 = literalNode;
+                  literal3 = literalNode;
                 }
-                if (literal2.kind === 11 && isIdentifierText(literal2.text, getEmitScriptTarget(options))) {
-                  return factory.createIdentifier(literal2.text);
+                if (literal3.kind === 11 && isIdentifierText(literal3.text, getEmitScriptTarget(options))) {
+                  return factory.createIdentifier(literal3.text);
                 }
-                if (literal2.kind === 9 && !literal2.text.startsWith("-")) {
-                  return literal2;
+                if (literal3.kind === 9 && !literal3.text.startsWith("-")) {
+                  return literal3;
                 }
-                return factory.updateComputedPropertyName(node2, literal2);
+                return factory.updateComputedPropertyName(node2, literal3);
               }
             }
             if (isTypePredicateNode(node2)) {
@@ -210314,9 +210314,9 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         },
         fixIds: [fixId12],
         getAllCodeActions: (context2) => codeFixAll(context2, errorCodes13, (changes, diag22) => {
-          const q = getQualifiedName(diag22.file, diag22.start);
-          if (q) {
-            doChange10(changes, diag22.file, q);
+          const q2 = getQualifiedName(diag22.file, diag22.start);
+          if (q2) {
+            doChange10(changes, diag22.file, q2);
           }
         })
       });
@@ -220282,7 +220282,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         const caseClause = findAncestor(contextToken, isCaseClause);
         if (caseClause && (isCaseKeyword(contextToken) || isNodeDescendantOf(contextToken, caseClause.expression))) {
           const tracker = newCaseClauseTracker(checker, caseClause.parent.clauses);
-          literals = literals.filter((literal2) => !tracker.hasValue(literal2));
+          literals = literals.filter((literal3) => !tracker.hasValue(literal3));
           symbols.forEach((symbol2, i) => {
             if (symbol2.valueDeclaration && isEnumMember(symbol2.valueDeclaration)) {
               const value = checker.getConstantValue(symbol2.valueDeclaration);
@@ -220359,8 +220359,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             );
           }
         }
-        for (const literal2 of literals) {
-          const literalEntry = createCompletionEntryForLiteral(sourceFile, preferences, literal2);
+        for (const literal3 of literals) {
+          const literalEntry = createCompletionEntryForLiteral(sourceFile, preferences, literal3);
           uniqueNames.add(literalEntry.name);
           insertSorted(
             entries,
@@ -220489,16 +220489,16 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             const indexExpression = typeNodeToExpression(typeNode.indexType, languageVersion, quotePreference);
             return objectExpression && indexExpression && factory.createElementAccessExpression(objectExpression, indexExpression);
           case 202:
-            const literal2 = typeNode.literal;
-            switch (literal2.kind) {
+            const literal3 = typeNode.literal;
+            switch (literal3.kind) {
               case 11:
                 return factory.createStringLiteral(
-                  literal2.text,
+                  literal3.text,
                   quotePreference === 0
                   /* Single */
                 );
               case 9:
-                return factory.createNumericLiteral(literal2.text, literal2.numericLiteralFlags);
+                return factory.createNumericLiteral(literal3.text, literal3.numericLiteralFlags);
             }
             return void 0;
           case 197:
@@ -220601,12 +220601,12 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           }
         });
       }
-      function completionNameForLiteral(sourceFile, preferences, literal2) {
-        return typeof literal2 === "object" ? pseudoBigIntToString(literal2) + "n" : isString(literal2) ? quote(sourceFile, preferences, literal2) : JSON.stringify(literal2);
+      function completionNameForLiteral(sourceFile, preferences, literal3) {
+        return typeof literal3 === "object" ? pseudoBigIntToString(literal3) + "n" : isString(literal3) ? quote(sourceFile, preferences, literal3) : JSON.stringify(literal3);
       }
-      function createCompletionEntryForLiteral(sourceFile, preferences, literal2) {
+      function createCompletionEntryForLiteral(sourceFile, preferences, literal3) {
         return {
-          name: completionNameForLiteral(sourceFile, preferences, literal2),
+          name: completionNameForLiteral(sourceFile, preferences, literal3),
           kind: "string",
           kindModifiers: "",
           sortText: SortText.LocationPriority,
@@ -221520,8 +221520,8 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           return { type: "request", request: completionData };
         }
         const { symbols, literals, location, completionKind, symbolToOriginInfoMap, contextToken, previousToken, isJsxInitializer, isTypeOnlyLocation } = completionData;
-        const literal2 = find(literals, (l) => completionNameForLiteral(sourceFile, preferences, l) === entryId.name);
-        if (literal2 !== void 0) return { type: "literal", literal: literal2 };
+        const literal3 = find(literals, (l) => completionNameForLiteral(sourceFile, preferences, l) === entryId.name);
+        if (literal3 !== void 0) return { type: "literal", literal: literal3 };
         return firstDefined(symbols, (symbol2, index) => {
           const origin = symbolToOriginInfoMap[index];
           const info = getCompletionEntryDisplayNameForSymbol(symbol2, getEmitScriptTarget(compilerOptions), origin, completionKind, completionData.isJsxIdentifierExpected);
@@ -221565,11 +221565,11 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             return createCompletionDetailsForSymbol(symbol2, symbolName2, typeChecker, sourceFile, location, cancellationToken, codeActions, sourceDisplay);
           }
           case "literal": {
-            const { literal: literal2 } = symbolCompletion;
+            const { literal: literal3 } = symbolCompletion;
             return createSimpleDetails(
-              completionNameForLiteral(sourceFile, preferences, literal2),
+              completionNameForLiteral(sourceFile, preferences, literal3),
               "string",
-              typeof literal2 === "string" ? 8 : 7
+              typeof literal3 === "string" ? 8 : 7
               /* numericLiteral */
             );
           }
@@ -224133,7 +224133,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
             if (!contextualTypes) {
               return;
             }
-            const literals = contextualTypes.types.filter((literal2) => !tracker.hasValue(literal2.value));
+            const literals = contextualTypes.types.filter((literal3) => !tracker.hasValue(literal3.value));
             return { kind: 2, types: literals, isNewIdentifier: false };
           case 277:
           case 282:
@@ -229393,7 +229393,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
         return ts_textChanges_exports.ChangeTracker.with(
           { host, formatContext, preferences },
           (changeTracker) => {
-            const parsed = contents.map((c) => parse5(sourceFile, c));
+            const parsed = contents.map((c) => parse6(sourceFile, c));
             const flattenedLocations = focusLocations && flatten(focusLocations);
             for (const nodes of parsed) {
               placeNodeGroup(
@@ -229406,7 +229406,7 @@ ${newComment.split("\n").map((c) => ` * ${c}`).join("\n")}
           }
         );
       }
-      function parse5(sourceFile, content) {
+      function parse6(sourceFile, content) {
         const nodeKinds = [
           {
             parse: () => createSourceFile(
@@ -240278,7 +240278,7 @@ ${options.prefix}` : "\n" : options.prefix
         walkUpParenthesizedTypesAndGetParentAndChild: () => walkUpParenthesizedTypesAndGetParentAndChild,
         whitespaceOrMapCommentRegExp: () => whitespaceOrMapCommentRegExp,
         writeCommentRange: () => writeCommentRange,
-        writeFile: () => writeFile8,
+        writeFile: () => writeFile9,
         writeFileEnsuringDirectories: () => writeFileEnsuringDirectories,
         zipWith: () => zipWith
       });
@@ -253285,15 +253285,15 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
 
 // src/cli.ts
 var import_semver9 = __toESM(require_semver2(), 1);
-import { mkdir as mkdir11, mkdtemp as mkdtemp5, readFile as readFile13, rm as rm6, writeFile as writeFile7 } from "node:fs/promises";
+import { mkdir as mkdir12, mkdtemp as mkdtemp5, readFile as readFile14, rm as rm6, writeFile as writeFile8 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
-import { basename as basename2, join as join17, resolve as resolve4 } from "node:path";
+import { basename as basename2, join as join19, resolve as resolve4 } from "node:path";
 import { parseArgs } from "node:util";
 
 // src/action.ts
-import { appendFile, mkdtemp as mkdtemp2, readFile as readFile9, rm as rm3 } from "node:fs/promises";
+import { appendFile, mkdtemp as mkdtemp2, readFile as readFile10, rm as rm3 } from "node:fs/promises";
 var import_semver6 = __toESM(require_semver2(), 1);
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 
 // src/config/repo-config.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -255156,18 +255156,18 @@ var validateAsync = async (schema, value, _ctx) => {
   return result.issues.length === 0;
 };
 var _encode = (_Err) => {
-  const parse5 = _parse(_Err);
+  const parse6 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
     const ctx = _ctx ? { ..._ctx, direction: "backward" } : { direction: "backward" };
-    return parse5(schema, value, ctx, finalizeParams(fn, _params));
+    return parse6(schema, value, ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
 var encode = /* @__PURE__ */ _encode($ZodRealError);
 var _decode = (_Err) => {
-  const parse5 = _parse(_Err);
+  const parse6 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
-    return parse5(schema, value, _ctx, finalizeParams(fn, _params));
+    return parse6(schema, value, _ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
@@ -256662,7 +256662,7 @@ function capSize(inst, size) {
   if (!caps.length)
     return;
   const cap = Math.min(...caps.map((c) => c[0]));
-  const parse5 = inst._zod.parse;
+  const parse6 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
     const n = size(payload.value);
     if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
@@ -256676,7 +256676,7 @@ function capSize(inst, size) {
         }
       }
     }
-    return parse5(payload, ctx);
+    return parse6(payload, ctx);
   };
 }
 var arraySize = (input3) => Array.isArray(input3) ? input3.length : -1;
@@ -273466,7 +273466,7 @@ function expand(template, context2) {
   var operators = ["+", "#", ".", "/", ";", "?", "&"];
   template = template.replace(
     /\{([^\{\}]+)\}|([^\{\}]+)/g,
-    function(_, expression, literal2) {
+    function(_, expression, literal3) {
       if (expression) {
         let operator = "";
         const values = [];
@@ -273490,7 +273490,7 @@ function expand(template, context2) {
           return values.join(",");
         }
       } else {
-        return encodeReserved(literal2);
+        return encodeReserved(literal3);
       }
     }
   );
@@ -291319,8 +291319,8 @@ function agentFormatParser(format) {
   if (ownJSONValue(format, "type") !== "json_schema" || !schema) {
     throw new OpenAIError("Typed agent formats require own enumerable type and schema data properties");
   }
-  const parse5 = descriptor.value;
-  return { type: "json_schema", schema, $parseRaw: (text) => parse5.call(format, text) };
+  const parse6 = descriptor.value;
+  return { type: "json_schema", schema, $parseRaw: (text) => parse6.call(format, text) };
 }
 function snapshotJSONProperty(object2, key, capture = (value) => value) {
   const descriptor = Object.getOwnPropertyDescriptor(object2, key);
@@ -300147,17 +300147,17 @@ var OpenAI = class {
     const request2 = authentication instanceof X509WorkloadIdentityAuth ? Promise.resolve(options).then((resolved) => authentication.runRequest(() => this.makeRequest(resolved, remainingRetries, void 0), this)) : this.makeRequest(options, remainingRetries, void 0);
     return this.responsePromise(request2);
   }
-  responsePromise(request2, parse5 = (client, props) => this.parseResponseWithTimeout(client, props)) {
+  responsePromise(request2, parse6 = (client, props) => this.parseResponseWithTimeout(client, props)) {
     const promise2 = new APIPromise2(this, request2, (client, props) => {
       const resume = __classPrivateFieldGet2(this, _OpenAI_responseAttempts, "f").get(props.controller)?.continueRequest;
-      return resume ? resume(() => parse5(client, props)) : parse5(client, props);
+      return resume ? resume(() => parse6(client, props)) : parse6(client, props);
     });
     promise2.withResponse = async () => {
       const data = await promise2;
       const { response } = await request2;
       return { data, response, request_id: response.headers.get("x-request-id") };
     };
-    promise2._thenUnwrap = (transform2) => this.responsePromise(request2, async (client, props) => addRequestID(transform2(await parse5(client, props), props), props.response));
+    promise2._thenUnwrap = (transform2) => this.responsePromise(request2, async (client, props) => addRequestID(transform2(await parse6(client, props), props), props.response));
     return promise2;
   }
   async parseResponseWithTimeout(client, props) {
@@ -301456,8 +301456,8 @@ function compatibleProvider(preset, model, baseURL, apiKey) {
 var import_semver3 = __toESM(require_semver2(), 1);
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { existsSync as existsSync6 } from "node:fs";
-import { mkdir as mkdir8, readFile as readFile8, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join11, resolve as resolve3 } from "node:path";
+import { mkdir as mkdir8, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
+import { join as join12, resolve as resolve3 } from "node:path";
 
 // src/change/extract.ts
 import { existsSync as existsSync3 } from "node:fs";
@@ -301550,8 +301550,8 @@ async function fetchNpmPackage(name, version2) {
   await writeFile2(tgz, buf);
   await runOk("tar", ["-xzf", tgz, "-C", dir]);
   if (!existsSync(root)) {
-    const { readdir: readdir5, rename } = await import("node:fs/promises");
-    const entries = (await readdir5(dir)).filter((e) => e !== "pkg.tgz");
+    const { readdir: readdir6, rename } = await import("node:fs/promises");
+    const entries = (await readdir6(dir)).filter((e) => e !== "pkg.tgz");
     if (entries.length === 1 && entries[0]) await rename(join5(dir, entries[0]), root);
   }
   return root;
@@ -301865,9 +301865,9 @@ function enforceEvidence(changes, sources) {
   const out = [];
   for (const c of changes) {
     const evidence = c.evidence.filter((e) => {
-      const q = norm(e.quote);
-      if (q.length < 4) return false;
-      const match = texts.find((t) => t.text.includes(q));
+      const q2 = norm(e.quote);
+      if (q2.length < 4) return false;
+      const match = texts.find((t) => t.text.includes(q2));
       if (match) e.url = match.url;
       return !!match;
     });
@@ -302758,6 +302758,50 @@ function bumpPythonText(text, name, to) {
   );
   return changed ? out : null;
 }
+var TOML_DEP_TABLE = /^\[(?:tool\.poetry\.(?:dev-)?dependencies|tool\.poetry\.group\.[^\]]+\.dependencies|packages|dev-packages)\]\s*$/;
+function bumpTomlSpec(spec, to) {
+  const s = spec.trim();
+  if (s === "*" || s === "") return s;
+  if (/^\^/.test(s)) return `^${to}`;
+  if (/^~(?!=)/.test(s)) return `~${to}`;
+  if (/^v?\d/.test(s) && !/[,<>=!]/.test(s)) return to;
+  const clauses = [...s.matchAll(new RegExp(`(${OP})\\s*([^\\s,]+)`, "g"))].map((m) => ({
+    op: m[1],
+    v: m[2]
+  }));
+  if (!clauses.length) return s;
+  const first = clauses[0]?.op ?? "==";
+  const newOp = first === "~=" || first === ">=" ? first : "==";
+  return `${newOp}${to}${keptBounds(clauses, to)}`;
+}
+function bumpTomlDeps(text, name, to) {
+  const norm2 = (n) => n.toLowerCase().replace(/[-_.]+/g, "-");
+  const target = norm2(name);
+  let inTable = false;
+  let found = false;
+  const lines = text.split("\n").map((line) => {
+    if (/^\s*\[/.test(line)) {
+      inTable = TOML_DEP_TABLE.test(line.trim());
+      return line;
+    }
+    if (!inTable) return line;
+    const m = /^(\s*["']?)([A-Za-z0-9_.-]+)(["']?\s*=\s*)(.*)$/.exec(line);
+    if (!m || norm2(m[2] ?? "") !== target) return line;
+    const value = m[4] ?? "";
+    const str = /^(["'])([^"']*)\1(.*)$/.exec(value);
+    if (str) {
+      found = true;
+      return `${m[1]}${m[2]}${m[3]}${str[1]}${bumpTomlSpec(str[2] ?? "", to)}${str[1]}${str[3]}`;
+    }
+    const inline = /^(\{.*?\bversion\s*=\s*)(["'])([^"']*)\2(.*)$/.exec(value);
+    if (inline) {
+      found = true;
+      return `${m[1]}${m[2]}${m[3]}${inline[1]}${inline[2]}${bumpTomlSpec(inline[3] ?? "", to)}${inline[2]}${inline[4]}`;
+    }
+    return line;
+  });
+  return found ? lines.join("\n") : null;
+}
 function npmDepInfo(text, name) {
   const pkg = JSON.parse(text);
   for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) {
@@ -302828,7 +302872,10 @@ function npmUpgradeArgv(pm, name, to, info, before, workspaceRoot = false, compa
 function bumpFile(ecosystem, file2, text, name, to) {
   if (ecosystem === "npm")
     return file2.endsWith("package.json") ? bumpPackageJson(text, name, to) : null;
-  return bumpPythonText(text, name, to);
+  const pep508 = bumpPythonText(text, name, to);
+  if (/(^|\/)(pyproject\.toml|Pipfile)$/.test(file2))
+    return bumpTomlDeps(pep508 ?? text, name, to) ?? pep508;
+  return pep508;
 }
 function npmCompanions(text, name, from) {
   const pkg = JSON.parse(text);
@@ -302898,11 +302945,22 @@ function nodeInstallArgv(pm) {
     case "bun":
       return ["bun", "install", "--ignore-scripts"];
     default:
-      return ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"];
+      return [
+        "sh",
+        "-c",
+        'npm install --ignore-scripts --no-audit --no-fund || { echo "bumpsmith: retrying with --legacy-peer-deps"; npm install --ignore-scripts --no-audit --no-fund --legacy-peer-deps; }'
+      ];
   }
 }
-async function inventoryNode(root, pkg) {
-  const pm = detectNodePm(root, pkg);
+function parsePackageJson(text, where = "package.json") {
+  try {
+    return JSON.parse(text.replace(/^\uFEFF/, ""));
+  } catch (err) {
+    throw new Error(`${where} is not valid JSON (${err.message.slice(0, 120)})`);
+  }
+}
+async function inventoryNode(root, pkg, pmOverride) {
+  const pm = pmOverride ?? detectNodePm(root, pkg);
   const lockfiles = [
     "package-lock.json",
     "pnpm-lock.yaml",
@@ -302955,61 +303013,162 @@ function parseRequirements(text) {
   }
   return out;
 }
-async function inventoryPython(root) {
-  const files = await readdir4(root);
-  const lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock"].filter((f) => files.includes(f));
-  const reqFiles = files.filter((f) => /requirements[^/]*\.txt$/.test(f)).sort();
-  const inFiles = files.filter((f) => /requirements[^/]*\.in$/.test(f)).sort();
-  const pyproject = await read(join9(root, "pyproject.toml"));
-  const pm = files.includes("uv.lock") ? "uv" : files.includes("poetry.lock") ? "poetry" : "pip";
-  const deps = {};
-  for (const f of reqFiles)
-    Object.assign(deps, parseRequirements(await read(join9(root, f)) ?? ""));
-  if (pyproject) {
-    const block = /dependencies\s*=\s*\[([\s\S]*?)\]/.exec(pyproject)?.[1] ?? "";
-    for (const m of block.matchAll(/["']([A-Za-z0-9_.\-[\]]+)\s*([^"']*)["']/g))
-      if (m[1]) deps[m[1].replace(/\[.*\]/, "").toLowerCase()] = (m[2] ?? "").trim();
+function tomlSections(text) {
+  const out = /* @__PURE__ */ new Map();
+  let name = "";
+  let body = [];
+  for (const line of text.split("\n")) {
+    const h = /^\s*\[\[?([^\]]+)\]\]?\s*(#.*)?$/.exec(line);
+    if (h?.[1]) {
+      out.set(name, `${out.get(name) ?? ""}${body.join("\n")}
+`);
+      name = h[1].trim().replace(/["']/g, "");
+      body = [];
+    } else body.push(line);
   }
-  const hasTests = files.includes("tests") || files.includes("test") || /pytest/.test(pyproject ?? "") || "pytest" in deps;
-  const ensurePytest = pm === "pip" && hasTests && !("pytest" in deps);
-  const installArgv = pm === "uv" ? UV_SYNC : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(installSet(reqFiles), ensurePytest) : withPytest(["pip", "install", "-e", ".[test]"], ensurePytest);
-  const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
-  const checks = [{ name: "install", argv: installArgv }];
-  if (hasTests)
-    checks.push({ name: "test", argv: [...runner, "python", "-m", "pytest", "-q", "-x"] });
-  return {
-    root,
-    ecosystem: "pypi",
-    packageManager: pm,
-    manifests: ["pyproject.toml", ...reqFiles, ...inFiles].filter((f) => files.includes(f)),
-    lockfiles,
-    dependencies: deps,
-    checks,
-    runtime: { python: (await read(join9(root, ".python-version")))?.trim() },
-    nodeMajor: 22,
-    hasTypeScript: false,
-    workspaces: [],
-    agentsMd: await read(join9(root, "AGENTS.md"))
+  out.set(name, `${out.get(name) ?? ""}${body.join("\n")}
+`);
+  return out;
+}
+function tomlArrays(body) {
+  const out = [];
+  for (const m of body.matchAll(/^\s*["']?([\w.-]+)["']?\s*=\s*\[/gm)) {
+    let depth = 1;
+    let quote = null;
+    let i = (m.index ?? 0) + m[0].length;
+    const start = i;
+    for (; i < body.length && depth > 0; i++) {
+      const ch = body[i];
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "#") while (i < body.length && body[i] !== "\n") i++;
+      else if (ch === "[") depth++;
+      else if (ch === "]") depth--;
+    }
+    out.push({ key: m[1] ?? "", items: body.slice(start, i - 1) });
+  }
+  return out;
+}
+var PEP508_ITEM = /["']([A-Za-z0-9][A-Za-z0-9_.-]*)(\[[^\]]*\])?\s*([^"';]*)[^"']*["']/g;
+function parsePythonManifest(text) {
+  const deps = {};
+  const add = (name, spec) => {
+    const n = name.toLowerCase();
+    if (n !== "python" && !(n in deps)) deps[n] = spec.trim();
   };
+  for (const [section, body] of tomlSections(text)) {
+    if (section === "project" || section === "project.optional-dependencies" || section === "dependency-groups" || section === "tool.pdm.dev-dependencies" || section === "tool.uv") {
+      for (const { key, items } of tomlArrays(body)) {
+        if (section === "project" && key !== "dependencies") continue;
+        if (section === "tool.uv" && key !== "dev-dependencies") continue;
+        for (const m of items.matchAll(PEP508_ITEM)) if (m[1]) add(m[1], m[3] ?? "");
+      }
+    } else if (/^tool\.poetry\.(dev-)?dependencies$|^tool\.poetry\.group\.[^.]+\.dependencies$|^(packages|dev-packages)$/.test(
+      section
+    )) {
+      for (const m of body.matchAll(
+        /^\s*["']?([A-Za-z0-9][A-Za-z0-9_.-]*)["']?\s*=\s*(?:["']([^"']*)["']|\{[^}\n]*?\bversion\s*=\s*["']([^"']*)["'][^}\n]*\}|(\{[^}\n]*\}))/gm
+      ))
+        if (m[1]) add(m[1], m[2] ?? m[3] ?? "*");
+    }
+  }
+  return deps;
 }
-var sh = (script, args = []) => ["sh", "-c", script, "sh", ...args];
-function withPytest(argv, ensure) {
-  if (!ensure) return argv;
-  const quoted = argv.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
-  return sh(`${quoted} && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }`);
-}
-function pipViaUv(reqFiles, ensurePytest = false) {
-  const pytest = ensurePytest ? " && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }" : "";
-  const resolve5 = reqFiles.length > 1 ? '{ uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" || { echo "requirement files conflict; installing $1 only"; uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$1"; }; }' : 'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@"';
-  return sh(
-    `${resolve5} && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
-    reqFiles
+var SANDBOX_PYTHONS = ["3.12", "3.13", "3.11", "3.10", "3.14"];
+function pythonSatisfies(version2, spec) {
+  const cmp = (a, b) => {
+    const pa = a.split(".").map(Number);
+    const pb = b.split(".").map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+      if (d) return Math.sign(d);
+    }
+    return 0;
+  };
+  return spec.split("||").some(
+    (alt) => [...alt.matchAll(/(\^|~=|~|===|==|!=|>=|<=|>|<)?\s*(\d+(?:\.\d+)*)(\.\*)?/g)].every((m) => {
+      const op = m[1] ?? "==";
+      const v = m[2] ?? "0";
+      const parts = v.split(".");
+      const wildcard = !!m[3] || op === "==" && parts.length < 3 && !m[1];
+      switch (op) {
+        case ">=":
+          return cmp(version2, v) >= 0;
+        case ">":
+          return cmp(version2, v) > 0;
+        case "<=":
+          return cmp(version2, v) <= 0;
+        case "<":
+          return cmp(version2, v) < 0;
+        case "!=":
+          return !version2.startsWith(v);
+        case "^":
+        case "~=":
+        case "~":
+          return cmp(version2, v) >= 0 && version2.split(".")[0] === parts[0];
+        default:
+          return wildcard ? `${version2}.`.startsWith(`${v}.`) || version2 === v : cmp(version2, v) === 0;
+      }
+    })
   );
 }
+function choosePython(pythonVersionFile, requires) {
+  const pinned = /^\s*(?:python-|cpython-)?(\d+\.\d+)/m.exec(pythonVersionFile ?? "")?.[1];
+  if (pinned && SANDBOX_PYTHONS.includes(pinned)) return pinned;
+  if (requires) {
+    for (const v of SANDBOX_PYTHONS) if (pythonSatisfies(`${v}.0`, requires)) return v;
+  }
+  return "3.12";
+}
+var VENV = "/workspace/.bumpsmith-cache/venv";
+var VPY = `${VENV}/bin/python`;
+var sh = (script, args = []) => ["sh", "-c", script, "sh", ...args];
+var q = (a) => `'${a.replace(/'/g, "'\\''")}'`;
+var ENSURE_PYTEST = `{ ${VPY} -m pytest --version >/dev/null 2>&1 || uv pip install -q --python ${VENV} pytest; }`;
+function testExtras(texts) {
+  const names = /* @__PURE__ */ new Set();
+  for (const t of texts) {
+    for (const [section, body] of tomlSections(t))
+      if (section === "project.optional-dependencies" || section === "options.extras_require") {
+        for (const m of body.matchAll(/^([A-Za-z0-9_.-]+)\s*=/gm)) if (m[1]) names.add(m[1]);
+      }
+    const setupPy = /extras_require\s*=\s*(?:dict\(([^)]*)\)|\{([^}]*)\})/s.exec(t);
+    if (setupPy) {
+      for (const m of (setupPy[1] ?? setupPy[2] ?? "").matchAll(
+        /["']?([A-Za-z0-9_.-]+)["']?\s*[:=]/g
+      ))
+        if (m[1]) names.add(m[1]);
+    }
+  }
+  return [...names].filter((n) => /^(test|tests|testing|dev|develop|all)$/i.test(n)).sort();
+}
+function pipInstall(opts) {
+  const steps = [`uv venv -q --allow-existing --python ${opts.python} ${VENV}`];
+  const pipIn = `uv pip install -q --python ${VENV}`;
+  if (opts.reqFiles.length) {
+    const all = opts.reqFiles.map((f) => `-r ${q(f)}`).join(" ");
+    const first = `-r ${q(opts.reqFiles[0] ?? "")}`;
+    steps.push(
+      opts.reqFiles.length > 1 ? `{ ${pipIn} ${all} || { echo "requirement files conflict; installing ${opts.reqFiles[0]} only"; ${pipIn} ${first}; }; }` : `${pipIn} ${all}`
+    );
+    if (opts.installable)
+      steps.push(
+        `{ ${pipIn} --no-deps -e . || echo "note: the project itself could not be installed; tests use the source tree"; }`
+      );
+  } else {
+    const target = opts.extras.length ? `.[${opts.extras.join(",")}]` : ".";
+    steps.push(`${pipIn} -e ${q(target)}`);
+  }
+  if (opts.ensurePytest) steps.push(ENSURE_PYTEST);
+  return sh(steps.join(" && "));
+}
 function installSet(reqFiles) {
-  const main2 = reqFiles.filter((f) => f === "requirements.txt");
+  const base = (f) => f.split("/").pop() ?? f;
+  const isMain = (f) => f === "requirements.txt" || /^requirements\/(base|common|requirements|main)\.txt$/.test(f);
+  const main2 = reqFiles.filter(isMain);
   const devTest = reqFiles.filter(
-    (f) => f !== "requirements.txt" && /(^|[-_])(dev|test|tests|testing)([-_.]|$)/i.test(f)
+    (f) => !isMain(f) && /(^|[-_/])(dev|develop|test|tests|testing|local)([-_.]|$)/i.test(base(f))
   );
   const chosen = [...main2, ...devTest];
   return chosen.length ? chosen : reqFiles;
@@ -303023,13 +303182,125 @@ var UV_SYNC = sh(
     'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras'
   ].join("\n")
 );
-async function inventory(root, ecosystem) {
+function poetryInstall(python) {
+  const install = "poetry install --no-interaction --all-extras --all-groups";
+  return sh(
+    [
+      `poetry env use -q "$(uv python find ${python} 2>/dev/null || command -v python3)" >/dev/null`,
+      "{ poetry check --lock >/dev/null 2>&1 || poetry lock --no-interaction; }",
+      `{ ${install} || ${install} --no-root; }`
+    ].join(" && ")
+  );
+}
+function pipenvInstall(python) {
+  return sh(
+    `pipenv install --dev --python "$(uv python find ${python} 2>/dev/null || command -v python3)"`
+  );
+}
+async function inventoryPython(root) {
+  const files = await readdir4(root);
+  const reqDir = files.includes("requirements") ? (await readdir4(join9(root, "requirements")).catch(() => [])).filter((f) => /\.(txt|in)$/.test(f)).map((f) => `requirements/${f}`) : [];
+  const lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock"].filter(
+    (f) => files.includes(f)
+  );
+  const reqFiles = [
+    ...files.filter((f) => /requirements[^/]*\.txt$/.test(f)),
+    ...reqDir.filter((f) => f.endsWith(".txt"))
+  ].sort();
+  const inFiles = [
+    ...files.filter((f) => /requirements[^/]*\.in$/.test(f)),
+    ...reqDir.filter((f) => f.endsWith(".in"))
+  ].sort();
+  const pyproject = await read(join9(root, "pyproject.toml"));
+  const pipfile = await read(join9(root, "Pipfile"));
+  const setupPy = await read(join9(root, "setup.py"));
+  const setupCfg = await read(join9(root, "setup.cfg"));
+  const poetryProject = /^\[tool\.poetry/m.test(pyproject ?? "");
+  const pm = files.includes("uv.lock") ? "uv" : files.includes("poetry.lock") || poetryProject && !reqFiles.length ? "poetry" : files.includes("Pipfile") ? "pipenv" : files.includes("pdm.lock") ? "pdm" : "pip";
+  const deps = {};
+  for (const f of reqFiles)
+    Object.assign(deps, parseRequirements(await read(join9(root, f)) ?? ""));
+  for (const text of [pyproject, pipfile])
+    if (text) for (const [k, v] of Object.entries(parsePythonManifest(text))) deps[k] ??= v;
+  for (const text of [setupPy, setupCfg])
+    if (text) {
+      for (const m of text.matchAll(
+        /["']?\s*([A-Za-z][A-Za-z0-9_.-]*)\s*((?:[<>=!~]=?|===)\s*[\d][^"',;\n]*)/g
+      ))
+        if (m[1] && !(m[1].toLowerCase() in deps)) deps[m[1].toLowerCase()] = (m[2] ?? "").trim();
+    }
+  const requires = /^\s*requires-python\s*=\s*["']([^"']+)["']/m.exec(pyproject ?? "")?.[1] ?? /^\s*python\s*=\s*["']([^"']+)["']/m.exec(
+    tomlSections(pyproject ?? "").get("tool.poetry.dependencies") ?? ""
+  )?.[1] ?? /python_version\s*=\s*["']([^"']+)["']/.exec(pipfile ?? "")?.[1] ?? /python_requires\s*=\s*["']([^"']+)["']/.exec(`${setupPy ?? ""}${setupCfg ?? ""}`)?.[1] ?? null;
+  const python = choosePython(await read(join9(root, ".python-version")), requires);
+  const django = files.includes("manage.py");
+  const pytestConfigured = /\[tool\.pytest|pytest/.test(pyproject ?? "") || files.includes("pytest.ini") || files.includes("conftest.py") || /\[tool:pytest\]/.test(setupCfg ?? "") || "pytest" in deps;
+  const hasTests = pytestConfigured || files.includes("tests") || files.includes("test") || django;
+  const djangoRunner = django && !pytestConfigured && !("pytest-django" in deps);
+  const installable = !!setupPy || !!setupCfg || /^\[(project|build-system)\]/m.test(pyproject ?? "");
+  let installArgv;
+  let runner;
+  if (pm === "uv") {
+    installArgv = UV_SYNC;
+    runner = ["uv", "run"];
+  } else if (pm === "poetry") {
+    installArgv = poetryInstall(python);
+    runner = ["poetry", "run"];
+  } else if (pm === "pipenv") {
+    installArgv = pipenvInstall(python);
+    runner = ["pipenv", "run"];
+  } else if (pm === "pdm") {
+    installArgv = sh(
+      `pdm use -q -f "$(uv python find ${python} 2>/dev/null || command -v python3)" && pdm install -G :all`
+    );
+    runner = ["pdm", "run"];
+  } else {
+    installArgv = pipInstall({
+      python,
+      reqFiles: installSet(reqFiles),
+      installable,
+      extras: testExtras([pyproject ?? "", setupPy ?? "", setupCfg ?? ""]),
+      ensurePytest: hasTests && !djangoRunner
+    });
+    runner = [];
+  }
+  const py = pm === "pip" ? [VPY] : [...runner, "python"];
+  const checks = [{ name: "install", argv: installArgv }];
+  if (djangoRunner) checks.push({ name: "test", argv: [...py, "manage.py", "test", "--noinput"] });
+  else if (hasTests) checks.push({ name: "test", argv: [...py, "-m", "pytest", "-q", "-x"] });
+  return {
+    root,
+    ecosystem: "pypi",
+    packageManager: pm,
+    manifests: [
+      "pyproject.toml",
+      "Pipfile",
+      "setup.py",
+      "setup.cfg",
+      ...reqFiles,
+      ...inFiles
+    ].filter((f) => files.includes(f) || f.startsWith("requirements/")),
+    lockfiles,
+    dependencies: deps,
+    checks,
+    runtime: { python },
+    nodeMajor: 22,
+    hasTypeScript: false,
+    workspaces: [],
+    agentsMd: await read(join9(root, "AGENTS.md"))
+  };
+}
+async function inventory(root, ecosystem, opts = {}) {
   const pkgText = await read(join9(root, "package.json"));
   const files = await readdir4(root);
-  const hasPython = files.includes("pyproject.toml") || files.some((f) => /requirements[^/]*\.(txt|in)$/.test(f));
+  const hasPython = files.some(
+    (f) => /^(pyproject\.toml|setup\.py|setup\.cfg|Pipfile|requirements)$|requirements[^/]*\.(txt|in)$/.test(
+      f
+    )
+  );
   if (ecosystem === "pypi" && hasPython) return inventoryPython(root);
   if (pkgText && ecosystem !== "pypi")
-    return inventoryNode(root, JSON.parse(pkgText));
+    return inventoryNode(root, parsePackageJson(pkgText), opts.packageManager);
   if (hasPython) return inventoryPython(root);
   throw new Error(`No supported manifest found in ${root}`);
 }
@@ -303259,20 +303530,150 @@ Review the patch.`;
 import { spawn as spawn4 } from "node:child_process";
 import { createHash as createHash4, randomUUID as randomUUID2 } from "node:crypto";
 import { existsSync as existsSync5 } from "node:fs";
-import { mkdir as mkdir7, readFile as readFile7 } from "node:fs/promises";
-import { dirname as dirname3, join as join10 } from "node:path";
+import { mkdir as mkdir7, readFile as readFile8 } from "node:fs/promises";
+import { dirname as dirname3, join as join11 } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// src/sandbox/services.ts
+var import_yaml2 = __toESM(require_dist(), 1);
+import { readdir as readdir5, readFile as readFile7 } from "node:fs/promises";
+import { join as join10 } from "node:path";
+var KINDS = {
+  postgres: "postgres",
+  "postgis/postgis": "postgres",
+  mysql: "mysql",
+  mariadb: "mariadb",
+  redis: "redis",
+  "valkey/valkey": "valkey",
+  mongo: "mongo"
+};
+var TAG = /^[\w][\w.-]{0,40}$/;
+var DEFAULT_ENV = {
+  postgres: { POSTGRES_PASSWORD: "postgres", POSTGRES_HOST_AUTH_METHOD: "trust" },
+  mysql: { MYSQL_ALLOW_EMPTY_PASSWORD: "yes" },
+  mariadb: { MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes" },
+  redis: {},
+  valkey: {},
+  mongo: {}
+};
+var literal2 = (v) => typeof v === "string" && !v.includes("${{") || typeof v === "number" || typeof v === "boolean";
+var SAFE_ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
+var BLOCKED_ENV = /^(PATH|HOME|LD_\w+|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|SSL_\w+|REQUESTS_CA_BUNDLE|PIP_\w+|UV_\w+|NPM_CONFIG_\w+|YARN_\w+|HTTPS?_PROXY|NO_PROXY|PYTHONPATH|GIT_\w+)$/i;
+function cleanEnv(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [k, v] of Object.entries(raw))
+    if (SAFE_ENV_NAME.test(k) && !BLOCKED_ENV.test(k) && literal2(v)) out[k] = String(v);
+  return out;
+}
+function parseImage(image) {
+  const m = /^(?:docker\.io\/)?(?:library\/)?([a-z0-9/-]+)(?::([^@\s]+))?$/.exec(image.trim());
+  if (!m?.[1]) return null;
+  const kind = KINDS[m[1]];
+  const tag = m[2] ?? "latest";
+  if (!kind || !TAG.test(tag)) return null;
+  return { kind, image: `${m[1]}:${tag}` };
+}
+function servicesFromWorkflow(text) {
+  const plan = { services: [], env: {}, skipped: [] };
+  let doc;
+  try {
+    doc = (0, import_yaml2.parse)(text);
+  } catch {
+    return plan;
+  }
+  const wf = doc ?? {};
+  for (const job of Object.values(wf.jobs ?? {})) {
+    const j = job ?? {};
+    if (!j.services) continue;
+    Object.assign(plan.env, cleanEnv(wf.env), cleanEnv(j.env));
+    for (const step of Array.isArray(j.steps) ? j.steps : [])
+      Object.assign(plan.env, cleanEnv(step?.env));
+    for (const [name, svc] of Object.entries(j.services)) {
+      const s = typeof svc === "string" ? { image: svc } : svc ?? {};
+      const parsed = typeof s.image === "string" ? parseImage(s.image) : null;
+      if (!parsed) {
+        plan.skipped.push(`${name} (${String(s.image ?? "no image")})`);
+        continue;
+      }
+      if (plan.services.some((x) => x.kind === parsed.kind)) continue;
+      plan.services.push({
+        ...parsed,
+        env: { ...DEFAULT_ENV[parsed.kind], ...cleanEnv(s.env) }
+      });
+    }
+  }
+  return plan;
+}
+async function detectServices(repoRoot) {
+  const plan = { services: [], env: {}, skipped: [] };
+  const dir = join10(repoRoot, ".github", "workflows");
+  let files = [];
+  try {
+    files = (await readdir5(dir)).filter((f) => /\.ya?ml$/.test(f)).sort();
+  } catch {
+    return plan;
+  }
+  for (const f of files) {
+    let text;
+    try {
+      text = await readFile7(join10(dir, f), "utf8");
+    } catch {
+      continue;
+    }
+    const p = servicesFromWorkflow(text);
+    for (const s of p.services)
+      if (!plan.services.some((x) => x.kind === s.kind)) plan.services.push(s);
+    for (const [k, v] of Object.entries(p.env)) plan.env[k] ??= v;
+    for (const s of p.skipped) if (!plan.skipped.includes(s)) plan.skipped.push(s);
+  }
+  plan.services = plan.services.slice(0, 4);
+  return plan;
+}
+function readinessProbe(kind) {
+  switch (kind) {
+    case "postgres":
+      return ["pg_isready", "-h", "127.0.0.1"];
+    case "mysql":
+    case "mariadb":
+      return [
+        "sh",
+        "-c",
+        "mysqladmin ping -h 127.0.0.1 --silent 2>/dev/null || mariadb-admin ping -h 127.0.0.1 --silent"
+      ];
+    case "redis":
+      return ["redis-cli", "ping"];
+    case "valkey":
+      return ["valkey-cli", "ping"];
+    case "mongo":
+      return [
+        "sh",
+        "-c",
+        'mongosh --quiet --eval "db.runCommand({ ping: 1 })" || mongo --quiet --eval "db.runCommand({ ping: 1 })"'
+      ];
+  }
+}
+var DATA_DIRS = {
+  postgres: "/var/lib/postgresql",
+  mysql: "/var/lib/mysql",
+  mariadb: "/var/lib/mysql",
+  redis: "/data",
+  valkey: "/data",
+  mongo: "/data/db"
+};
+
+// src/sandbox/docker.ts
 function packageRoot() {
   let dir = dirname3(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
-    if (existsSync5(join10(dir, "sandbox", "mirror", "Dockerfile"))) return dir;
+    if (existsSync5(join11(dir, "sandbox", "mirror", "Dockerfile"))) return dir;
     dir = dirname3(dir);
   }
   throw new Error("cannot locate the bumpsmith sandbox definitions");
 }
 var ROOT = packageRoot();
-var SANDBOX_DIR = join10(ROOT, "sandbox");
-var DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? join10(ROOT, ".data");
+var SANDBOX_DIR = join11(ROOT, "sandbox");
+var DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? join11(ROOT, ".data");
 var NETWORK = "bumpsmith-sbx";
 var SUBNET = "172.31.250.0/24";
 var MIRROR_NAME = "bumpsmith-registry-mirror";
@@ -303284,7 +303685,7 @@ var REGISTRY_HOSTS = [
   "pypi.org",
   "files.pythonhosted.org"
 ];
-var CERT_DIR = join10(DATA_DIR, "mirror-certs");
+var CERT_DIR = join11(DATA_DIR, "mirror-certs");
 var UID = "10001:10001";
 var DEFAULT_LIMITS2 = {
   cpus: 2,
@@ -303299,7 +303700,7 @@ var NODE_IMAGES = {
 async function imageTag(kind, buildArgs) {
   const files = kind === "mirror" ? ["Dockerfile", "mirror.mjs"] : ["Dockerfile"];
   const h = createHash4("sha256");
-  for (const f of files) h.update(await readFile7(join10(SANDBOX_DIR, kind, f)));
+  for (const f of files) h.update(await readFile8(join11(SANDBOX_DIR, kind, f)));
   h.update(buildArgs.join("\n"));
   return `bumpsmith-${kind}:${h.digest("hex").slice(0, 12)}`;
 }
@@ -303315,7 +303716,7 @@ async function ensureImage(kind, buildArgs = []) {
         ...buildArgs.flatMap((a) => ["--build-arg", a]),
         "-t",
         tag,
-        join10(SANDBOX_DIR, kind)
+        join11(SANDBOX_DIR, kind)
       ],
       { timeoutMs: 15 * 6e4 }
     );
@@ -303324,13 +303725,13 @@ async function ensureImage(kind, buildArgs = []) {
 }
 async function ensureMirrorCerts(dir = CERT_DIR) {
   const { existsSync: existsSync8 } = await import("node:fs");
-  const { writeFile: writeFile8, rm: rm7 } = await import("node:fs/promises");
-  if (existsSync8(join10(dir, "mirror.crt")) && existsSync8(join10(dir, "ca.crt"))) return dir;
+  const { writeFile: writeFile9, rm: rm7 } = await import("node:fs/promises");
+  if (existsSync8(join11(dir, "mirror.crt")) && existsSync8(join11(dir, "ca.crt"))) return dir;
   await mkdir7(dir, { recursive: true, mode: 493 });
   const { chmod: chmodDir } = await import("node:fs/promises");
   await chmodDir(dir, 493);
-  const cfg = join10(dir, "leaf.cnf");
-  await writeFile8(
+  const cfg = join11(dir, "leaf.cnf");
+  await writeFile9(
     cfg,
     [
       "[req]",
@@ -303396,11 +303797,11 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
     "ext"
   ]);
   for (const f of ["ca.key", "mirror.csr", "ca.srl", "leaf.cnf"])
-    await rm7(join10(dir, f), { force: true });
+    await rm7(join11(dir, f), { force: true });
   const { chmod } = await import("node:fs/promises");
-  await chmod(join10(dir, "mirror.key"), 420);
-  await chmod(join10(dir, "mirror.crt"), 420);
-  await chmod(join10(dir, "ca.crt"), 420);
+  await chmod(join11(dir, "mirror.key"), 420);
+  await chmod(join11(dir, "mirror.crt"), 420);
+  await chmod(join11(dir, "ca.crt"), 420);
   return dir;
 }
 var infraReady = null;
@@ -303493,6 +303894,18 @@ async function ensureInfraOnce() {
     `registry mirror did not become ready in 10 seconds (restarts: ${restarts}): ${(logs.stdout + logs.stderr).slice(-1500)}`
   );
 }
+var SERVICE_HOST_ALIASES = [
+  "postgres",
+  "postgresql",
+  "db",
+  "database",
+  "mysql",
+  "mariadb",
+  "redis",
+  "valkey",
+  "mongo",
+  "mongodb"
+];
 var DockerSandbox = class _DockerSandbox {
   constructor(id, container, volume) {
     this.id = id;
@@ -303503,6 +303916,10 @@ var DockerSandbox = class _DockerSandbox {
   container;
   volume;
   networkAttached = true;
+  /** Services that started and answered their readiness probe. */
+  startedServices = [];
+  /** Services that could not start, with the reason. */
+  failedServices = [];
   static async create(opts) {
     await ensureInfra();
     const image = opts.ecosystem === "npm" ? await ensureImage("node", [`NODE_IMAGE=${NODE_IMAGES[opts.nodeMajor ?? 22]}`]) : await ensureImage("python");
@@ -303548,8 +303965,11 @@ var DockerSandbox = class _DockerSandbox {
       "--ulimit",
       "nofile=4096:8192",
       ...REGISTRY_HOSTS.flatMap((h) => ["--add-host", `${h}:${MIRROR_IP}`]),
+      // CI container jobs reach services by name; here they listen on localhost.
+      ...opts.services?.length ? SERVICE_HOST_ALIASES.flatMap((h) => ["--add-host", `${h}:127.0.0.1`]) : [],
+      ...Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
       "--mount",
-      `type=bind,src=${join10(CERT_DIR, "ca.crt")},dst=/etc/bumpsmith/ca.crt,readonly`,
+      `type=bind,src=${join11(CERT_DIR, "ca.crt")},dst=/etc/bumpsmith/ca.crt,readonly`,
       ...[
         "NODE_EXTRA_CA_CERTS=/etc/bumpsmith/ca.crt",
         "YARN_HTTPS_CA_FILE_PATH=/etc/bumpsmith/ca.crt",
@@ -303564,7 +303984,64 @@ var DockerSandbox = class _DockerSandbox {
     ]);
     const sb = new _DockerSandbox(id, container, volume);
     await sb.setNetwork(false);
+    for (const svc of opts.services ?? []) await sb.startService(svc, opts.label ?? "none");
     return sb;
+  }
+  /**
+   * Start one service sidecar in this sandbox's network namespace: it listens on the
+   * sandbox's localhost, keeps its data in memory, and has no network of its own.
+   */
+  async startService(svc, label) {
+    const name = `${this.container}-svc-${svc.kind}`;
+    const pulled = await run("docker", ["image", "inspect", svc.image]);
+    if (pulled.exitCode !== 0) {
+      const p = await run("docker", ["pull", "--quiet", svc.image], { timeoutMs: 10 * 6e4 });
+      if (p.exitCode !== 0) {
+        this.failedServices.push(`${svc.image} (pull failed: ${p.stderr.trim().slice(0, 160)})`);
+        return;
+      }
+    }
+    const r = await run("docker", [
+      "run",
+      "-d",
+      "--name",
+      name,
+      "--label",
+      "bumpsmith=1",
+      "--label",
+      `bumpsmith.job=${label.replace(/[^A-Za-z0-9_.-]/g, "_")}`,
+      "--network",
+      `container:${this.container}`,
+      "--cap-drop",
+      "ALL",
+      ...["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "FOWNER"].flatMap((c) => ["--cap-add", c]),
+      "--security-opt",
+      "no-new-privileges",
+      "--memory",
+      "1g",
+      "--pids-limit",
+      "256",
+      "--tmpfs",
+      `${DATA_DIRS[svc.kind]}:rw,size=1g`,
+      ...Object.entries(svc.env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+      svc.image
+    ]);
+    if (r.exitCode !== 0) {
+      this.failedServices.push(`${svc.image} (${r.stderr.trim().slice(0, 160)})`);
+      return;
+    }
+    for (let i = 0; i < 60; i++) {
+      const probe = await run("docker", ["exec", name, ...readinessProbe(svc.kind)]);
+      if (probe.exitCode === 0) {
+        this.startedServices.push(svc.image);
+        return;
+      }
+      await new Promise((res) => setTimeout(res, 1e3));
+    }
+    const logs = await run("docker", ["logs", "--tail", "5", name]);
+    this.failedServices.push(
+      `${svc.image} (not ready after 60 seconds: ${(logs.stdout + logs.stderr).trim().slice(-200)})`
+    );
   }
   /** Attach or detach the internal network. Detached = loopback only. */
   async setNetwork(on) {
@@ -303691,6 +304168,9 @@ var DockerSandbox = class _DockerSandbox {
     });
   }
   async destroy() {
+    const sidecars = await run("docker", ["ps", "-aq", "--filter", `name=${this.container}-svc-`]);
+    for (const c of sidecars.stdout.split("\n").filter(Boolean))
+      await run("docker", ["rm", "-f", "-v", c]);
     await run("docker", ["rm", "-f", "-v", this.container]);
     await run("docker", ["volume", "rm", "-f", this.volume]);
   }
@@ -303809,7 +304289,7 @@ function filesFromOutput(output2) {
 
 // src/pipeline.ts
 async function prepareRepo(input3, dir) {
-  const dest = join11(dir, "repo");
+  const dest = join12(dir, "repo");
   if (/^https:\/\//.test(input3.repo)) {
     await runOk(
       "git",
@@ -303847,16 +304327,50 @@ function normaliseSubdir(dir) {
 }
 async function currentVersion(inv, pkg) {
   if (inv.ecosystem === "npm") {
-    const lock = join11(inv.root, "package-lock.json");
-    if (existsSync6(lock)) {
-      const j = JSON.parse(await readFile8(lock, "utf8"));
-      const v = j.packages?.[`node_modules/${pkg}`]?.version;
-      if (v) return v;
+    try {
+      const lock = join12(inv.root, "package-lock.json");
+      if (existsSync6(lock)) {
+        const j = JSON.parse(await readFile9(lock, "utf8"));
+        const v = j.packages?.[`node_modules/${pkg}`]?.version;
+        if (v) return v;
+      }
+    } catch {
     }
   }
-  const range = inv.dependencies[pkg] ?? inv.dependencies[pkg.toLowerCase()];
-  if (!range) return null;
-  return import_semver3.default.minVersion(range.replace(/^==/, ""))?.version ?? null;
+  const range = inv.dependencies[pkg] ?? inv.dependencies[pkg.toLowerCase()] ?? inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "-")] ?? inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "_")];
+  if (range === void 0) return null;
+  return lowestVersion(range);
+}
+function lowestVersion(range) {
+  const r = range.trim().replace(/^(==|===|~=)/, "");
+  try {
+    const v = import_semver3.default.minVersion(r)?.version;
+    if (v) return v;
+  } catch {
+  }
+  const first = /(\d+(?:\.\d+){0,2})/.exec(r)?.[1];
+  return first ? import_semver3.default.coerce(first)?.version ?? null : null;
+}
+function explainError(message) {
+  if (/is not a dependency of this repository/.test(message))
+    return "The package is not declared in this directory's manifest; for a monorepo, pass the package's directory (--dir).";
+  if (/No supported manifest found/.test(message))
+    return "No package.json, pyproject.toml, setup.py, Pipfile or requirements file was found in this directory.";
+  if (/is not valid JSON/.test(message)) return `${message.replace(/^Error: /, "")}.`;
+  if (/could not install .*ETARGET|No matching version|notarget/i.test(message))
+    return "The target version is not on the registry.";
+  if (/could not install/.test(message))
+    return "The package manager could not apply the version bump; the output is in the job record.";
+  if (/could not find .* in /.test(message))
+    return "The package is declared in a form Bumpsmith cannot rewrite yet (for example a URL or a file path).";
+  if (/clone|Repository not found|exit code 128/i.test(message))
+    return "The repository could not be cloned (private, deleted, or too large).";
+  if (/exit code 137|OOM|out of memory/i.test(message)) return "The machine ran out of memory.";
+  if (/Cannot connect to the Docker daemon|docker: not found|ENOENT.*docker/i.test(message))
+    return "Docker is not running; Bumpsmith needs Docker for its sandbox.";
+  if (/404|not found on (npm|pypi)|registry/i.test(message))
+    return "The package or version could not be found on the public registry.";
+  return "An unexpected error stopped the job; the details are in the job record.";
 }
 var PUBLIC_HOSTS = /* @__PURE__ */ new Set([
   "registry.npmjs.org",
@@ -303869,7 +304383,7 @@ async function privateRegistryHost(repoDir, lockfiles) {
   !/^(github\.com|codeload\.github\.com|.*\.githubusercontent\.com)$/.test(host);
   for (const f of lockfiles) {
     if (f.endsWith(".lockb")) continue;
-    const text = await readFile8(join11(repoDir, f), "utf8");
+    const text = await readFile9(join12(repoDir, f), "utf8");
     for (const m of text.matchAll(/(?:resolved|tarball)["':\s]+"?(https?:\/\/[^/"'\s]+)/g)) {
       const host = new URL(m[1] ?? "http://x").host;
       if (isPrivate(host)) return host;
@@ -303878,7 +304392,7 @@ async function privateRegistryHost(repoDir, lockfiles) {
   for (const f of [".npmrc", ".yarnrc.yml", ".yarnrc"]) {
     let text;
     try {
-      text = await readFile8(join11(repoDir, f), "utf8");
+      text = await readFile9(join12(repoDir, f), "utf8");
     } catch {
       continue;
     }
@@ -303922,6 +304436,25 @@ function installFailureReason(baseline) {
     return " (it did not finish within the time limit)";
   return "";
 }
+function checkFailureReason(baseline) {
+  const failing = baseline.filter((c) => c.name !== "install" && !c.passed);
+  if (!failing.length) return null;
+  const out = failing.map((c) => c.output_tail).join("\n");
+  const names = failing.map((c) => c.name).join(", ");
+  if (/ECONNREFUSED[^\n]*:(5432|3306|6379|27017)|could not connect to server|Connection refused[^\n]*(5432|3306|6379|27017)|OperationalError: (connection|could not connect)|Can't connect to MySQL|Error 111 connecting|ServerSelectionTimeoutError|redis\.exceptions\.ConnectionError/i.test(
+    out
+  ))
+    return `Before the upgrade, ${names} already failed because the tests need a database or cache that the CI workflow does not declare as a service; declare it under services: in the workflow, or set checks in .bumpsmith.yml.`;
+  if (/ModuleNotFoundError|Cannot find module|ERR_MODULE_NOT_FOUND/.test(out))
+    return `Before the upgrade, ${names} already failed: a module is missing (often a package installed only in CI, or a generated file).`;
+  if (/command not found|not found: |ENOENT.*spawn/i.test(out))
+    return `Before the upgrade, ${names} already failed: a program the check calls is not installed in the sandbox.`;
+  if (/(API|SECRET|TOKEN|KEY)[A-Z_]* (is )?(not set|missing|required)|KeyError: '[A-Z_]+'|environment variable/i.test(
+    out
+  ))
+    return `Before the upgrade, ${names} already failed: the tests expect an environment variable or secret that only CI has.`;
+  return `Before the upgrade, ${names} already failed; Bumpsmith compares against that and only counts new failures.`;
+}
 function isVerified(baseline, verdict) {
   if (!baseline.find((c) => c.name === "install")?.passed) return false;
   return verdict.comparisons.some((c) => c.name !== "install" && c.after === true);
@@ -303940,7 +304473,7 @@ async function runJob(input3, opts) {
   });
   const started = Date.now();
   const id = opts.jobId ?? `${(/* @__PURE__ */ new Date()).toISOString().replace(/[-:T]/g, "").slice(0, 14)}-${randomUUID3().slice(0, 6)}`;
-  const dir = join11(opts.runsDir ?? join11(process.cwd(), "runs"), id);
+  const dir = join12(opts.runsDir ?? join12(process.cwd(), "runs"), id);
   await mkdir8(dir, { recursive: true });
   const ledger = new Ledger(opts.budgetUsd ?? 8);
   const job = {
@@ -303962,7 +304495,7 @@ async function runJob(input3, opts) {
     job.usage = ledger.entries;
     job.cost_usd = Number(ledger.totalUsd.toFixed(4));
     job.duration_ms = Date.now() - started;
-    await writeFile4(join11(dir, "job.json"), `${JSON.stringify(job, null, 2)}
+    await writeFile4(join12(dir, "job.json"), `${JSON.stringify(job, null, 2)}
 `);
   };
   let sb = null;
@@ -303974,19 +304507,27 @@ async function runJob(input3, opts) {
     const sub = normaliseSubdir(input3.dir);
     const repoDir = sub ? containedPath(repoRoot, sub) : repoRoot;
     if (!existsSync6(repoDir)) throw new Error(`directory ${sub} does not exist in the repository`);
-    const inv = await inventory(repoDir, input3.ecosystem);
+    let inv = await inventory(repoDir, input3.ecosystem);
+    let workspaceMember = false;
     if (sub) {
-      for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
-      const sharesRootLock = inv.ecosystem === "npm" && !inv.lockfiles.length && ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].some(
-        (f) => existsSync6(join11(repoRoot, f))
+      workspaceMember = inv.ecosystem === "npm" && !inv.lockfiles.length && ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"].some(
+        (f) => existsSync6(join12(repoRoot, f))
       );
-      if (sharesRootLock) {
-        job.state = "blocked_policy";
+      if (workspaceMember) {
+        const rootInv = await inventory(repoRoot, "npm");
+        inv = await inventory(repoDir, "npm", { packageManager: rootInv.packageManager });
+        inv.lockfiles = [];
+        inv.nodeMajor = Math.max(inv.nodeMajor, rootInv.nodeMajor);
+        inv.runtime.node ??= rootInv.runtime.node;
+        for (const c of inv.checks)
+          c.cwd = c.name === "install" ? "/workspace" : `/workspace/${sub}`;
+        const install = inv.checks.find((c) => c.name === "install");
+        const rootInstall = rootInv.checks.find((c) => c.name === "install");
+        if (install && rootInstall) install.argv = rootInstall.argv;
         job.notes.push(
-          `Unsupported (for now): ${sub} is a workspace member that shares the repository's root lockfile. Packages with their own lockfile in a sub-directory are supported.`
+          `${sub} is a workspace member: dependencies install from the repository root with ${rootInv.packageManager}.`
         );
-        return job;
-      }
+      } else for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
     }
     for (const [name, cmd] of Object.entries(opts.config?.checks ?? {})) {
       if (!cmd) continue;
@@ -303999,7 +304540,12 @@ async function runJob(input3, opts) {
     const from = input3.from ?? await currentVersion(inv, input3.packageName);
     if (!from) throw new Error(`${input3.packageName} is not a dependency of this repository`);
     job.from = from;
-    const privateHost = eco === "npm" ? await privateRegistryHost(repoDir, inv.lockfiles) : null;
+    const privateHost = eco === "npm" ? workspaceMember ? await privateRegistryHost(
+      repoRoot,
+      ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].filter(
+        (f) => existsSync6(join12(repoRoot, f))
+      )
+    ) : await privateRegistryHost(repoDir, inv.lockfiles) : null;
     if (privateHost) {
       job.state = "blocked_policy";
       job.notes.push(
@@ -304009,7 +304555,7 @@ async function runJob(input3, opts) {
     }
     if (eco === "npm") {
       const gitDeps = nonRegistryDependencies(
-        await readFile8(join11(repoDir, "package.json"), "utf8")
+        await readFile9(join12(repoDir, "package.json"), "utf8")
       );
       if (gitDeps.length) {
         job.state = "blocked_policy";
@@ -304035,26 +304581,50 @@ async function runJob(input3, opts) {
       job.notes.push(...job.gate.reasons);
       return job;
     }
-    log2(`job ${id}: building Change Record ${input3.packageName} ${from} -> ${input3.to}`);
-    job.change_record = await buildChangeRecord({
-      ecosystem: eco,
-      name: input3.packageName,
-      from,
-      to: input3.to,
-      repositoryUrl: rel.repositoryUrl,
-      provider: opts.provider,
-      ledger,
-      refresh: opts.refreshChangeRecord
-    });
-    job.impact = await buildImpactMap(repoDir, eco, input3.packageName, job.change_record);
-    if (sub) for (const it of job.impact.items) it.file = `${sub}/${it.file}`;
+    if (opts.setupOnly) {
+      job.impact = {
+        package: input3.packageName,
+        from,
+        to: input3.to,
+        items: [],
+        files_importing_package: [],
+        upgrade_class: "safe",
+        reason: "setup-only run"
+      };
+    } else {
+      log2(`job ${id}: building Change Record ${input3.packageName} ${from} -> ${input3.to}`);
+      job.change_record = await buildChangeRecord({
+        ecosystem: eco,
+        name: input3.packageName,
+        from,
+        to: input3.to,
+        repositoryUrl: rel.repositoryUrl,
+        provider: opts.provider,
+        ledger,
+        refresh: opts.refreshChangeRecord
+      });
+      job.impact = await buildImpactMap(repoDir, eco, input3.packageName, job.change_record);
+      if (sub) for (const it of job.impact.items) it.file = `${sub}/${it.file}`;
+    }
     job.state = "analysed";
     log2(`job ${id}: ${job.impact.items.length} impact item(s), class ${job.impact.upgrade_class}`);
+    const svc = inv.checks.some((c) => c.name === "test") ? await detectServices(repoRoot) : { services: [], env: {}, skipped: [] };
     sb = await (opts.sandboxFactory ?? dockerSandboxFactory)({
       ecosystem: eco,
       nodeMajor: inv.nodeMajor,
-      label: id
+      label: id,
+      services: svc.services,
+      env: svc.env
     });
+    const started2 = sb.startedServices ?? [];
+    const failed = sb.failedServices ?? [];
+    if (started2.length)
+      job.notes.push(`Started the services the CI workflow uses for tests: ${started2.join(", ")}.`);
+    if (failed.length) job.notes.push(`Could not start CI services: ${failed.join("; ")}.`);
+    if (svc.skipped.length)
+      job.notes.push(
+        `CI services not run in the sandbox (only official postgres, mysql, mariadb, redis, valkey and mongo images are): ${svc.skipped.join(", ")}.`
+      );
     await sb.copyIn(repoRoot);
     const wd = sub ? `/workspace/${sub}` : void 0;
     log2(`job ${id}: baseline checks`);
@@ -304063,6 +304633,8 @@ async function runJob(input3, opts) {
       job.notes.push(
         `Baseline install failed${installFailureReason(job.baseline)}; running in limited mode (static checks only, draft output).`
       );
+    const why = checkFailureReason(job.baseline);
+    if (why) job.notes.push(why);
     const timedOut = job.baseline.filter((c) => c.timed_out).map((c) => c.name);
     const checks = inv.checks.filter((c) => !timedOut.includes(c.name));
     if (timedOut.length)
@@ -304073,8 +304645,11 @@ async function runJob(input3, opts) {
       const info = npmDepInfo(cur.stdout, input3.packageName);
       if (!info) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
       const before = new Date(Date.now() - minAge * 864e5);
-      const vendoredBerry = inv.packageManager === "yarn" && existsSync6(join11(repoDir, ".yarnrc.yml"));
-      const workspaceRoot = !vendoredBerry && (existsSync6(join11(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
+      const vendoredBerry = inv.packageManager === "yarn" && (existsSync6(join12(repoDir, ".yarnrc.yml")) || existsSync6(join12(repoRoot, ".yarnrc.yml")));
+      const workspaceRoot = !workspaceMember && !vendoredBerry && (existsSync6(join12(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
+      const npmMember = workspaceMember && inv.packageManager === "npm";
+      const upCwd = npmMember ? void 0 : wd;
+      const memberArgs = npmMember ? ["--workspace", sub] : [];
       const companions = [];
       for (const c of npmCompanions(cur.stdout, input3.packageName, from)) {
         try {
@@ -304105,8 +304680,8 @@ async function runJob(input3, opts) {
       }
       if (companions.length)
         job.notes.push(`Upgraded together with ${input3.packageName}: ${companions.join(", ")}.`);
-      let up = await sb.exec(
-        npmUpgradeArgv(
+      const upArgv = [
+        ...npmUpgradeArgv(
           inv.packageManager,
           input3.packageName,
           input3.to,
@@ -304115,24 +304690,25 @@ async function runJob(input3, opts) {
           workspaceRoot,
           companions
         ),
-        { network: true, timeoutSec: 15 * 60, cwd: wd }
-      );
+        ...memberArgs
+      ];
+      const upOpts = { network: true, timeoutSec: 15 * 60, cwd: upCwd };
+      let up = await sb.exec(upArgv, upOpts);
       if (up.exitCode !== 0 && inv.packageManager === "npm") {
-        job.notes.push(
-          "npm could not apply the release-age limit to transitive dependencies (--before); installed without it."
-        );
-        up = await sb.exec(
-          npmUpgradeArgv(
-            "npm",
-            input3.packageName,
-            input3.to,
-            info,
-            before,
-            false,
-            companions
-          ).filter((a) => !a.startsWith("--before")),
-          { network: true, timeoutSec: 15 * 60, cwd: wd }
-        );
+        const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
+        const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
+        if (peerConflict) {
+          job.notes.push(
+            "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does."
+          );
+          up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
+          if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
+        } else {
+          job.notes.push(
+            "npm could not apply the release-age limit to transitive dependencies (--before); installed without it."
+          );
+          up = await sb.exec(noBefore, upOpts);
+        }
       }
       if (up.exitCode !== 0)
         throw new Error(
@@ -304180,6 +304756,13 @@ async function runJob(input3, opts) {
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
     let verdict = await compareWithBaseline(sb, checks, job.baseline, job.after_bump, deadline);
+    if (opts.setupOnly) {
+      job.verdict = verdict;
+      job.state = isVerified(job.baseline, verdict) ? "safe" : "needs_human";
+      return job;
+    }
+    const record2 = job.change_record;
+    if (!record2) throw new Error("no Change Record");
     const allow = /* @__PURE__ */ new Set([
       ...inv.manifests,
       ...inv.lockfiles,
@@ -304222,7 +304805,7 @@ async function runJob(input3, opts) {
           pkg: input3.packageName,
           from,
           to: input3.to,
-          record: job.change_record,
+          record: record2,
           impact: job.impact,
           failing: lastChecks,
           round,
@@ -304258,8 +304841,8 @@ async function runJob(input3, opts) {
     job.verdict = verdict;
     job.edits = [...policy.edits.values()];
     job.tool_log = toolLog;
-    await sb.copyOut(join11(dir, "after"));
-    await snapshot(repoRoot, join11(dir, "before"));
+    await sb.copyOut(join12(dir, "after"));
+    await snapshot(repoRoot, join12(dir, "before"));
     const fullPatch = await computePatch(dir, "before", "after");
     const inSub = (f) => sub ? `${sub}/${f}` : f;
     const keep = /* @__PURE__ */ new Set([
@@ -304273,6 +304856,7 @@ async function runJob(input3, opts) {
         "uv.lock",
         "poetry.lock"
       ].map(inSub),
+      ...workspaceMember ? ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"] : [],
       ...policy.edits.keys()
     ]);
     const { patch, excluded } = filterPatch(fullPatch, (p) => keep.has(p));
@@ -304280,13 +304864,13 @@ async function runJob(input3, opts) {
       job.notes.push(
         `Excluded files changed by builds or tests, not by the fix: ${excluded.join(", ")}.`
       );
-    await writeFile4(join11(dir, "patch.diff"), patch);
+    await writeFile4(join12(dir, "patch.diff"), patch);
     const files = parsePatch(patch);
     job.patch_lines = files.reduce((n, f) => n + f.added.length + f.removed.length, 0);
     job.state = "reviewing";
     const readSnap = async (side, path5) => {
-      const f = join11(dir, side, path5);
-      return existsSync6(f) ? await readFile8(f, "utf8") : null;
+      const f = join12(dir, side, path5);
+      return existsSync6(f) ? await readFile9(f, "utf8") : null;
     };
     const manifests = await Promise.all(
       files.filter((f) => /(^|\/)package\.json$/.test(f.path)).map(async (f) => ({
@@ -304300,7 +304884,7 @@ async function runJob(input3, opts) {
       packageName: input3.packageName,
       files,
       manifests,
-      record: job.change_record,
+      record: record2,
       edits: job.edits,
       peerDependencies: eco === "npm" ? await npmPeerDependencies(input3.packageName, input3.to) : [],
       protectedPaths: opts.config?.rules.protected_paths ?? []
@@ -304310,7 +304894,7 @@ async function runJob(input3, opts) {
         provider: opts.provider,
         ledger,
         patch,
-        record: job.change_record,
+        record: record2,
         impact: job.impact,
         agentSummary: job.rounds.map((r) => r.summary).join("\n\n---\n\n"),
         checks: verdict.comparisons,
@@ -304340,6 +304924,7 @@ async function runJob(input3, opts) {
     return job;
   } catch (err) {
     job.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    if (!(err instanceof TimeBudgetExceeded)) job.notes.push(`Stopped: ${explainError(job.error)}`);
     if (err instanceof TimeBudgetExceeded)
       job.notes.push("Stopped: the job's time budget ran out.");
     job.state = err instanceof PolicyError ? "blocked_policy" : err instanceof TimeBudgetExceeded ? "needs_human" : "failed_infra";
@@ -304348,7 +304933,7 @@ async function runJob(input3, opts) {
     if (sb) await sb.destroy();
     job.finished_at = (/* @__PURE__ */ new Date()).toISOString();
     await save();
-    await writeFile4(join11(dir, "evidence.md"), renderEvidence(job));
+    await writeFile4(join12(dir, "evidence.md"), renderEvidence(job));
     log2(
       `job ${id}: ${job.state} (confidence ${job.confidence ?? "n/a"}, $${ledger.totalUsd.toFixed(2)}) -> ${dir}`
     );
@@ -304551,14 +305136,14 @@ async function mine(opts) {
   const seenRepos = new Set(opts.excludeRepos ?? []);
   for (const target of targets) {
     if (tasks.length >= opts.want) break;
-    const q = encodeURIComponent(
+    const q2 = encodeURIComponent(
       `is:pr is:merged author:app/dependabot in:title "bump ${target} from"${opts.merged ? ` merged:${opts.merged}` : ""}`
     );
     await pause(2500);
     let items = [];
     try {
       items = (await gh(
-        `/search/issues?q=${q}&sort=updated&order=desc&per_page=100`,
+        `/search/issues?q=${q2}&sort=updated&order=desc&per_page=100`,
         3600
       )).items;
     } catch (err) {
@@ -304660,17 +305245,29 @@ var import_semver5 = __toESM(require_semver2(), 1);
 async function botPrEcosystem(gh2, owner, repo, prNumber, headRef) {
   if (/^dependabot\/(npm_and_yarn|bun|npm)\//.test(headRef)) return "npm";
   if (/^dependabot\/(pip|uv|poetry|pipenv)\//.test(headRef)) return "pypi";
+  if (/^dependabot\//.test(headRef)) return null;
   const files = (await gh2.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
     owner,
     repo,
     pull_number: prNumber,
     per_page: 100
   })).data;
-  return files.some(
-    (f) => /(^|\/)(pyproject\.toml|requirements[^/]*\.txt|poetry\.lock|uv\.lock|Pipfile(\.lock)?)$/.test(
+  if (files.some(
+    (f) => /(^|\/)(pyproject\.toml|requirements[^/]*\.(txt|in)|poetry\.lock|uv\.lock|pdm\.lock|Pipfile(\.lock)?|setup\.(py|cfg))$/.test(
       f.filename
     )
-  ) ? "pypi" : "npm";
+  ))
+    return "pypi";
+  if (files.some(
+    (f) => /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/.test(
+      f.filename
+    )
+  ))
+    return "npm";
+  return null;
+}
+function botEcosystemName(headRef) {
+  return /^dependabot\/([^/]+)\//.exec(headRef)?.[1]?.replace(/_/g, " ") ?? "this ecosystem";
 }
 async function exactTarget(gh2, owner, repo, headSha, pkg, to) {
   if (import_semver5.default.valid(to)) return to;
@@ -304782,15 +305379,29 @@ async function resolveTargets(gh2, owner, repo, event, payload, opts = modeFromI
       const jump = (g) => (import_semver6.default.coerce(g.to)?.major ?? 0) - (import_semver6.default.coerce(g.from ?? "0")?.major ?? 0);
       const [primary, ...rest] = [...group].sort((a, b) => jump(b) - jump(a));
       if (!primary) continue;
+      const groupEco = await botPrEcosystem(gh2, owner, repo, n, pr.head.ref);
+      if (!groupEco) {
+        notice(
+          `#${n}: ${botEcosystemName(pr.head.ref)} updates are not supported yet (npm and Python only); skipped`
+        );
+        continue;
+      }
       out.push({
         packageName: primary.pkg,
         from: primary.from,
         to: primary.to,
-        ecosystem: await botPrEcosystem(gh2, owner, repo, n, pr.head.ref),
+        ecosystem: groupEco,
         rescueOf: n,
         dir: normaliseSubdir(/(?:across|in) (\/[\w./-]*)/.exec(pr.title)?.[1]),
         also: rest.map((g) => ({ name: g.pkg, to: g.to }))
       });
+      continue;
+    }
+    const eco = await botPrEcosystem(gh2, owner, repo, n, pr.head.ref);
+    if (!eco) {
+      notice(
+        `#${n}: ${botEcosystemName(pr.head.ref)} updates are not supported yet (npm and Python only); skipped`
+      );
       continue;
     }
     const to = await exactTarget(gh2, owner, repo, pr.head.sha, parsed.pkg, parsed.to);
@@ -304799,7 +305410,7 @@ async function resolveTargets(gh2, owner, repo, event, payload, opts = modeFromI
       packageName: parsed.pkg,
       from: parsed.from,
       to,
-      ecosystem: await botPrEcosystem(gh2, owner, repo, n, pr.head.ref),
+      ecosystem: eco,
       rescueOf: n,
       dir: normaliseSubdir(parsed.dir)
     });
@@ -304850,14 +305461,14 @@ async function runAction(d) {
     log(
       `::group::${t.packageName} ${t.from ?? ""} \u2192 ${t.to}${t.rescueOf ? ` (rescuing #${t.rescueOf})` : ""}`
     );
-    const dir = join12(d.workDir, branchSuffix);
-    const checkout = await d.checkout(join12(dir, "repo"), baseSha);
-    const record2 = await d.upgrade(t, join12(dir, "repo"), join12(dir, "runs"), config2);
+    const dir = join13(d.workDir, branchSuffix);
+    const checkout = await d.checkout(join13(dir, "repo"), baseSha);
+    const record2 = await d.upgrade(t, join13(dir, "repo"), join13(dir, "runs"), config2);
     if (checkout.removedSymlinks.length)
       record2.notes.push(
         `${checkout.removedSymlinks.length} symlink(s) pointing outside the repository were ignored.`
       );
-    const patch = await readFile9(join12(dir, "runs", record2.id, "patch.diff"), "utf8").catch(
+    const patch = await readFile10(join13(dir, "runs", record2.id, "patch.diff"), "utf8").catch(
       () => ""
     );
     log("::endgroup::");
@@ -304917,12 +305528,12 @@ async function runAction(d) {
 }
 
 // src/bench/run.ts
-import { mkdir as mkdir10, readFile as readFile10, writeFile as writeFile6 } from "node:fs/promises";
-import { join as join13 } from "node:path";
+import { mkdir as mkdir10, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
+import { join as join14 } from "node:path";
 async function overlap(job, runsDir, human) {
   if (!human.length) return null;
   try {
-    const patch = await readFile10(join13(runsDir, job.id, "patch.diff"), "utf8");
+    const patch = await readFile11(join14(runsDir, job.id, "patch.diff"), "utf8");
     const ours = new Set(parsePatch(patch).map((f) => f.path));
     return human.filter((f) => ours.has(f)).length / human.length;
   } catch {
@@ -304931,8 +305542,8 @@ async function overlap(job, runsDir, human) {
 }
 async function runBench(opts) {
   await mkdir10(opts.outDir, { recursive: true });
-  const runsDir = join13(opts.outDir, "runs");
-  const file2 = join13(opts.outDir, `results-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`);
+  const runsDir = join14(opts.outDir, "runs");
+  const file2 = join14(opts.outDir, `results-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`);
   const outcomes = [];
   for (const [i, t] of opts.tasks.entries()) {
     opts.log(`[${i + 1}/${opts.tasks.length}] ${t.id}: ${t.packageName} ${t.from} -> ${t.to}`);
@@ -304996,6 +305607,220 @@ function summarise(o) {
     median_minutes: o.length ? [...o.map((x) => x.minutes)].sort((a, b) => a - b)[Math.floor(o.length / 2)] : null
   };
 }
+
+// src/bench/zoo.ts
+import { mkdir as mkdir11, writeFile as writeFile7 } from "node:fs/promises";
+import { dirname as dirname5, join as join15 } from "node:path";
+
+// src/model/fake.ts
+var FakeProvider = class {
+  constructor(script) {
+    this.script = script;
+  }
+  script;
+  name = "fake";
+  model = "fake-model";
+  calls = [];
+  usage(role) {
+    return {
+      role,
+      provider: this.name,
+      model: this.model,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      api_equivalent_usd: 0,
+      duration_ms: 0
+    };
+  }
+  async structured(req) {
+    this.calls.push({ kind: "structured", role: req.role, user: req.user });
+    if (!this.script.structured) throw new Error("FakeProvider: no structured script");
+    const data = req.schema.parse(this.script.structured(req));
+    return { data, usage: this.usage(req.role) };
+  }
+  async runAgent(req) {
+    this.calls.push({ kind: "agent", role: req.role, user: req.user });
+    if (!this.script.agent) throw new Error("FakeProvider: no agent script");
+    const finalText = await this.script.agent(req);
+    return { finalText, stop: "completed", usage: [this.usage(req.role)] };
+  }
+};
+
+// src/bench/zoo.ts
+function classify(paths, dir) {
+  const pre = dir ? `${dir}/` : "";
+  const has3 = (f) => paths.includes(`${pre}${f}`);
+  const rootHas = (f) => paths.includes(f);
+  if (has3("package.json")) {
+    const inWorkspace = !!dir && !has3("package-lock.json") && !has3("pnpm-lock.yaml") && !has3("yarn.lock");
+    if (has3("pnpm-lock.yaml") || inWorkspace && rootHas("pnpm-lock.yaml"))
+      return inWorkspace || rootHas("pnpm-workspace.yaml") ? "pnpm-workspace" : "pnpm";
+    if (has3("bun.lock") || has3("bun.lockb")) return "bun";
+    if (has3("yarn.lock") || inWorkspace && rootHas("yarn.lock"))
+      return paths.includes(".yarnrc.yml") ? "yarn-berry" : "yarn1";
+    if (inWorkspace && rootHas("package-lock.json")) return "npm-workspace";
+    if (has3("package-lock.json")) return "npm";
+    return null;
+  }
+  if (has3("poetry.lock")) return "poetry";
+  if (has3("uv.lock")) return "uv";
+  if (has3("Pipfile")) return "pipenv";
+  if (has3("pdm.lock")) return "pdm";
+  if (paths.some((p) => p.startsWith(`${pre}requirements/`) && p.endsWith(".txt")))
+    return "pip-requirements-dir";
+  if (has3("requirements.txt")) return "pip-requirements";
+  if (has3("setup.py") || has3("setup.cfg")) return "pip-setup";
+  if (has3("pyproject.toml")) return "hatch-pyproject";
+  return null;
+}
+var pause2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var QUERIES = [
+  { eco: "npm", label: "javascript" },
+  { eco: "pypi", label: "python" }
+];
+async function mineZoo(opts) {
+  const out = [];
+  const count2 = /* @__PURE__ */ new Map();
+  const seen = /* @__PURE__ */ new Set();
+  for (const { eco, label } of QUERIES) {
+    for (let page = 1; page <= opts.pages; page++) {
+      const q2 = encodeURIComponent(
+        `is:pr is:merged author:app/dependabot label:${label} "bump" merged:>=2026-06-01`
+      );
+      await pause2(2500);
+      let items = [];
+      try {
+        items = (await gh(
+          `/search/issues?q=${q2}&sort=updated&order=desc&per_page=100&page=${page}`
+        )).items;
+      } catch (err) {
+        opts.log(`! search ${label} p${page}: ${err.message.slice(0, 120)}`);
+        break;
+      }
+      for (const item of items) {
+        const t = parseTitle(item.title);
+        if (!t) continue;
+        const repoPath = item.repository_url.replace("https://api.github.com/repos/", "");
+        if (seen.has(repoPath)) continue;
+        seen.add(repoPath);
+        try {
+          await pause2(250);
+          const commits = await gh(
+            `/repos/${repoPath}/pulls/${item.number}/commits?per_page=5`
+          );
+          const base = commits[0]?.parents[0]?.sha;
+          if (!base) continue;
+          const tree = await gh(`/repos/${repoPath}/git/trees/${base}?recursive=1`);
+          const paths = tree.tree.filter((e) => e.type === "blob").map((e) => e.path);
+          const dir = (t.dir ?? "").replace(/^\/+|\/+$/g, "");
+          const shape = classify(paths, dir);
+          if (!shape) continue;
+          if ((shape === "npm" || shape.startsWith("pnpm") || shape.startsWith("yarn") || shape === "bun" || shape === "npm-workspace") !== (eco === "npm"))
+            continue;
+          if ((count2.get(shape) ?? 0) >= opts.perShape) continue;
+          count2.set(shape, (count2.get(shape) ?? 0) + 1);
+          out.push({
+            id: `${repoPath.replace("/", "__")}__${item.number}`,
+            shape,
+            ecosystem: eco,
+            repo: `https://github.com/${repoPath}.git`,
+            ref: base,
+            dir: dir || null,
+            packageName: t.pkg,
+            from: t.from,
+            to: t.to,
+            pr_url: item.html_url
+          });
+          opts.log(
+            `+ ${shape.padEnd(20)} ${repoPath}${dir ? ` (${dir})` : ""}: ${t.pkg} ${t.from} -> ${t.to}`
+          );
+          await opts.onTask?.(out);
+        } catch (err) {
+          opts.log(`! ${repoPath}: ${err.message.slice(0, 100)}`);
+        }
+      }
+    }
+  }
+  return out;
+}
+async function runZoo(opts) {
+  await mkdir11(dirname5(opts.outFile), { recursive: true });
+  const provider2 = new FakeProvider({});
+  const outcomes = [];
+  for (const [i, t] of opts.tasks.entries()) {
+    opts.log(`[${i + 1}/${opts.tasks.length}] ${t.shape} ${t.id}`);
+    const job = await runJob(
+      {
+        repo: t.repo,
+        ref: t.ref,
+        packageName: t.packageName,
+        from: t.from,
+        to: t.to,
+        ecosystem: t.ecosystem,
+        dir: t.dir ?? void 0
+      },
+      {
+        provider: provider2,
+        runsDir: opts.runsDir,
+        setupOnly: true,
+        minReleaseAgeDays: 0,
+        jobMinutes: 30,
+        log: () => {
+        }
+      }
+    );
+    const base = job.baseline ?? [];
+    const after = job.after_bump ?? [];
+    const fmt = (rs) => rs.map((c) => `${c.name}:${c.passed ? "ok" : c.timed_out ? "timeout" : "fail"}`).join(" ");
+    const o = {
+      task: t.id,
+      shape: t.shape,
+      state: job.state,
+      installed: !!base.find((c) => c.name === "install")?.passed,
+      verifiable: job.state === "safe",
+      checks: `before[${fmt(base)}] after[${fmt(after)}]`,
+      reason: job.error ?? (job.state === "safe" ? null : job.notes.join(" | ") || null),
+      minutes: Number(((job.duration_ms ?? 0) / 6e4).toFixed(1)),
+      job_id: job.id
+    };
+    outcomes.push(o);
+    opts.log(
+      `    -> ${o.state} ${o.checks}${o.reason ? `
+       ${o.reason.slice(0, 300)}` : ""}`
+    );
+    await writeFile7(
+      opts.outFile,
+      `${JSON.stringify({ outcomes, summary: summariseZoo(outcomes) }, null, 2)}
+`
+    );
+  }
+  return outcomes;
+}
+function summariseZoo(o) {
+  const byShape = {};
+  for (const x of o) {
+    const s = byShape[x.shape] ?? { n: 0, installed: 0, verifiable: 0 };
+    byShape[x.shape] = s;
+    s.n++;
+    if (x.installed) s.installed++;
+    if (x.verifiable) s.verifiable++;
+  }
+  return {
+    repos: o.length,
+    installed: o.filter((x) => x.installed).length,
+    verifiable: o.filter((x) => x.verifiable).length,
+    crashed: o.filter((x) => x.state === "failed_infra").length,
+    by_shape: byShape
+  };
+}
+async function saveZoo(path5, tasks) {
+  await mkdir11(dirname5(path5), { recursive: true });
+  await writeFile7(path5, `${JSON.stringify(tasks, null, 2)}
+`);
+}
+var ZOO_RUNS = join15("bench", "zoo-runs");
 
 // src/inventory/debt.ts
 var import_semver7 = __toESM(require_semver2(), 1);
@@ -305067,8 +305892,8 @@ async function computeDebt(opts) {
 var import_semver8 = __toESM(require_semver2(), 1);
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { existsSync as existsSync7 } from "node:fs";
-import { readFile as readFile11 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { readFile as readFile12 } from "node:fs/promises";
+import { join as join16 } from "node:path";
 function purl(ecosystem, name, version2) {
   if (ecosystem === "pypi")
     return `pkg:pypi/${encodeURIComponent(name.toLowerCase().replace(/[-_.]+/g, "-"))}@${encodeURIComponent(version2)}`;
@@ -305077,9 +305902,9 @@ function purl(ecosystem, name, version2) {
 }
 async function collectComponents(inv) {
   const eco = inv.ecosystem;
-  const lock = join14(inv.root, "package-lock.json");
+  const lock = join16(inv.root, "package-lock.json");
   if (eco === "npm" && existsSync7(lock)) {
-    const j = JSON.parse(await readFile11(lock, "utf8"));
+    const j = JSON.parse(await readFile12(lock, "utf8"));
     const out = /* @__PURE__ */ new Map();
     for (const [path5, p] of Object.entries(j.packages ?? {})) {
       if (!path5 || p.link || !p.version) continue;
@@ -305140,7 +305965,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp as mkdtemp3, rm as rm4 } from "node:fs/promises";
 import { createServer as createServer2 } from "node:http";
 import { tmpdir as tmpdir2 } from "node:os";
-import { join as join15 } from "node:path";
+import { join as join17 } from "node:path";
 
 // node_modules/.pnpm/@modelcontextprotocol+server@2.4.0/node_modules/@modelcontextprotocol/server/dist/chunk-vYduTEsO.mjs
 var __create2 = Object.create;
@@ -310633,8 +311458,8 @@ var require_content_type = /* @__PURE__ */ __commonJSMin(((exports) => {
   var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
   var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g;
   var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-  exports.parse = parse5;
-  function parse5(string4) {
+  exports.parse = parse6;
+  function parse6(string4) {
     if (!string4) throw new TypeError("argument string is required");
     var header = typeof string4 === "object" ? getcontenttype(string4) : string4;
     if (typeof header !== "string") throw new TypeError("argument string is required to be a string");
@@ -314044,7 +314869,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
   }
   function normalize2(uri, options) {
     if (typeof uri === "string") uri = normalizeString(uri, options);
-    else if (typeof uri === "object") uri = parse5(serialize2(uri, options), options);
+    else if (typeof uri === "object") uri = parse6(serialize2(uri, options), options);
     return uri;
   }
   function resolve5(baseURI, relativeURI, options) {
@@ -314065,8 +314890,8 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
   function resolveComponent(base, relative3, options, skipNormalization) {
     const target = {};
     if (!skipNormalization) {
-      base = parse5(serialize2(base, options), options);
-      relative3 = parse5(serialize2(relative3, options), options);
+      base = parse6(serialize2(base, options), options);
+      relative3 = parse6(serialize2(relative3, options), options);
     }
     options = options || {};
     if (!options.tolerant && relative3.scheme) {
@@ -314298,7 +315123,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
       malformedScheme
     };
   }
-  function parse5(uri, opts) {
+  function parse6(uri, opts) {
     return parseWithStatus(uri, opts).parsed;
   }
   function normalizeString(uri, opts) {
@@ -314333,7 +315158,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     resolveComponent,
     equal,
     serialize: serialize2,
-    parse: parse5
+    parse: parse6
   };
   module.exports = fastUri;
   module.exports.default = fastUri;
@@ -322051,7 +322876,7 @@ var ClaudeCodeProvider = class {
     }
   }
   async invokeOnce(args, prompt, timeoutMs) {
-    const cwd = await mkdtemp3(join15(tmpdir2(), "bumpsmith-cc-"));
+    const cwd = await mkdtemp3(join17(tmpdir2(), "bumpsmith-cc-"));
     const env = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
@@ -322196,9 +323021,9 @@ ${r.stderr}`.trim());
 };
 
 // src/model/codex.ts
-import { mkdtemp as mkdtemp4, readFile as readFile12, rm as rm5 } from "node:fs/promises";
+import { mkdtemp as mkdtemp4, readFile as readFile13, rm as rm5 } from "node:fs/promises";
 import { tmpdir as tmpdir3 } from "node:os";
-import { join as join16 } from "node:path";
+import { join as join18 } from "node:path";
 var DISABLED_FEATURES = [
   "shell_tool",
   "unified_exec",
@@ -322252,8 +323077,8 @@ var CodexProvider = class {
   bin;
   name = "codex";
   async exec(prompt, effort, extra, env, timeoutMs) {
-    const cwd = await mkdtemp4(join16(tmpdir3(), "bumpsmith-codex-"));
-    const outFile = join16(cwd, "last-message.txt");
+    const cwd = await mkdtemp4(join18(tmpdir3(), "bumpsmith-codex-"));
+    const outFile = join18(cwd, "last-message.txt");
     const started = Date.now();
     const childEnv = { ...process.env, ...env };
     delete childEnv.OPENAI_API_KEY;
@@ -322288,7 +323113,7 @@ var CodexProvider = class {
         maxBytes: 8 * 1024 * 1024
       });
       const events = parseEvents(r.stdout);
-      const text = await readFile12(outFile, "utf8").catch(() => "");
+      const text = await readFile13(outFile, "utf8").catch(() => "");
       const all = `${r.stderr}
 ${events.error ?? ""}`;
       if (!text && SIGN_IN_RE.test(all)) throw new SignInError("codex", all.trim());
@@ -322406,6 +323231,8 @@ Advanced:
              [--turns 40] [--effort high] [--min-age-days 3]
   bumpsmith bench mine [--ecosystem npm|pypi] [--want 30] [--out bench/tasks.json]
   bumpsmith bench run [--tasks bench/tasks.json] [--limit N] [--only id,id] [--provider p] [--budget 8]
+  bumpsmith bench zoo-mine [--want 5] [--out bench/zoo.json]   repositories of every shape (no model)
+  bumpsmith bench zoo [--tasks bench/zoo.json] [--only id|shape,...]   set up, bump and check each (no model)
   bumpsmith cleanup
 
 Providers:
@@ -322432,7 +323259,7 @@ function parseSpec(spec) {
 async function repoConfig(dir) {
   for (const f of CONFIG_PATHS) {
     try {
-      const r = parseConfig(await readFile13(join17(dir, f), "utf8"));
+      const r = parseConfig(await readFile14(join19(dir, f), "utf8"));
       for (const p of r.problems)
         process.stderr.write(`${f}:${p.line ?? "?"} ${p.path} ${p.message}
 `);
@@ -322502,7 +323329,7 @@ async function githubRun(target, mode, prov, budget, log2) {
     throw new Error("--github expects owner/repo");
   const token = await githubToken();
   const gh2 = tokenClient(token, { userAgent: "bumpsmith-cli", log: log2 });
-  const work = await mkdtemp5(join17(tmpdir4(), "bumpsmith-gh-"));
+  const work = await mkdtemp5(join19(tmpdir4(), "bumpsmith-gh-"));
   try {
     const rows = await runAction({
       gh: gh2,
@@ -322574,13 +323401,13 @@ async function main() {
   switch (cmd) {
     case "init": {
       const dir = resolve4(values.repo ?? ".");
-      const wfDir = join17(dir, ".github", "workflows");
+      const wfDir = join19(dir, ".github", "workflows");
       let ciName = "CI";
       try {
-        const { readdir: readdir5 } = await import("node:fs/promises");
-        for (const f of await readdir5(wfDir)) {
+        const { readdir: readdir6 } = await import("node:fs/promises");
+        for (const f of await readdir6(wfDir)) {
           if (!/\.ya?ml$/.test(f) || /bumpsmith/.test(f)) continue;
-          const text = await readFile13(join17(wfDir, f), "utf8");
+          const text = await readFile14(join19(wfDir, f), "utf8");
           if (/pull_request/.test(text)) {
             ciName = /^name:\s*["']?([^"'\n]+)/m.exec(text)?.[1]?.trim() ?? f.replace(/\.ya?ml$/, "");
             break;
@@ -322588,12 +323415,12 @@ async function main() {
         }
       } catch {
       }
-      const wfPath = join17(wfDir, "bumpsmith.yml");
-      const cfgPath = join17(dir, ".bumpsmith.yml");
+      const wfPath = join19(wfDir, "bumpsmith.yml");
+      const cfgPath = join19(dir, ".bumpsmith.yml");
       const { existsSync: existsSync8 } = await import("node:fs");
-      await mkdir11(wfDir, { recursive: true });
-      if (!existsSync8(wfPath)) await writeFile7(wfPath, initWorkflow(ciName));
-      if (!existsSync8(cfgPath)) await writeFile7(cfgPath, INIT_CONFIG);
+      await mkdir12(wfDir, { recursive: true });
+      if (!existsSync8(wfPath)) await writeFile8(wfPath, initWorkflow(ciName));
+      if (!existsSync8(cfgPath)) await writeFile8(cfgPath, INIT_CONFIG);
       log2(
         `wrote ${wfPath} (runs after your "${ciName}" workflow fails on a Dependabot/Renovate PR)`
       );
@@ -322630,7 +323457,7 @@ async function main() {
         return;
       }
       const dir = resolve4(values.repo ?? ".");
-      const runsDir = join17(dir, ".bumpsmith", "runs");
+      const runsDir = join19(dir, ".bumpsmith", "runs");
       const job = await runJob(
         { repo: dir, packageName: name, to: version2, from: values.from, dir: values.dir },
         {
@@ -322641,14 +323468,14 @@ async function main() {
           log: log2
         }
       );
-      const out = join17(runsDir, job.id);
+      const out = join19(runsDir, job.id);
       log2(
         `
 ${job.state.toUpperCase()} (confidence ${job.confidence ?? "n/a"}, $${(job.cost_usd ?? 0).toFixed(2)})`
       );
-      log2(`evidence: ${join17(out, "evidence.md")}`);
-      const patchFile = join17(out, "patch.diff");
-      const patch = await readFile13(patchFile, "utf8").catch(() => "");
+      log2(`evidence: ${join19(out, "evidence.md")}`);
+      const patchFile = join19(out, "patch.diff");
+      const patch = await readFile14(patchFile, "utf8").catch(() => "");
       if (patch.trim()) {
         log2(`patch:    ${patchFile}`);
         if (values.apply) {
@@ -322709,17 +323536,17 @@ cost: $${ledger.totalUsd.toFixed(3)}`);
         unsupported: [],
         minReleaseAgeDays: cfg.release_age_days
       });
-      const outDir = join17(dir, ".bumpsmith");
-      await mkdir11(outDir, { recursive: true });
-      await writeFile7(
-        join17(outDir, "sbom.cdx.json"),
+      const outDir = join19(dir, ".bumpsmith");
+      await mkdir12(outDir, { recursive: true });
+      await writeFile8(
+        join19(outDir, "sbom.cdx.json"),
         JSON.stringify(
           cycloneDx({ repoFullName: basename2(dir), commit: "working-tree", components, complete }),
           null,
           2
         )
       );
-      await writeFile7(join17(outDir, "debt.json"), JSON.stringify(report, null, 2));
+      await writeFile8(join19(outDir, "debt.json"), JSON.stringify(report, null, 2));
       console.log(
         `${inv.ecosystem} (${inv.packageManager}), ${report.directDependencies} direct dependencies, ${report.behind.length} a major version or more behind:
 `
@@ -322813,7 +323640,7 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       if (args[0] === "mine") {
         const eco = values.ecosystem === "pypi" ? "pypi" : "npm";
         const out = values.out ?? `bench/tasks-${eco}.json`;
-        const dev = values.heldout ? JSON.parse(await readFile13("bench/tasks-npm.json", "utf8")) : [];
+        const dev = values.heldout ? JSON.parse(await readFile14("bench/tasks-npm.json", "utf8")) : [];
         const tasks = await mine({
           ecosystem: eco,
           want: Number(values.want),
@@ -322834,7 +323661,7 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       }
       if (args[0] === "run") {
         let tasks = JSON.parse(
-          await readFile13(values.tasks ?? "bench/tasks.json", "utf8")
+          await readFile14(values.tasks ?? "bench/tasks.json", "utf8")
         );
         if (values.only) {
           const ids = new Set(values.only.split(","));
@@ -322852,7 +323679,37 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
         log2(`results: ${file2}`);
         return;
       }
-      throw new Error("usage: bumpsmith bench mine|run");
+      if (args[0] === "zoo-mine") {
+        const out = values.out ?? "bench/zoo.json";
+        const tasks = await mineZoo({
+          perShape: Number(values.want === "30" ? 5 : values.want),
+          pages: 5,
+          log: log2,
+          onTask: (t) => saveZoo(out, t)
+        });
+        await saveZoo(out, tasks);
+        log2(`saved ${tasks.length} repositories to ${out}`);
+        return;
+      }
+      if (args[0] === "zoo") {
+        let tasks = JSON.parse(
+          await readFile14(
+            values.tasks === "bench/tasks.json" ? "bench/zoo.json" : values.tasks ?? "bench/zoo.json",
+            "utf8"
+          )
+        );
+        if (values.only) {
+          const ids = new Set(values.only.split(","));
+          tasks = tasks.filter((t) => ids.has(t.id) || ids.has(t.shape));
+        }
+        if (values.limit) tasks = tasks.slice(0, Number(values.limit));
+        const outFile = values.out ?? `bench/zoo-results-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`;
+        const outcomes = await runZoo({ tasks, outFile, runsDir: ZOO_RUNS, log: log2 });
+        console.log(JSON.stringify(summariseZoo(outcomes), null, 2));
+        log2(`results: ${outFile}`);
+        return;
+      }
+      throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
     case "cleanup":
       await cleanupStale();

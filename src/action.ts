@@ -34,7 +34,7 @@ import {
   parseBotPr,
   parseGroupedUpdates,
 } from "./rescue/bot-pr.ts";
-import { botPrEcosystem, exactTarget } from "./rescue/resolve.ts";
+import { botEcosystemName, botPrEcosystem, exactTarget } from "./rescue/resolve.ts";
 import { maskSecrets } from "./security/secrets.ts";
 import { sha256Hex } from "./util/hash.ts";
 
@@ -194,15 +194,29 @@ export async function resolveTargets(
         (semver.coerce(g.to)?.major ?? 0) - (semver.coerce(g.from ?? "0")?.major ?? 0);
       const [primary, ...rest] = [...group].sort((a, b) => jump(b) - jump(a));
       if (!primary) continue;
+      const groupEco = await botPrEcosystem(gh, owner, repo, n, pr.head.ref);
+      if (!groupEco) {
+        notice(
+          `#${n}: ${botEcosystemName(pr.head.ref)} updates are not supported yet (npm and Python only); skipped`,
+        );
+        continue;
+      }
       out.push({
         packageName: primary.pkg,
         from: primary.from,
         to: primary.to,
-        ecosystem: await botPrEcosystem(gh, owner, repo, n, pr.head.ref),
+        ecosystem: groupEco,
         rescueOf: n,
         dir: normaliseSubdir(/(?:across|in) (\/[\w./-]*)/.exec(pr.title)?.[1]),
         also: rest.map((g) => ({ name: g.pkg, to: g.to })),
       });
+      continue;
+    }
+    const eco = await botPrEcosystem(gh, owner, repo, n, pr.head.ref);
+    if (!eco) {
+      notice(
+        `#${n}: ${botEcosystemName(pr.head.ref)} updates are not supported yet (npm and Python only); skipped`,
+      );
       continue;
     }
     const to = await exactTarget(gh, owner, repo, pr.head.sha, parsed.pkg, parsed.to);
@@ -211,7 +225,7 @@ export async function resolveTargets(
       packageName: parsed.pkg,
       from: parsed.from,
       to,
-      ecosystem: await botPrEcosystem(gh, owner, repo, n, pr.head.ref),
+      ecosystem: eco,
       rescueOf: n,
       dir: normaliseSubdir(parsed.dir),
     });

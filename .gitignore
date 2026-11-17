@@ -10,3 +10,6 @@ coverage/
 *.log
 .env*
 !.env.example
+bench/results-20*.json
+bench/zoo-runs/
+bench/*.log

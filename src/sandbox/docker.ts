@@ -13,6 +13,7 @@ import {
   hostTarCreateArgs,
   type Sandbox,
 } from "./sandbox.ts";
+import { DATA_DIRS, readinessProbe, type ServiceSpec } from "./services.ts";
 
 export { EXPORT_EXCLUDES };
 
@@ -295,8 +296,27 @@ async function ensureInfraOnce(): Promise<void> {
   );
 }
 
+/** Host names CI container jobs use for services; they resolve to the sandbox's localhost. */
+export const SERVICE_HOST_ALIASES = [
+  "postgres",
+  "postgresql",
+  "db",
+  "database",
+  "mysql",
+  "mariadb",
+  "redis",
+  "valkey",
+  "mongo",
+  "mongodb",
+];
+
 export class DockerSandbox implements Sandbox {
   private networkAttached = true;
+
+  /** Services that started and answered their readiness probe. */
+  readonly startedServices: string[] = [];
+  /** Services that could not start, with the reason. */
+  readonly failedServices: string[] = [];
 
   private constructor(
     readonly id: string,
@@ -352,6 +372,11 @@ export class DockerSandbox implements Sandbox {
       "--ulimit",
       "nofile=4096:8192",
       ...REGISTRY_HOSTS.flatMap((h) => ["--add-host", `${h}:${MIRROR_IP}`]),
+      // CI container jobs reach services by name; here they listen on localhost.
+      ...(opts.services?.length
+        ? SERVICE_HOST_ALIASES.flatMap((h) => ["--add-host", `${h}:127.0.0.1`])
+        : []),
+      ...Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
       "--mount",
       `type=bind,src=${join(CERT_DIR, "ca.crt")},dst=/etc/bumpsmith/ca.crt,readonly`,
       ...[
@@ -368,7 +393,65 @@ export class DockerSandbox implements Sandbox {
     ]);
     const sb = new DockerSandbox(id, container, volume);
     await sb.setNetwork(false);
+    for (const svc of opts.services ?? []) await sb.startService(svc, opts.label ?? "none");
     return sb;
+  }
+
+  /**
+   * Start one service sidecar in this sandbox's network namespace: it listens on the
+   * sandbox's localhost, keeps its data in memory, and has no network of its own.
+   */
+  private async startService(svc: ServiceSpec, label: string): Promise<void> {
+    const name = `${this.container}-svc-${svc.kind}`;
+    const pulled = await run("docker", ["image", "inspect", svc.image]);
+    if (pulled.exitCode !== 0) {
+      const p = await run("docker", ["pull", "--quiet", svc.image], { timeoutMs: 10 * 60_000 });
+      if (p.exitCode !== 0) {
+        this.failedServices.push(`${svc.image} (pull failed: ${p.stderr.trim().slice(0, 160)})`);
+        return;
+      }
+    }
+    const r = await run("docker", [
+      "run",
+      "-d",
+      "--name",
+      name,
+      "--label",
+      "bumpsmith=1",
+      "--label",
+      `bumpsmith.job=${label.replace(/[^A-Za-z0-9_.-]/g, "_")}`,
+      "--network",
+      `container:${this.container}`,
+      "--cap-drop",
+      "ALL",
+      ...["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "FOWNER"].flatMap((c) => ["--cap-add", c]),
+      "--security-opt",
+      "no-new-privileges",
+      "--memory",
+      "1g",
+      "--pids-limit",
+      "256",
+      "--tmpfs",
+      `${DATA_DIRS[svc.kind]}:rw,size=1g`,
+      ...Object.entries(svc.env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+      svc.image,
+    ]);
+    if (r.exitCode !== 0) {
+      this.failedServices.push(`${svc.image} (${r.stderr.trim().slice(0, 160)})`);
+      return;
+    }
+    for (let i = 0; i < 60; i++) {
+      const probe = await run("docker", ["exec", name, ...readinessProbe(svc.kind)]);
+      if (probe.exitCode === 0) {
+        this.startedServices.push(svc.image);
+        return;
+      }
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    const logs = await run("docker", ["logs", "--tail", "5", name]);
+    this.failedServices.push(
+      `${svc.image} (not ready after 60 seconds: ${(logs.stdout + logs.stderr).trim().slice(-200)})`,
+    );
   }
 
   /** Attach or detach the internal network. Detached = loopback only. */
@@ -509,6 +592,9 @@ export class DockerSandbox implements Sandbox {
   }
 
   async destroy(): Promise<void> {
+    const sidecars = await run("docker", ["ps", "-aq", "--filter", `name=${this.container}-svc-`]);
+    for (const c of sidecars.stdout.split("\n").filter(Boolean))
+      await run("docker", ["rm", "-f", "-v", c]);
     await run("docker", ["rm", "-f", "-v", this.container]);
     await run("docker", ["volume", "rm", "-f", this.volume]);
   }

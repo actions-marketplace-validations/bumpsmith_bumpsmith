@@ -12,17 +12,17 @@ what the human did.
 - Model: Claude through the `claude-code` provider (a Claude Code subscription).
 - Raw data: `bench/results-heldout-v1.json`; per-task evidence in `bench/runs/<job>/`.
 
-| | |
-|---|---|
-| Tasks | 24 |
-| Attempted (the sandbox could run the repository) | 22 |
-| **Ready** (verified in the sandbox, review approved) | **12** (55% of attempted, 50% of all) |
-| Ready at high / medium / low confidence | 4 / 6 / 2 |
-| Sent to a human (could not prove the change) | 9 |
-| Correctly refused | 1 (target release listed as malicious, GHSA-cg8m-r9f2-5wm2) |
-| Safety-rule false positives | 0 |
-| Model cost, API-equivalent | $8.73 total, $0.73 per ready result |
-| Median time per task | 3.3 minutes |
+|                                                      |                                                             |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| Tasks                                                | 24                                                          |
+| Attempted (the sandbox could run the repository)     | 22                                                          |
+| **Ready** (verified in the sandbox, review approved) | **12** (55% of attempted, 50% of all)                       |
+| Ready at high / medium / low confidence              | 4 / 6 / 2                                                   |
+| Sent to a human (could not prove the change)         | 9                                                           |
+| Correctly refused                                    | 1 (target release listed as malicious, GHSA-cg8m-r9f2-5wm2) |
+| Safety-rule false positives                          | 0                                                           |
+| Model cost, API-equivalent                           | $8.73 total, $0.73 per ready result                         |
+| Median time per task                                 | 3.3 minutes                                                 |
 
 "Ready" requires that dependencies install and at least one build, typecheck or test
 passes after the upgrade. Anything less goes to a human at low confidence, whatever the
@@ -42,12 +42,12 @@ and 100%. A manual review of the four is the next step.
 
 ### Where it stops, and why
 
-| Outcome | Tasks | Cause |
-|---|---|---|
-| Tests already failing before the upgrade | 4 | e.g. Django tests that need PostgreSQL; a CLI the tests call is not installed. Needs service containers (planned). |
-| Dependencies cannot be installed in the sandbox | 4 | a git dependency from GitHub; GPU builds of torch over the disk limit; a package that needs a system library (LevelDB). |
-| Behaviour changes the tests could not prove | 1 | `sinon` 18 → 22 across a large test suite. |
-| Infrastructure | 2 | the repository's own peer dependencies conflict before the upgrade; a repository too large to clone. |
+| Outcome                                         | Tasks | Cause                                                                                                                   |
+| ----------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------- |
+| Tests already failing before the upgrade        | 4     | e.g. Django tests that need PostgreSQL; a CLI the tests call is not installed. Needs service containers (planned).      |
+| Dependencies cannot be installed in the sandbox | 4     | a git dependency from GitHub; GPU builds of torch over the disk limit; a package that needs a system library (LevelDB). |
+| Behaviour changes the tests could not prove     | 1     | `sinon` 18 → 22 across a large test suite.                                                                              |
+| Infrastructure                                  | 2     | the repository's own peer dependencies conflict before the upgrade; a repository too large to clone.                    |
 
 Install and policy failures now explain themselves in plain words in the pull request or CLI output; the two infrastructure failures still show the raw tool error.
 
@@ -78,7 +78,7 @@ The same benchmark runs with any provider (`--provider`). Community runs are wel
 pnpm bumpsmith bench run --tasks bench/heldout-v1.json --provider openai --model <model>
 ```
 
-| Provider | Model | Ready / attempted | Notes |
-|---|---|---|---|
-| Claude Code subscription | Claude | 12 / 22 | this page |
-| Codex, OpenAI, Gemini, OpenRouter, Ollama | | not run yet | |
+| Provider                                  | Model  | Ready / attempted | Notes     |
+| ----------------------------------------- | ------ | ----------------- | --------- |
+| Claude Code subscription                  | Claude | 12 / 22           | this page |
+| Codex, OpenAI, Gemini, OpenRouter, Ollama |        | not run yet       |           |

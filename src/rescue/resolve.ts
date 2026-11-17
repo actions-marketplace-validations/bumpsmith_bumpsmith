@@ -8,9 +8,11 @@ export async function botPrEcosystem(
   repo: string,
   prNumber: number,
   headRef: string,
-): Promise<"npm" | "pypi"> {
+): Promise<"npm" | "pypi" | null> {
   if (/^dependabot\/(npm_and_yarn|bun|npm)\//.test(headRef)) return "npm";
   if (/^dependabot\/(pip|uv|poetry|pipenv)\//.test(headRef)) return "pypi";
+  // Any other Dependabot ecosystem (github_actions, go_modules, cargo, maven, docker, ...).
+  if (/^dependabot\//.test(headRef)) return null;
   const files = (
     await gh.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
       owner,
@@ -19,13 +21,28 @@ export async function botPrEcosystem(
       per_page: 100,
     })
   ).data;
-  return files.some((f) =>
-    /(^|\/)(pyproject\.toml|requirements[^/]*\.txt|poetry\.lock|uv\.lock|Pipfile(\.lock)?)$/.test(
-      f.filename,
-    ),
+  if (
+    files.some((f) =>
+      /(^|\/)(pyproject\.toml|requirements[^/]*\.(txt|in)|poetry\.lock|uv\.lock|pdm\.lock|Pipfile(\.lock)?|setup\.(py|cfg))$/.test(
+        f.filename,
+      ),
+    )
   )
-    ? "pypi"
-    : "npm";
+    return "pypi";
+  if (
+    files.some((f) =>
+      /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/.test(
+        f.filename,
+      ),
+    )
+  )
+    return "npm";
+  return null;
+}
+
+/** Dependabot's ecosystem name from its branch, for a plain "not supported" message. */
+export function botEcosystemName(headRef: string): string {
+  return /^dependabot\/([^/]+)\//.exec(headRef)?.[1]?.replace(/_/g, " ") ?? "this ecosystem";
 }
 
 /** Renovate titles may name only a major ("to v5"); read the exact version from the PR's manifest. */

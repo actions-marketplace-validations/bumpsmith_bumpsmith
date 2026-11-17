@@ -27,6 +27,7 @@ import { REVIEWER_PROMPT_VERSION, type ReviewResult, review } from "./review/rev
 import { applyRules, type RuleFinding } from "./review/rules.ts";
 import { dockerSandboxFactory } from "./sandbox/docker.ts";
 import type { Sandbox, SandboxFactory } from "./sandbox/sandbox.ts";
+import { detectServices } from "./sandbox/services.ts";
 import type { ChangeRecord } from "./schemas/change-record.ts";
 import type { CheckName, CheckResult, Ecosystem, ImpactMap, JobState } from "./schemas/job.ts";
 import { runOk } from "./util/proc.ts";
@@ -73,6 +74,11 @@ export interface JobOptions {
   jobId?: string;
   /** Where untrusted code runs (Docker locally, E2B micro-VMs in production). */
   sandboxFactory?: SandboxFactory;
+  /**
+   * Model-free dry run for compatibility testing: inventory, baseline checks, the version
+   * bump and the checks after it, then stop. No Change Record, fixer or review.
+   */
+  setupOnly?: boolean;
 }
 
 export type ConfidenceBand = "high" | "medium" | "low";
@@ -157,18 +163,65 @@ export function normaliseSubdir(dir: string | undefined | null): string {
 
 async function currentVersion(inv: Inventory, pkg: string): Promise<string | null> {
   if (inv.ecosystem === "npm") {
-    const lock = join(inv.root, "package-lock.json");
-    if (existsSync(lock)) {
-      const j = JSON.parse(await readFile(lock, "utf8")) as {
-        packages?: Record<string, { version?: string }>;
-      };
-      const v = j.packages?.[`node_modules/${pkg}`]?.version;
-      if (v) return v;
+    try {
+      const lock = join(inv.root, "package-lock.json");
+      if (existsSync(lock)) {
+        const j = JSON.parse(await readFile(lock, "utf8")) as {
+          packages?: Record<string, { version?: string }>;
+        };
+        const v = j.packages?.[`node_modules/${pkg}`]?.version;
+        if (v) return v;
+      }
+    } catch {
+      // unreadable lockfile: fall back to the declared range
     }
   }
-  const range = inv.dependencies[pkg] ?? inv.dependencies[pkg.toLowerCase()];
-  if (!range) return null;
-  return semver.minVersion(range.replace(/^==/, ""))?.version ?? null;
+  const range =
+    inv.dependencies[pkg] ??
+    inv.dependencies[pkg.toLowerCase()] ??
+    inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "-")] ??
+    inv.dependencies[pkg.toLowerCase().replace(/[-_.]+/g, "_")];
+  if (range === undefined) return null;
+  return lowestVersion(range);
+}
+
+/** Lowest version a declared range admits, for npm and Python styles; null if none is named. */
+export function lowestVersion(range: string): string | null {
+  const r = range.trim().replace(/^(==|===|~=)/, "");
+  try {
+    const v = semver.minVersion(r)?.version;
+    if (v) return v;
+  } catch {
+    // not an npm range (">=1.2,<2", "~=1.4", "1.2.*")
+  }
+  const first = /(\d+(?:\.\d+){0,2})/.exec(r)?.[1];
+  return first ? (semver.coerce(first)?.version ?? null) : null;
+}
+
+/**
+ * Plain words for errors that end a job early, so every outcome says why. The raw error
+ * stays in job.error for debugging.
+ */
+export function explainError(message: string): string {
+  if (/is not a dependency of this repository/.test(message))
+    return "The package is not declared in this directory's manifest; for a monorepo, pass the package's directory (--dir).";
+  if (/No supported manifest found/.test(message))
+    return "No package.json, pyproject.toml, setup.py, Pipfile or requirements file was found in this directory.";
+  if (/is not valid JSON/.test(message)) return `${message.replace(/^Error: /, "")}.`;
+  if (/could not install .*ETARGET|No matching version|notarget/i.test(message))
+    return "The target version is not on the registry.";
+  if (/could not install/.test(message))
+    return "The package manager could not apply the version bump; the output is in the job record.";
+  if (/could not find .* in /.test(message))
+    return "The package is declared in a form Bumpsmith cannot rewrite yet (for example a URL or a file path).";
+  if (/clone|Repository not found|exit code 128/i.test(message))
+    return "The repository could not be cloned (private, deleted, or too large).";
+  if (/exit code 137|OOM|out of memory/i.test(message)) return "The machine ran out of memory.";
+  if (/Cannot connect to the Docker daemon|docker: not found|ENOENT.*docker/i.test(message))
+    return "Docker is not running; Bumpsmith needs Docker for its sandbox.";
+  if (/404|not found on (npm|pypi)|registry/i.test(message))
+    return "The package or version could not be found on the public registry.";
+  return "An unexpected error stopped the job; the details are in the job record.";
 }
 
 const PUBLIC_HOSTS = new Set([
@@ -250,6 +303,31 @@ export function installFailureReason(baseline: CheckResult[]): string {
   return "";
 }
 
+/** Plain words for checks that already fail before the upgrade, when the cause is recognisable. */
+export function checkFailureReason(baseline: CheckResult[]): string | null {
+  const failing = baseline.filter((c) => c.name !== "install" && !c.passed);
+  if (!failing.length) return null;
+  const out = failing.map((c) => c.output_tail).join("\n");
+  const names = failing.map((c) => c.name).join(", ");
+  if (
+    /ECONNREFUSED[^\n]*:(5432|3306|6379|27017)|could not connect to server|Connection refused[^\n]*(5432|3306|6379|27017)|OperationalError: (connection|could not connect)|Can't connect to MySQL|Error 111 connecting|ServerSelectionTimeoutError|redis\.exceptions\.ConnectionError/i.test(
+      out,
+    )
+  )
+    return `Before the upgrade, ${names} already failed because the tests need a database or cache that the CI workflow does not declare as a service; declare it under services: in the workflow, or set checks in .bumpsmith.yml.`;
+  if (/ModuleNotFoundError|Cannot find module|ERR_MODULE_NOT_FOUND/.test(out))
+    return `Before the upgrade, ${names} already failed: a module is missing (often a package installed only in CI, or a generated file).`;
+  if (/command not found|not found: |ENOENT.*spawn/i.test(out))
+    return `Before the upgrade, ${names} already failed: a program the check calls is not installed in the sandbox.`;
+  if (
+    /(API|SECRET|TOKEN|KEY)[A-Z_]* (is )?(not set|missing|required)|KeyError: '[A-Z_]+'|environment variable/i.test(
+      out,
+    )
+  )
+    return `Before the upgrade, ${names} already failed: the tests expect an environment variable or secret that only CI has.`;
+  return `Before the upgrade, ${names} already failed; Bumpsmith compares against that and only counts new failures.`;
+}
+
 /** True when the dependencies installed and at least one real check passed after the upgrade. */
 export function isVerified(baseline: CheckResult[], verdict: Verdict): boolean {
   if (!baseline.find((c) => c.name === "install")?.passed) return false;
@@ -314,23 +392,33 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     const sub = normaliseSubdir(input.dir);
     const repoDir = sub ? containedPath(repoRoot, sub) : repoRoot;
     if (!existsSync(repoDir)) throw new Error(`directory ${sub} does not exist in the repository`);
-    const inv = await inventory(repoDir, input.ecosystem);
+    let inv = await inventory(repoDir, input.ecosystem);
+    /** The package is a member of a workspace whose lockfile lives at the repository root. */
+    let workspaceMember = false;
     if (sub) {
-      // Checks and the version bump run in the package's own directory.
-      for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
-      const sharesRootLock =
+      workspaceMember =
         inv.ecosystem === "npm" &&
         !inv.lockfiles.length &&
-        ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].some((f) =>
+        ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"].some((f) =>
           existsSync(join(repoRoot, f)),
         );
-      if (sharesRootLock) {
-        job.state = "blocked_policy";
+      if (workspaceMember) {
+        // Install from the root with the root's package manager; other checks and the
+        // bump run in the member's own directory.
+        const rootInv = await inventory(repoRoot, "npm");
+        inv = await inventory(repoDir, "npm", { packageManager: rootInv.packageManager });
+        inv.lockfiles = [];
+        inv.nodeMajor = Math.max(inv.nodeMajor, rootInv.nodeMajor) as 22 | 24;
+        inv.runtime.node ??= rootInv.runtime.node;
+        for (const c of inv.checks)
+          c.cwd = c.name === "install" ? "/workspace" : `/workspace/${sub}`;
+        const install = inv.checks.find((c) => c.name === "install");
+        const rootInstall = rootInv.checks.find((c) => c.name === "install");
+        if (install && rootInstall) install.argv = rootInstall.argv;
         job.notes.push(
-          `Unsupported (for now): ${sub} is a workspace member that shares the repository's root lockfile. Packages with their own lockfile in a sub-directory are supported.`,
+          `${sub} is a workspace member: dependencies install from the repository root with ${rootInv.packageManager}.`,
         );
-        return job;
-      }
+      } else for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
     }
     // Configured check commands replace detected ones (argv only, validated in config).
     for (const [name, cmd] of Object.entries(opts.config?.checks ?? {})) {
@@ -346,7 +434,17 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     job.from = from;
 
     // Phase 0 sandboxes can only reach the public registries.
-    const privateHost = eco === "npm" ? await privateRegistryHost(repoDir, inv.lockfiles) : null;
+    const privateHost =
+      eco === "npm"
+        ? workspaceMember
+          ? await privateRegistryHost(
+              repoRoot,
+              ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].filter((f) =>
+                existsSync(join(repoRoot, f)),
+              ),
+            )
+          : await privateRegistryHost(repoDir, inv.lockfiles)
+        : null;
     if (privateHost) {
       job.state = "blocked_policy";
       job.notes.push(
@@ -388,29 +486,56 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       return job;
     }
 
-    // Change intelligence + impact (public data + host-side parsing only)
-    log(`job ${id}: building Change Record ${input.packageName} ${from} -> ${input.to}`);
-    job.change_record = await buildChangeRecord({
-      ecosystem: eco,
-      name: input.packageName,
-      from,
-      to: input.to,
-      repositoryUrl: rel.repositoryUrl,
-      provider: opts.provider,
-      ledger,
-      refresh: opts.refreshChangeRecord,
-    });
-    job.impact = await buildImpactMap(repoDir, eco, input.packageName, job.change_record);
-    if (sub) for (const it of job.impact.items) it.file = `${sub}/${it.file}`;
+    if (opts.setupOnly) {
+      job.impact = {
+        package: input.packageName,
+        from,
+        to: input.to,
+        items: [],
+        files_importing_package: [],
+        upgrade_class: "safe",
+        reason: "setup-only run",
+      };
+    } else {
+      // Change intelligence + impact (public data + host-side parsing only)
+      log(`job ${id}: building Change Record ${input.packageName} ${from} -> ${input.to}`);
+      job.change_record = await buildChangeRecord({
+        ecosystem: eco,
+        name: input.packageName,
+        from,
+        to: input.to,
+        repositoryUrl: rel.repositoryUrl,
+        provider: opts.provider,
+        ledger,
+        refresh: opts.refreshChangeRecord,
+      });
+      job.impact = await buildImpactMap(repoDir, eco, input.packageName, job.change_record);
+      if (sub) for (const it of job.impact.items) it.file = `${sub}/${it.file}`;
+    }
     job.state = "analysed";
     log(`job ${id}: ${job.impact.items.length} impact item(s), class ${job.impact.upgrade_class}`);
 
     // Sandbox: baseline
+    // Databases and caches the tests need, as the repository's CI starts them.
+    const svc = inv.checks.some((c) => c.name === "test")
+      ? await detectServices(repoRoot)
+      : { services: [], env: {}, skipped: [] };
     sb = await (opts.sandboxFactory ?? dockerSandboxFactory)({
       ecosystem: eco,
       nodeMajor: inv.nodeMajor,
       label: id,
+      services: svc.services,
+      env: svc.env,
     });
+    const started = sb.startedServices ?? [];
+    const failed = sb.failedServices ?? [];
+    if (started.length)
+      job.notes.push(`Started the services the CI workflow uses for tests: ${started.join(", ")}.`);
+    if (failed.length) job.notes.push(`Could not start CI services: ${failed.join("; ")}.`);
+    if (svc.skipped.length)
+      job.notes.push(
+        `CI services not run in the sandbox (only official postgres, mysql, mariadb, redis, valkey and mongo images are): ${svc.skipped.join(", ")}.`,
+      );
     await sb.copyIn(repoRoot);
     const wd = sub ? `/workspace/${sub}` : undefined;
     log(`job ${id}: baseline checks`);
@@ -419,6 +544,8 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       job.notes.push(
         `Baseline install failed${installFailureReason(job.baseline)}; running in limited mode (static checks only, draft output).`,
       );
+    const why = checkFailureReason(job.baseline);
+    if (why) job.notes.push(why);
     // A check that cannot finish within its limit at baseline cannot verify anything later.
     const timedOut = job.baseline.filter((c) => c.timed_out).map((c) => c.name);
     const checks = inv.checks.filter((c) => !timedOut.includes(c.name));
@@ -436,10 +563,16 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       // "yarn" can be Yarn 1 handing off to a vendored Yarn 2+ (yarnPath in .yarnrc.yml);
       // Yarn 2+ adds to the workspace in cwd and rejects Yarn 1's -W.
       const vendoredBerry =
-        inv.packageManager === "yarn" && existsSync(join(repoDir, ".yarnrc.yml"));
+        inv.packageManager === "yarn" &&
+        (existsSync(join(repoDir, ".yarnrc.yml")) || existsSync(join(repoRoot, ".yarnrc.yml")));
       const workspaceRoot =
+        !workspaceMember &&
         !vendoredBerry &&
         (existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
+      // npm adds to a workspace member from the root with --workspace.
+      const npmMember = workspaceMember && inv.packageManager === "npm";
+      const upCwd = npmMember ? undefined : wd;
+      const memberArgs = npmMember ? ["--workspace", sub] : [];
       // Companions must exist at the target version and pass the same release gate.
       const companions: string[] = [];
       for (const c of npmCompanions(cur.stdout, input.packageName, from)) {
@@ -473,8 +606,8 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       }
       if (companions.length)
         job.notes.push(`Upgraded together with ${input.packageName}: ${companions.join(", ")}.`);
-      let up = await sb.exec(
-        npmUpgradeArgv(
+      const upArgv = [
+        ...npmUpgradeArgv(
           inv.packageManager,
           input.packageName,
           input.to,
@@ -483,24 +616,25 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           workspaceRoot,
           companions,
         ),
-        { network: true, timeoutSec: 15 * 60, cwd: wd },
-      );
+        ...memberArgs,
+      ];
+      const upOpts = { network: true, timeoutSec: 15 * 60, cwd: upCwd };
+      let up = await sb.exec(upArgv, upOpts);
       if (up.exitCode !== 0 && inv.packageManager === "npm") {
-        job.notes.push(
-          "npm could not apply the release-age limit to transitive dependencies (--before); installed without it.",
-        );
-        up = await sb.exec(
-          npmUpgradeArgv(
-            "npm",
-            input.packageName,
-            input.to,
-            info,
-            before,
-            false,
-            companions,
-          ).filter((a) => !a.startsWith("--before")),
-          { network: true, timeoutSec: 15 * 60, cwd: wd },
-        );
+        const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
+        const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
+        if (peerConflict) {
+          job.notes.push(
+            "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does.",
+          );
+          up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
+          if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
+        } else {
+          job.notes.push(
+            "npm could not apply the release-age limit to transitive dependencies (--before); installed without it.",
+          );
+          up = await sb.exec(noBefore, upOpts);
+        }
       }
       if (up.exitCode !== 0)
         throw new Error(
@@ -554,6 +688,13 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
     let verdict = await compareWithBaseline(sb, checks, job.baseline, job.after_bump, deadline);
+    if (opts.setupOnly) {
+      job.verdict = verdict;
+      job.state = isVerified(job.baseline, verdict) ? "safe" : "needs_human";
+      return job;
+    }
+    const record = job.change_record;
+    if (!record) throw new Error("no Change Record");
 
     // Fix loop (FIX-1..8)
     const allow = new Set<string>([
@@ -598,7 +739,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
           pkg: input.packageName,
           from,
           to: input.to,
-          record: job.change_record,
+          record,
           impact: job.impact,
           failing: lastChecks,
           round,
@@ -655,6 +796,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         "uv.lock",
         "poetry.lock",
       ].map(inSub),
+      ...(workspaceMember ? ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"] : []),
       ...policy.edits.keys(),
     ]);
     const { patch, excluded } = filterPatch(fullPatch, (p) => keep.has(p));
@@ -686,7 +828,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       packageName: input.packageName,
       files,
       manifests,
-      record: job.change_record,
+      record,
       edits: job.edits,
       peerDependencies: eco === "npm" ? await npmPeerDependencies(input.packageName, input.to) : [],
       protectedPaths: opts.config?.rules.protected_paths ?? [],
@@ -696,7 +838,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         provider: opts.provider,
         ledger,
         patch,
-        record: job.change_record,
+        record,
         impact: job.impact,
         agentSummary: job.rounds.map((r) => r.summary).join("\n\n---\n\n"),
         checks: verdict.comparisons,
@@ -730,6 +872,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     return job;
   } catch (err) {
     job.error = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    if (!(err instanceof TimeBudgetExceeded)) job.notes.push(`Stopped: ${explainError(job.error)}`);
     if (err instanceof TimeBudgetExceeded)
       job.notes.push("Stopped: the job's time budget ran out.");
     job.state =

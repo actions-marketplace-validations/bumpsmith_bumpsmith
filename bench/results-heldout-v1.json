@@ -52,9 +52,7 @@
       "minutes": 6.6,
       "job_id": "20261117004657-56997e",
       "error": null,
-      "notes": [
-        "Excluded files changed by builds or tests, not by the fix: tsconfig.tsbuildinfo."
-      ],
+      "notes": ["Excluded files changed by builds or tests, not by the fix: tsconfig.tsbuildinfo."],
       "baseline": {
         "install": true,
         "build": false,
@@ -473,9 +471,7 @@
       "minutes": 0.1,
       "job_id": "20261117024828-20be4c",
       "error": null,
-      "notes": [
-        "listed as malicious: GHSA-cg8m-r9f2-5wm2"
-      ],
+      "notes": ["listed as malicious: GHSA-cg8m-r9f2-5wm2"],
       "baseline": {}
     },
     {

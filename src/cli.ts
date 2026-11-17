@@ -13,6 +13,7 @@ import {
   saveTasks,
 } from "./bench/mine.ts";
 import { runBench, summarise } from "./bench/run.ts";
+import { mineZoo, runZoo, saveZoo, summariseZoo, ZOO_RUNS, type ZooTask } from "./bench/zoo.ts";
 import { npmApiDiff, renderApiDiff } from "./change/dts-diff.ts";
 import { buildChangeRecord } from "./change/extract.ts";
 import { CONFIG_PATHS, parseConfig } from "./config/repo-config.ts";
@@ -55,6 +56,8 @@ Advanced:
              [--turns 40] [--effort high] [--min-age-days 3]
   bumpsmith bench mine [--ecosystem npm|pypi] [--want 30] [--out bench/tasks.json]
   bumpsmith bench run [--tasks bench/tasks.json] [--limit N] [--only id,id] [--provider p] [--budget 8]
+  bumpsmith bench zoo-mine [--want 5] [--out bench/zoo.json]   repositories of every shape (no model)
+  bumpsmith bench zoo [--tasks bench/zoo.json] [--only id|shape,...]   set up, bump and check each (no model)
   bumpsmith cleanup
 
 Providers:
@@ -520,7 +523,40 @@ async function main() {
         log(`results: ${file}`);
         return;
       }
-      throw new Error("usage: bumpsmith bench mine|run");
+      if (args[0] === "zoo-mine") {
+        const out = values.out ?? "bench/zoo.json";
+        const tasks = await mineZoo({
+          perShape: Number(values.want === "30" ? 5 : values.want),
+          pages: 5,
+          log,
+          onTask: (t) => saveZoo(out, t),
+        });
+        await saveZoo(out, tasks);
+        log(`saved ${tasks.length} repositories to ${out}`);
+        return;
+      }
+      if (args[0] === "zoo") {
+        let tasks = JSON.parse(
+          await readFile(
+            values.tasks === "bench/tasks.json"
+              ? "bench/zoo.json"
+              : (values.tasks ?? "bench/zoo.json"),
+            "utf8",
+          ),
+        ) as ZooTask[];
+        if (values.only) {
+          const ids = new Set(values.only.split(","));
+          tasks = tasks.filter((t) => ids.has(t.id) || ids.has(t.shape));
+        }
+        if (values.limit) tasks = tasks.slice(0, Number(values.limit));
+        const outFile =
+          values.out ?? `bench/zoo-results-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+        const outcomes = await runZoo({ tasks, outFile, runsDir: ZOO_RUNS, log });
+        console.log(JSON.stringify(summariseZoo(outcomes), null, 2));
+        log(`results: ${outFile}`);
+        return;
+      }
+      throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
     case "cleanup":
       await cleanupStale();

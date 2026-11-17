@@ -87,6 +87,60 @@ export function bumpPythonText(text: string, name: string, to: string): string |
   return changed ? out : null;
 }
 
+/** TOML tables that map package names to version specs (Poetry, Pipenv, PDM dev groups). */
+const TOML_DEP_TABLE =
+  /^\[(?:tool\.poetry\.(?:dev-)?dependencies|tool\.poetry\.group\.[^\]]+\.dependencies|packages|dev-packages)\]\s*$/;
+
+/** Rewrite one Poetry / Pipenv spec to admit exactly `to` (caret and tilde styles kept). */
+export function bumpTomlSpec(spec: string, to: string): string {
+  const s = spec.trim();
+  if (s === "*" || s === "") return s;
+  if (/^\^/.test(s)) return `^${to}`;
+  if (/^~(?!=)/.test(s)) return `~${to}`;
+  if (/^v?\d/.test(s) && !/[,<>=!]/.test(s)) return to;
+  const clauses = [...s.matchAll(new RegExp(`(${OP})\\s*([^\\s,]+)`, "g"))].map((m) => ({
+    op: m[1] as string,
+    v: m[2] as string,
+  }));
+  if (!clauses.length) return s;
+  const first = clauses[0]?.op ?? "==";
+  const newOp = first === "~=" || first === ">=" ? first : "==";
+  return `${newOp}${to}${keptBounds(clauses, to)}`;
+}
+
+/**
+ * Update `name = "^1.2"` or `name = { version = "^1.2", ... }` in Poetry / Pipenv tables.
+ * Returns the text unchanged (not null) when the spec is "*", which already admits `to`.
+ */
+export function bumpTomlDeps(text: string, name: string, to: string): string | null {
+  const norm = (n: string) => n.toLowerCase().replace(/[-_.]+/g, "-");
+  const target = norm(name);
+  let inTable = false;
+  let found = false;
+  const lines = text.split("\n").map((line) => {
+    if (/^\s*\[/.test(line)) {
+      inTable = TOML_DEP_TABLE.test(line.trim());
+      return line;
+    }
+    if (!inTable) return line;
+    const m = /^(\s*["']?)([A-Za-z0-9_.-]+)(["']?\s*=\s*)(.*)$/.exec(line);
+    if (!m || norm(m[2] ?? "") !== target) return line;
+    const value = m[4] ?? "";
+    const str = /^(["'])([^"']*)\1(.*)$/.exec(value);
+    if (str) {
+      found = true;
+      return `${m[1]}${m[2]}${m[3]}${str[1]}${bumpTomlSpec(str[2] ?? "", to)}${str[1]}${str[3]}`;
+    }
+    const inline = /^(\{.*?\bversion\s*=\s*)(["'])([^"']*)\2(.*)$/.exec(value);
+    if (inline) {
+      found = true;
+      return `${m[1]}${m[2]}${m[3]}${inline[1]}${inline[2]}${bumpTomlSpec(inline[3] ?? "", to)}${inline[2]}${inline[4]}`;
+    }
+    return line;
+  });
+  return found ? lines.join("\n") : null;
+}
+
 export type DepField = "dependencies" | "devDependencies" | "optionalDependencies";
 
 /** Find which field declares `name` and the range prefix the user chose. */
@@ -209,7 +263,10 @@ export function bumpFile(
 ): string | null {
   if (ecosystem === "npm")
     return file.endsWith("package.json") ? bumpPackageJson(text, name, to) : null;
-  return bumpPythonText(text, name, to);
+  const pep508 = bumpPythonText(text, name, to);
+  if (/(^|\/)(pyproject\.toml|Pipfile)$/.test(file))
+    return bumpTomlDeps(pep508 ?? text, name, to) ?? pep508;
+  return pep508;
 }
 
 /**

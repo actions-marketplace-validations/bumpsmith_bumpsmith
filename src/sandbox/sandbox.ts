@@ -25,6 +25,10 @@ export interface ExecOptions {
 
 export interface Sandbox {
   readonly id: string;
+  /** Service sidecars that started and answered their readiness probe. */
+  readonly startedServices?: string[];
+  /** Service sidecars that could not start, with the reason. */
+  readonly failedServices?: string[];
   exec(argv: string[], opts?: ExecOptions): Promise<ExecResult>;
   /** Run a check, restoring package.json afterwards if the check's scripts rewrote it. */
   execCheck(argv: string[], opts?: ExecOptions & { guardManifest?: boolean }): Promise<ExecResult>;
@@ -39,6 +43,10 @@ export interface CreateOptions {
   nodeMajor?: 22 | 24;
   /** Label used to find and clean up sandboxes of a job after a crash. */
   label?: string;
+  /** Databases and caches the tests need, started as sidecars on the sandbox's localhost. */
+  services?: import("./services.ts").ServiceSpec[];
+  /** Extra environment for every command (literal values from the repo's CI job). */
+  env?: Record<string, string>;
 }
 
 export type SandboxFactory = (opts: CreateOptions) => Promise<Sandbox>;
