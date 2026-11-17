@@ -56,10 +56,7 @@ interface PackageJson {
   packageManager?: string;
 }
 
-/**
- * Yarn 2+ ("berry") unless the repo vendors its own Yarn release via yarnPath,
- * in which case Yarn 1 delegates to it.
- */
+/** Yarn 2+ ("berry") unless the repo is on Yarn 1, or vendors a Yarn 1 release via yarnPath. */
 function yarnFlavour(root: string, pkg: PackageJson): "yarn" | "yarn-berry" {
   const rc = join(root, ".yarnrc.yml");
   const major = Number(/^yarn@(\d+)/.exec(pkg.packageManager ?? "")?.[1] ?? 0);
@@ -67,7 +64,11 @@ function yarnFlavour(root: string, pkg: PackageJson): "yarn" | "yarn-berry" {
   if (!berry) return "yarn";
   try {
     const yarnPath = /^yarnPath:\s*["']?([^"'\n]+)/m.exec(readFileSync(rc, "utf8"))?.[1];
-    if (yarnPath && existsSync(join(root, yarnPath.trim()))) return "yarn";
+    // A vendored Yarn 1 release keeps Yarn 1 flags; a vendored Yarn 2+ release (the usual
+    // case, e.g. .yarn/releases/yarn-4.7.0.cjs) needs Yarn 2+ flags, and Yarn 4 in the
+    // image hands off to it through the same yarnPath.
+    if (yarnPath && existsSync(join(root, yarnPath.trim())) && /yarn-1\./.test(yarnPath))
+      return "yarn";
   } catch {
     // no .yarnrc.yml
   }

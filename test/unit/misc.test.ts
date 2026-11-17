@@ -293,3 +293,26 @@ describe("fixes from the second held-out run", () => {
     expect((await inventory(dir)).ecosystem).toBe("npm");
   });
 });
+
+describe("vendored Yarn releases", () => {
+  it("uses Yarn 2+ flags for a vendored Yarn 4 and Yarn 1 flags for a vendored Yarn 1", async () => {
+    const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { inventory } = await import("../../src/inventory/inventory.ts");
+    for (const [release, pm] of [
+      ["yarn-4.7.0.cjs", "yarn-berry"],
+      ["yarn-1.22.22.cjs", "yarn"],
+    ]) {
+      const dir = await mkdtemp(join(tmpdir(), "bs-yarn-"));
+      await mkdir(join(dir, ".yarn/releases"), { recursive: true });
+      await writeFile(join(dir, `.yarn/releases/${release}`), "");
+      await writeFile(join(dir, ".yarnrc.yml"), `yarnPath: .yarn/releases/${release}\n`);
+      await writeFile(join(dir, "yarn.lock"), "");
+      await writeFile(join(dir, "package.json"), '{"name":"x","packageManager":"yarn@4.7.0"}');
+      if (pm === "yarn")
+        await writeFile(join(dir, "package.json"), '{"name":"x","packageManager":"yarn@1.22.22"}');
+      expect((await inventory(dir)).packageManager).toBe(pm);
+    }
+  });
+});

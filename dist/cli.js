@@ -302863,7 +302863,8 @@ function yarnFlavour(root, pkg) {
   if (!berry) return "yarn";
   try {
     const yarnPath = /^yarnPath:\s*["']?([^"'\n]+)/m.exec(readFileSync(rc, "utf8"))?.[1];
-    if (yarnPath && existsSync4(join9(root, yarnPath.trim()))) return "yarn";
+    if (yarnPath && existsSync4(join9(root, yarnPath.trim())) && /yarn-1\./.test(yarnPath))
+      return "yarn";
   } catch {
   }
   return "yarn-berry";
