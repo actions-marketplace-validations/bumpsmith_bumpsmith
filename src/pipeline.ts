@@ -409,8 +409,13 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       const info = npmDepInfo(cur.stdout, input.packageName);
       if (!info) throw new Error(`could not find ${input.packageName} in ${manifest}`);
       const before = new Date(Date.now() - minAge * 86_400_000);
+      // "yarn" can be Yarn 1 handing off to a vendored Yarn 2+ (yarnPath in .yarnrc.yml);
+      // Yarn 2+ adds to the workspace in cwd and rejects Yarn 1's -W.
+      const vendoredBerry =
+        inv.packageManager === "yarn" && existsSync(join(repoDir, ".yarnrc.yml"));
       const workspaceRoot =
-        existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0;
+        !vendoredBerry &&
+        (existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
       // Companions must exist at the target version and pass the same release gate.
       const companions: string[] = [];
       for (const c of npmCompanions(cur.stdout, input.packageName, from)) {

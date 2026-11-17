@@ -303975,7 +303975,8 @@ async function runJob(input3, opts) {
       const info = npmDepInfo(cur.stdout, input3.packageName);
       if (!info) throw new Error(`could not find ${input3.packageName} in ${manifest}`);
       const before = new Date(Date.now() - minAge * 864e5);
-      const workspaceRoot = existsSync6(join11(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0;
+      const vendoredBerry = inv.packageManager === "yarn" && existsSync6(join11(repoDir, ".yarnrc.yml"));
+      const workspaceRoot = !vendoredBerry && (existsSync6(join11(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0);
       const companions = [];
       for (const c of npmCompanions(cur.stdout, input3.packageName, from)) {
         try {
