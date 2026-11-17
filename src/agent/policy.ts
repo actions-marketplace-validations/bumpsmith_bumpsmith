@@ -76,11 +76,20 @@ export class EditPolicy {
     /** Extra protected paths from .bumpsmith.yml (can only add to the hard denylist). */
     private readonly extraDenied: string[] = [],
   ) {
-    for (const p of allowlisted) this.allow.add(normalisePath(p));
+    for (const p of allowlisted) this.addAllowed(p);
   }
 
+  /**
+   * Allow edits to a path. Paths often come from check output (stack traces into installed
+   * packages, absolute paths); anything outside the workspace is simply not allowed, never
+   * an error that stops the job.
+   */
   addAllowed(path: string): void {
-    this.allow.add(normalisePath(path));
+    try {
+      this.allow.add(normalisePath(path));
+    } catch (err) {
+      if (!(err instanceof PolicyError)) throw err;
+    }
   }
 
   checkRead(raw: string): string {

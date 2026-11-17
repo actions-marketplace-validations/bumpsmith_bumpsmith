@@ -226,6 +226,26 @@ export function nonRegistryDependencies(packageJsonText: string): string[] {
   return out;
 }
 
+/** Plain-words reason for the common ways a dependency install fails in the sandbox. */
+export function installFailureReason(baseline: CheckResult[]): string {
+  const out = baseline.find((c) => c.name === "install")?.output_tail ?? "";
+  if (
+    /Could not resolve host: (github\.com|gitlab\.com|bitbucket\.org)|git fetch|git clone/i.test(
+      out,
+    )
+  )
+    return " (a dependency is fetched straight from a git repository, which the sandbox cannot reach; unsupported for now)";
+  if (/No space left on device|ENOSPC/.test(out))
+    return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
+  if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
+    return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
+  if (/ERESOLVE|conflicting peer dependency/i.test(out))
+    return " (the repository's own dependencies conflict before the upgrade)";
+  if (/timed out|ETIMEDOUT/i.test(out) || baseline.some((c) => c.name === "install" && c.timed_out))
+    return " (it did not finish within the time limit)";
+  return "";
+}
+
 /** True when the dependencies installed and at least one real check passed after the upgrade. */
 export function isVerified(baseline: CheckResult[], verdict: Verdict): boolean {
   if (!baseline.find((c) => c.name === "install")?.passed) return false;
@@ -290,7 +310,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     const sub = normaliseSubdir(input.dir);
     const repoDir = sub ? containedPath(repoRoot, sub) : repoRoot;
     if (!existsSync(repoDir)) throw new Error(`directory ${sub} does not exist in the repository`);
-    const inv = await inventory(repoDir);
+    const inv = await inventory(repoDir, input.ecosystem);
     if (sub) {
       // Checks and the version bump run in the package's own directory.
       for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
@@ -393,7 +413,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     job.baseline = await runChecks(sb, inv.checks, deadline);
     if (!job.baseline.find((c) => c.name === "install")?.passed)
       job.notes.push(
-        "Baseline install failed; running in limited mode (static checks only, draft output).",
+        `Baseline install failed${installFailureReason(job.baseline)}; running in limited mode (static checks only, draft output).`,
       );
     // A check that cannot finish within its limit at baseline cannot verify anything later.
     const timedOut = job.baseline.filter((c) => c.timed_out).map((c) => c.name);

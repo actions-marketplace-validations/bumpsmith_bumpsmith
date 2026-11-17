@@ -275517,13 +275517,22 @@ function isDenied(path5) {
 var EditPolicy = class {
   constructor(allowlisted, extraDenied = []) {
     this.extraDenied = extraDenied;
-    for (const p of allowlisted) this.allow.add(normalisePath(p));
+    for (const p of allowlisted) this.addAllowed(p);
   }
   extraDenied;
   allow = /* @__PURE__ */ new Set();
   edits = /* @__PURE__ */ new Map();
+  /**
+   * Allow edits to a path. Paths often come from check output (stack traces into installed
+   * packages, absolute paths); anything outside the workspace is simply not allowed, never
+   * an error that stops the job.
+   */
   addAllowed(path5) {
-    this.allow.add(normalisePath(path5));
+    try {
+      this.allow.add(normalisePath(path5));
+    } catch (err) {
+      if (!(err instanceof PolicyError)) throw err;
+    }
   }
   checkRead(raw) {
     return normalisePath(raw);
@@ -302962,12 +302971,14 @@ var UV_SYNC = sh(
     'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras'
   ].join("\n")
 );
-async function inventory(root) {
+async function inventory(root, ecosystem) {
   const pkgText = await read(join9(root, "package.json"));
-  if (pkgText) return inventoryNode(root, JSON.parse(pkgText));
   const files = await readdir4(root);
-  if (files.includes("pyproject.toml") || files.some((f) => /^requirements.*\.txt$/.test(f)))
-    return inventoryPython(root);
+  const hasPython = files.includes("pyproject.toml") || files.some((f) => /requirements[^/]*\.(txt|in)$/.test(f));
+  if (ecosystem === "pypi" && hasPython) return inventoryPython(root);
+  if (pkgText && ecosystem !== "pypi")
+    return inventoryNode(root, JSON.parse(pkgText));
+  if (hasPython) return inventoryPython(root);
   throw new Error(`No supported manifest found in ${root}`);
 }
 
@@ -303824,6 +303835,22 @@ function nonRegistryDependencies(packageJsonText) {
   }
   return out;
 }
+function installFailureReason(baseline) {
+  const out = baseline.find((c) => c.name === "install")?.output_tail ?? "";
+  if (/Could not resolve host: (github\.com|gitlab\.com|bitbucket\.org)|git fetch|git clone/i.test(
+    out
+  ))
+    return " (a dependency is fetched straight from a git repository, which the sandbox cannot reach; unsupported for now)";
+  if (/No space left on device|ENOSPC/.test(out))
+    return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
+  if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
+    return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
+  if (/ERESOLVE|conflicting peer dependency/i.test(out))
+    return " (the repository's own dependencies conflict before the upgrade)";
+  if (/timed out|ETIMEDOUT/i.test(out) || baseline.some((c) => c.name === "install" && c.timed_out))
+    return " (it did not finish within the time limit)";
+  return "";
+}
 function isVerified(baseline, verdict) {
   if (!baseline.find((c) => c.name === "install")?.passed) return false;
   return verdict.comparisons.some((c) => c.name !== "install" && c.after === true);
@@ -303876,7 +303903,7 @@ async function runJob(input3, opts) {
     const sub = normaliseSubdir(input3.dir);
     const repoDir = sub ? containedPath(repoRoot, sub) : repoRoot;
     if (!existsSync6(repoDir)) throw new Error(`directory ${sub} does not exist in the repository`);
-    const inv = await inventory(repoDir);
+    const inv = await inventory(repoDir, input3.ecosystem);
     if (sub) {
       for (const c of inv.checks) c.cwd = `/workspace/${sub}`;
       const sharesRootLock = inv.ecosystem === "npm" && !inv.lockfiles.length && ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"].some(
@@ -303963,7 +303990,7 @@ async function runJob(input3, opts) {
     job.baseline = await runChecks(sb, inv.checks, deadline);
     if (!job.baseline.find((c) => c.name === "install")?.passed)
       job.notes.push(
-        "Baseline install failed; running in limited mode (static checks only, draft output)."
+        `Baseline install failed${installFailureReason(job.baseline)}; running in limited mode (static checks only, draft output).`
       );
     const timedOut = job.baseline.filter((c) => c.timed_out).map((c) => c.name);
     const checks = inv.checks.filter((c) => !timedOut.includes(c.name));

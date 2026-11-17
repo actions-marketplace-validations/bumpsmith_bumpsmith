@@ -273,11 +273,18 @@ export const UV_SYNC = sh(
   ].join("\n"),
 );
 
-export async function inventory(root: string): Promise<Inventory> {
+/**
+ * Inventory the repository for one ecosystem. Many repos have both (a Django app with a
+ * package.json for its front end), so the ecosystem of the upgrade decides, when known.
+ */
+export async function inventory(root: string, ecosystem?: "npm" | "pypi"): Promise<Inventory> {
   const pkgText = await read(join(root, "package.json"));
-  if (pkgText) return inventoryNode(root, JSON.parse(pkgText) as PackageJson);
   const files = await readdir(root);
-  if (files.includes("pyproject.toml") || files.some((f) => /^requirements.*\.txt$/.test(f)))
-    return inventoryPython(root);
+  const hasPython =
+    files.includes("pyproject.toml") || files.some((f) => /requirements[^/]*\.(txt|in)$/.test(f));
+  if (ecosystem === "pypi" && hasPython) return inventoryPython(root);
+  if (pkgText && ecosystem !== "pypi")
+    return inventoryNode(root, JSON.parse(pkgText) as PackageJson);
+  if (hasPython) return inventoryPython(root);
   throw new Error(`No supported manifest found in ${root}`);
 }

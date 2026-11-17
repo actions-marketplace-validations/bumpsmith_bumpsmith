@@ -268,3 +268,28 @@ describe("verification gate", () => {
     ).toBe(true);
   });
 });
+
+describe("fixes from the second held-out run", () => {
+  it("ignores paths from check output that point outside the workspace", async () => {
+    const { EditPolicy } = await import("../../src/agent/policy.ts");
+    const p = new EditPolicy(["src/a.py", "../../home/sandbox/.local/lib/x.py", "/usr/lib/y.py"]);
+    expect(() => p.addAllowed("../outside.py")).not.toThrow();
+    expect(() => p.checkEdit("src/a.py", "test")).not.toThrow();
+  });
+  it("uses the Python manifests for a PyPI upgrade in a repo that also has package.json", async () => {
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { inventory } = await import("../../src/inventory/inventory.ts");
+    const dir = await mkdtemp(join(tmpdir(), "bs-inv-"));
+    await writeFile(join(dir, "package.json"), '{"name":"web","dependencies":{"react":"18.0.0"}}');
+    await writeFile(join(dir, "requirements.in"), "marshmallow>=3.26.2,<4\n");
+    await writeFile(join(dir, "requirements.txt"), "marshmallow==3.26.2\n");
+    expect((await inventory(dir, "pypi")).ecosystem).toBe("pypi");
+    expect((await inventory(dir, "pypi")).manifests).toEqual([
+      "requirements.txt",
+      "requirements.in",
+    ]);
+    expect((await inventory(dir)).ecosystem).toBe("npm");
+  });
+});
