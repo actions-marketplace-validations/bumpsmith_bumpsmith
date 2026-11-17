@@ -18,7 +18,12 @@ import {
   npmDepInfo,
   npmUpgradeArgv,
 } from "./inventory/bump.ts";
-import { type Inventory, inventory, workspaceMembersDeclaring } from "./inventory/inventory.ts";
+import {
+  type Inventory,
+  inventory,
+  nestedPythonManifestsDeclaring,
+  workspaceMembersDeclaring,
+} from "./inventory/inventory.ts";
 import { Ledger } from "./model/ledger.ts";
 import type { AgentStop, Effort, ModelProvider } from "./model/provider.ts";
 import {
@@ -237,6 +242,17 @@ async function lockTexts(dirs: string[]): Promise<string> {
       }
     }
   return parts.join("\n");
+}
+
+/** The range a manifest declares for `pkg` (lockfiles not consulted), if any. */
+function lowestVersionDeclared(inv: Inventory, pkg: string): string | undefined {
+  const lower = pkg.toLowerCase();
+  return (
+    inv.dependencies[pkg] ??
+    inv.dependencies[lower] ??
+    inv.dependencies[lower.replace(/[-_.]+/g, "-")] ??
+    inv.dependencies[lower.replace(/[-_.]+/g, "_")]
+  );
 }
 
 /** Lowest version a declared range admits, for npm and Python styles; null if none is named. */
@@ -513,7 +529,26 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     // Not declared anywhere but present in a lockfile: a transitive dependency (Dependabot
     // security updates). The lockfile moves; manifests stay as they are.
     let transitive = false;
-    if (declaredVersion === null && !members.length) {
+    // Python: a package declared only in a nested file (tools/docs-requirements.txt).
+    let nested: string[] = [];
+    if (eco === "pypi" && declaredVersion === null) {
+      nested = await nestedPythonManifestsDeclaring(repoDir, input.packageName);
+      if (nested.length) {
+        inv.manifests.push(...nested.filter((f) => !inv.manifests.includes(f)));
+        job.notes.push(`${input.packageName} is declared in ${nested.join(", ")}.`);
+        if (!input.from) {
+          const text = await readFile(join(repoDir, nested[0] ?? ""), "utf8");
+          const spec = new RegExp(
+            `${input.packageName.replace(/[-_.]/g, "[-_.]")}\\s*(?:\\[[^\\]]*\\])?\\s*([=<>~!]=?\\s*[\\w.*]+)`,
+            "i",
+          ).exec(text)?.[1];
+          if (spec) input.from = lowestVersion(spec) ?? undefined;
+        }
+      }
+    }
+    const declaredInManifest =
+      lowestVersionDeclared(inv, input.packageName) !== undefined || members.length > 0;
+    if (!declaredInManifest && !nested.length) {
       const locked = lockedVersions(await lockTexts([repoDir, repoRoot]), input.packageName);
       if (locked.length) {
         transitive = true;

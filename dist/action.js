@@ -303258,11 +303258,11 @@ function installSet(reqFiles) {
 }
 var UV_SYNC = sh(
   [
-    `out=$(uv sync --all-extras 2>&1); rc=$?; printf '%s\\n' "$out"`,
+    `out=$(uv sync --all-extras --all-groups 2>&1); rc=$?; printf '%s\\n' "$out"`,
     "[ $rc -eq 0 ] && exit 0",
     "spec=$(printf '%s' \"$out\" | sed -n 's/.*Required uv version `\\([^`]*\\)`.*/\\1/p' | head -n1)",
     '[ -n "$spec" ] || exit $rc',
-    'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras'
+    'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras --all-groups'
   ].join("\n")
 );
 function poetryInstall(python) {
@@ -303279,6 +303279,45 @@ function pipenvInstall(python) {
   return sh(
     `pipenv install --dev --python "$(uv python find ${python} 2>/dev/null || command -v python3)"`
   );
+}
+var PY_MANIFEST = /(^|\/)([^/]*requirements[^/]*\.(txt|in)|pyproject\.toml|Pipfile|setup\.cfg)$/;
+var PY_SKIP = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  ".venv",
+  "venv",
+  "site-packages",
+  ".tox",
+  "dist",
+  "build"
+]);
+async function nestedPythonManifestsDeclaring(root, pkg, maxDepth = 4) {
+  const name = pkg.replace(/[-_.]/g, "[-_.]");
+  const declares = new RegExp(
+    `(^|["'\\s])${name}(\\[[^\\]]*\\])?\\s*(==|>=|~=|<=|!=|<|>|=|\\[|;|$)`,
+    "im"
+  );
+  const out = [];
+  const walk4 = async (rel, depth) => {
+    if (depth > maxDepth || out.length >= 20) return;
+    let entries;
+    try {
+      entries = await readdir4(join9(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const path5 = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        if (!PY_SKIP.has(e.name) && !e.name.startsWith(".")) await walk4(path5, depth + 1);
+      } else if (rel && PY_MANIFEST.test(path5)) {
+        const text = await read(join9(root, path5));
+        if (text && declares.test(text)) out.push(path5);
+      }
+    }
+  };
+  await walk4("", 0);
+  return out.sort();
 }
 async function importablePackages(root, files) {
   const out = [];
@@ -304422,6 +304461,17 @@ var Deadline = class {
     return Math.min(limitSec, left);
   }
 };
+var KEY_LINE = /\b(error|ERROR|Error|failed|FAILED|Unable to|Because|cannot|Cannot|requires|not found|No matching|conflict)\b/;
+function keyLinesAndTail(out) {
+  if (out.length <= TAIL) return out;
+  const cut = out.slice(0, out.length - TAIL);
+  const key = cut.split("\n").filter((l) => KEY_LINE.test(l) && !/--hash=/.test(l)).map((l) => l.slice(0, 300));
+  const head = [...new Set(key)].slice(0, 25).join("\n");
+  return head ? `[earlier error lines]
+${head}
+[...]
+${out.slice(-TAIL)}` : out.slice(-TAIL);
+}
 async function runCheck(sb, check2, deadline) {
   const timeoutSec = deadline ? deadline.allow(CHECK_TIMEOUT_SEC) : CHECK_TIMEOUT_SEC;
   const r = await sb.execCheck(check2.argv, {
@@ -304430,8 +304480,8 @@ async function runCheck(sb, check2, deadline) {
     guardManifest: check2.name !== "install",
     cwd: check2.cwd
   });
-  const out = `${r.stdout}
-${r.stderr}`.trim();
+  const out = keyLinesAndTail(`${r.stdout}
+${r.stderr}`.trim());
   return {
     name: check2.name,
     command: check2.argv.join(" "),
@@ -304439,13 +304489,16 @@ ${r.stderr}`.trim();
     passed: r.exitCode === 0,
     duration_ms: r.durationMs,
     timed_out: r.timedOut,
-    output_tail: out.slice(-TAIL)
+    output_tail: out
   };
 }
+var NETWORK_FLAKE = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|socket hang up|fetch failed|HTTP (429|50[0-4])|status code (429|50[0-4])|Connection reset|Connection refused|Temporary failure in name resolution|Read timed out|error sending request|upstream error|network error/i;
 async function runChecks(sb, checks, deadline) {
   const results = [];
   for (const c of checks) {
-    const res = await runCheck(sb, c, deadline);
+    let res = await runCheck(sb, c, deadline);
+    if (c.name === "install" && !res.passed && !res.timed_out && NETWORK_FLAKE.test(res.output_tail))
+      res = await runCheck(sb, c, deadline);
     results.push(res);
     if (c.name === "install" && !res.passed) break;
   }
@@ -304613,6 +304666,10 @@ async function lockTexts(dirs) {
       }
     }
   return parts.join("\n");
+}
+function lowestVersionDeclared(inv, pkg) {
+  const lower = pkg.toLowerCase();
+  return inv.dependencies[pkg] ?? inv.dependencies[lower] ?? inv.dependencies[lower.replace(/[-_.]+/g, "-")] ?? inv.dependencies[lower.replace(/[-_.]+/g, "_")];
 }
 function lowestVersion(range) {
   const r = range.trim().replace(/^(==|===|~=)/, "");
@@ -304827,7 +304884,24 @@ async function runJob(input3, opts) {
       );
     const declaredVersion = await currentVersion(inv, input3.packageName);
     let transitive = false;
-    if (declaredVersion === null && !members2.length) {
+    let nested = [];
+    if (eco === "pypi" && declaredVersion === null) {
+      nested = await nestedPythonManifestsDeclaring(repoDir, input3.packageName);
+      if (nested.length) {
+        inv.manifests.push(...nested.filter((f) => !inv.manifests.includes(f)));
+        job.notes.push(`${input3.packageName} is declared in ${nested.join(", ")}.`);
+        if (!input3.from) {
+          const text = await readFile10(join13(repoDir, nested[0] ?? ""), "utf8");
+          const spec = new RegExp(
+            `${input3.packageName.replace(/[-_.]/g, "[-_.]")}\\s*(?:\\[[^\\]]*\\])?\\s*([=<>~!]=?\\s*[\\w.*]+)`,
+            "i"
+          ).exec(text)?.[1];
+          if (spec) input3.from = lowestVersion(spec) ?? void 0;
+        }
+      }
+    }
+    const declaredInManifest = lowestVersionDeclared(inv, input3.packageName) !== void 0 || members2.length > 0;
+    if (!declaredInManifest && !nested.length) {
       const locked = lockedVersions(await lockTexts([repoDir, repoRoot]), input3.packageName);
       if (locked.length) {
         transitive = true;

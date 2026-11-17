@@ -30,6 +30,24 @@ export class Deadline {
   }
 }
 
+const KEY_LINE =
+  /\b(error|ERROR|Error|failed|FAILED|Unable to|Because|cannot|Cannot|requires|not found|No matching|conflict)\b/;
+
+/**
+ * The output tail, prefixed with the error lines from the part the tail cuts off: the
+ * root cause of an install failure is often printed long before the end.
+ */
+export function keyLinesAndTail(out: string): string {
+  if (out.length <= TAIL) return out;
+  const cut = out.slice(0, out.length - TAIL);
+  const key = cut
+    .split("\n")
+    .filter((l) => KEY_LINE.test(l) && !/--hash=/.test(l))
+    .map((l) => l.slice(0, 300));
+  const head = [...new Set(key)].slice(0, 25).join("\n");
+  return head ? `[earlier error lines]\n${head}\n[...]\n${out.slice(-TAIL)}` : out.slice(-TAIL);
+}
+
 export async function runCheck(
   sb: Sandbox,
   check: CheckCommand,
@@ -42,7 +60,7 @@ export async function runCheck(
     guardManifest: check.name !== "install",
     cwd: check.cwd,
   });
-  const out = `${r.stdout}\n${r.stderr}`.trim();
+  const out = keyLinesAndTail(`${r.stdout}\n${r.stderr}`.trim());
   return {
     name: check.name,
     command: check.argv.join(" "),
@@ -50,9 +68,13 @@ export async function runCheck(
     passed: r.exitCode === 0,
     duration_ms: r.durationMs,
     timed_out: r.timedOut,
-    output_tail: out.slice(-TAIL),
+    output_tail: out,
   };
 }
+
+/** Output of an install that failed for network reasons rather than the repository's. */
+export const NETWORK_FLAKE =
+  /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|socket hang up|fetch failed|HTTP (429|50[0-4])|status code (429|50[0-4])|Connection reset|Connection refused|Temporary failure in name resolution|Read timed out|error sending request|upstream error|network error/i;
 
 /** Run checks in order (VER-4). Stops after a failed install, since later checks are meaningless. */
 export async function runChecks(
@@ -62,7 +84,15 @@ export async function runChecks(
 ): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   for (const c of checks) {
-    const res = await runCheck(sb, c, deadline);
+    let res = await runCheck(sb, c, deadline);
+    // A dropped connection or a rate limit is not the repository's fault: try once more.
+    if (
+      c.name === "install" &&
+      !res.passed &&
+      !res.timed_out &&
+      NETWORK_FLAKE.test(res.output_tail)
+    )
+      res = await runCheck(sb, c, deadline);
     results.push(res);
     if (c.name === "install" && !res.passed) break;
   }

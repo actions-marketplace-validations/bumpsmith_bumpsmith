@@ -506,11 +506,11 @@ export function installSet(reqFiles: string[]): string[] {
  */
 export const UV_SYNC = sh(
   [
-    "out=$(uv sync --all-extras 2>&1); rc=$?; printf '%s\\n' \"$out\"",
+    "out=$(uv sync --all-extras --all-groups 2>&1); rc=$?; printf '%s\\n' \"$out\"",
     "[ $rc -eq 0 ] && exit 0",
     "spec=$(printf '%s' \"$out\" | sed -n 's/.*Required uv version `\\([^`]*\\)`.*/\\1/p' | head -n1)",
     '[ -n "$spec" ] || exit $rc',
-    'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras',
+    'pip install --user "uv$spec" && "$HOME/.local/bin/uv" sync --all-extras --all-groups',
   ].join("\n"),
 );
 
@@ -531,6 +531,55 @@ export function pipenvInstall(python: string): string[] {
   return sh(
     `pipenv install --dev --python "$(uv python find ${python} 2>/dev/null || command -v python3)"`,
   );
+}
+
+const PY_MANIFEST = /(^|\/)([^/]*requirements[^/]*\.(txt|in)|pyproject\.toml|Pipfile|setup\.cfg)$/;
+const PY_SKIP = new Set([
+  "node_modules",
+  ".git",
+  ".venv",
+  "venv",
+  "site-packages",
+  ".tox",
+  "dist",
+  "build",
+]);
+
+/**
+ * Python manifests below the root that declare `pkg` (tools/requirements-docs.txt,
+ * services/api/pyproject.toml). Bots bump them from the root without naming the directory.
+ */
+export async function nestedPythonManifestsDeclaring(
+  root: string,
+  pkg: string,
+  maxDepth = 4,
+): Promise<string[]> {
+  const name = pkg.replace(/[-_.]/g, "[-_.]");
+  const declares = new RegExp(
+    `(^|["'\\s])${name}(\\[[^\\]]*\\])?\\s*(==|>=|~=|<=|!=|<|>|=|\\[|;|$)`,
+    "im",
+  );
+  const out: string[] = [];
+  const walk = async (rel: string, depth: number): Promise<void> => {
+    if (depth > maxDepth || out.length >= 20) return;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(join(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const path = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        if (!PY_SKIP.has(e.name) && !e.name.startsWith(".")) await walk(path, depth + 1);
+      } else if (rel && PY_MANIFEST.test(path)) {
+        const text = await read(join(root, path));
+        if (text && declares.test(text)) out.push(path);
+      }
+    }
+  };
+  await walk("", 0);
+  return out.sort();
 }
 
 /** Top-level Python packages of the project (root or src/ layout), excluding tests and docs. */
