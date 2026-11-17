@@ -302972,7 +302972,7 @@ async function inventoryPython(root) {
   }
   const hasTests = files.includes("tests") || files.includes("test") || /pytest/.test(pyproject ?? "") || "pytest" in deps;
   const ensurePytest = pm === "pip" && hasTests && !("pytest" in deps);
-  const installArgv = pm === "uv" ? UV_SYNC : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(reqFiles, ensurePytest) : withPytest(["pip", "install", "-e", ".[test]"], ensurePytest);
+  const installArgv = pm === "uv" ? UV_SYNC : pm === "poetry" ? ["poetry", "install", "--no-interaction"] : reqFiles.length ? pipViaUv(installSet(reqFiles), ensurePytest) : withPytest(["pip", "install", "-e", ".[test]"], ensurePytest);
   const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
   const checks = [{ name: "install", argv: installArgv }];
   if (hasTests)
@@ -303000,10 +303000,19 @@ function withPytest(argv, ensure) {
 }
 function pipViaUv(reqFiles, ensurePytest = false) {
   const pytest = ensurePytest ? " && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }" : "";
+  const resolve5 = reqFiles.length > 1 ? '{ uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" || { echo "requirement files conflict; installing $1 only"; uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$1"; }; }' : 'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@"';
   return sh(
-    `uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
+    `${resolve5} && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
     reqFiles
   );
+}
+function installSet(reqFiles) {
+  const main2 = reqFiles.filter((f) => f === "requirements.txt");
+  const devTest = reqFiles.filter(
+    (f) => f !== "requirements.txt" && /(^|[-_])(dev|test|tests|testing)([-_.]|$)/i.test(f)
+  );
+  const chosen = [...main2, ...devTest];
+  return chosen.length ? chosen : reqFiles;
 }
 var UV_SYNC = sh(
   [
@@ -303903,6 +303912,10 @@ function installFailureReason(baseline) {
     return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
   if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
+  if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
+    return " (a package is built from source and needs a system library the sandbox does not have)";
+  if (/No solution found when resolving|ResolutionImpossible|unsatisfiable/i.test(out))
+    return " (the repository's pinned requirements cannot be resolved together)";
   if (/ERESOLVE|conflicting peer dependency/i.test(out))
     return " (the repository's own dependencies conflict before the upgrade)";
   if (/timed out|ETIMEDOUT/i.test(out) || baseline.some((c) => c.name === "install" && c.timed_out))

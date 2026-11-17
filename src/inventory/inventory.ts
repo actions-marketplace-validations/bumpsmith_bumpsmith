@@ -212,7 +212,7 @@ async function inventoryPython(root: string): Promise<Inventory> {
       : pm === "poetry"
         ? ["poetry", "install", "--no-interaction"]
         : reqFiles.length
-          ? pipViaUv(reqFiles, ensurePytest)
+          ? pipViaUv(installSet(reqFiles), ensurePytest)
           : withPytest(["pip", "install", "-e", ".[test]"], ensurePytest);
   const runner = pm === "uv" ? ["uv", "run"] : pm === "poetry" ? ["poetry", "run"] : [];
   const checks: CheckCommand[] = [{ name: "install", argv: installArgv }];
@@ -254,10 +254,28 @@ export function pipViaUv(reqFiles: string[], ensurePytest = false): string[] {
   const pytest = ensurePytest
     ? " && { python -m pytest --version >/dev/null 2>&1 || pip install pytest; }"
     : "";
+  // If the app and dev files pin conflicting versions, fall back to the first (main) file.
+  const resolve =
+    reqFiles.length > 1
+      ? '{ uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" || { echo "requirement files conflict; installing $1 only"; uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$1"; }; }'
+      : 'uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@"';
   return sh(
-    `uv pip compile --quiet -o /tmp/bumpsmith-resolved.txt "$@" && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
+    `${resolve} && pip install --no-deps -r /tmp/bumpsmith-resolved.txt${pytest}`,
     reqFiles,
   );
+}
+
+/**
+ * Which requirement files to install: the app's own file first, then dev/test files.
+ * CI, docs and lint files often pin tools at versions that conflict with the app.
+ */
+export function installSet(reqFiles: string[]): string[] {
+  const main = reqFiles.filter((f) => f === "requirements.txt");
+  const devTest = reqFiles.filter(
+    (f) => f !== "requirements.txt" && /(^|[-_])(dev|test|tests|testing)([-_.]|$)/i.test(f),
+  );
+  const chosen = [...main, ...devTest];
+  return chosen.length ? chosen : reqFiles;
 }
 
 /**

@@ -239,6 +239,10 @@ export function installFailureReason(baseline: CheckResult[]): string {
     return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
   if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
+  if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
+    return " (a package is built from source and needs a system library the sandbox does not have)";
+  if (/No solution found when resolving|ResolutionImpossible|unsatisfiable/i.test(out))
+    return " (the repository's pinned requirements cannot be resolved together)";
   if (/ERESOLVE|conflicting peer dependency/i.test(out))
     return " (the repository's own dependencies conflict before the upgrade)";
   if (/timed out|ETIMEDOUT/i.test(out) || baseline.some((c) => c.name === "install" && c.timed_out))

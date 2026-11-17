@@ -316,3 +316,21 @@ describe("vendored Yarn releases", () => {
     }
   });
 });
+
+describe("which requirement files to install", () => {
+  it("installs the app and dev/test files, not CI or docs pins", async () => {
+    const { installSet } = await import("../../src/inventory/inventory.ts");
+    expect(
+      installSet([
+        "ci-requirements.txt",
+        "dev-requirements.txt",
+        "docs-requirements.txt",
+        "requirements.txt",
+      ]),
+    ).toEqual(["requirements.txt", "dev-requirements.txt"]);
+    expect(
+      installSet(["requirements-dev.txt", "requirements.txt", "requirements-test.txt"]),
+    ).toEqual(["requirements.txt", "requirements-dev.txt", "requirements-test.txt"]);
+    expect(installSet(["requirements-prod.txt"])).toEqual(["requirements-prod.txt"]);
+  });
+});
