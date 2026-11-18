@@ -50,10 +50,54 @@ act on, not with charts.
 - **Tick meters** instead of decorative charts for ratios (ready / total, verified rate):
   segmented bars read at a glance and stay honest at small counts.
 - **Contribution graph** for activity: every developer already reads GitHub's.
-- **Run page as a pull request**: tabs for Summary, Changes, Checks, Breaking changes and
-  Log; the diff has a file tree, and the agent's edits are marked apart from the lockfile.
+- **Run page as a pull request**: tabs for Summary, Files changed, Checks, Breaking changes,
+  Log and Report; the diff has a file tree, and the agent's edits are marked apart from the
+  lockfile.
 - **Dark mode** follows the system setting, with a toggle; many developers live in it.
 - **8pt grid**: spacing in 4/8 steps, controls 32/40px, radii 8/12.
+
+## Files changed, Log and Report (GitHub conventions, on purpose)
+
+Developers review diffs in GitHub every day, so these three views copy its conventions
+closely instead of inventing new ones. Anything unfamiliar here costs trust.
+
+**Files changed** (`src/dashboard/client/diff.ts`)
+
+- A file tree on the left (folders compressed, status icons for added, modified, deleted and
+  renamed files, a filter box), and one card per file on the right.
+- Sticky file headers: collapse chevron, expand-all, `+/-` count with GitHub's five
+  diffstat squares, the path with the file name in bold, copy path, and a **Viewed**
+  checkbox. "x / n viewed" with a progress bar is remembered per run in the browser.
+- Two line-number columns, blue `@@` hunk rows with the enclosing function, and expanders
+  that load the hidden lines from the run's stored `before/` and `after/` files.
+- GitHub's Primer colours for additions, deletions, hunks and word-level highlights, in light
+  and dark; syntax colours stay on inside a highlighted word.
+- Unified or split view (remembered), line wrapping, and lockfiles collapsed as generated
+  with "Load diff", like GitHub does. Large diffs are collapsed the same way.
+- **What GitHub does not have**: every file is labelled by who changed it: _edited by the
+  agent_ (ember edge on the card and a dot in the tree), _version bump_ (the manifest) or
+  _package manager_ (the lockfile). The reviewer's question is "what did the AI touch?", and
+  this answers it at a glance.
+
+**Log** (`src/dashboard/client/log.ts`): a GitHub Actions job log, always dark.
+
+- One collapsible step per stage (set up, release gate, changelog, affected code, checks
+  before and after the bump, the fix with each tool call and its time offset, review,
+  result), with status icons and durations; failed and warning steps open by default.
+- Line numbers, search with match counts per step, expand/collapse all, download as text.
+- ANSI colour codes from test runners and build tools render as colours instead of noise.
+- A check that already fails before the upgrade is amber, not red: it is not counted against
+  the upgrade, and the log says so. The header follows the run's result, not the number of
+  red steps.
+- The same component is used for check output and the live run in the drawer.
+
+**Report**: `evidence.md` rendered like a `.md` file on GitHub (Preview / Code toggle, line
+numbers in Code), with a small Markdown renderer that escapes everything and only links
+`http(s)` URLs.
+
+**Breaking changes**: API signatures from `.d.ts` files arrive on one line with their doc
+comments; they are tidied (comments dropped, one member per line) and shown as a real line
+diff, so "interface became type alias, three fields added" is visible at once.
 
 ## References
 
@@ -63,3 +107,10 @@ act on, not with charts.
 - Dribbble: "AI IDE Analytics Dashboard" (Demyanchuk Art Team), "Kodezi Developer
   Analytics Dashboard" (Wavespace), "Coherence Developer Platform" (Airzon), "Zereth AI
   Developer Platform" (Exalt Studio).
+- Files changed, Log and Report research:
+  - Mobbin: GitHub pull request Files changed (file tree, sticky headers, Viewed, split
+    view), GitHub Actions job logs, Laravel Cloud deployment logs, Browserbase session logs.
+  - Dribbble: "Updated GitHub diffs" (GitHub), "Code Diff Multi-Line Comment" (Liviu Ang),
+    "Guildhall: Review What Your AI Agent Changed" (Kretya), "GitHub Desktop" (Nicolas
+    Solerieu), "Diffwise: Agent Plan & Diff Review for AI Coding" (Niksdesign).
+  - Primer (GitHub's design system) for the diff and syntax colour values.

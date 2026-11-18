@@ -101,6 +101,24 @@ const P: Record<string, string> = {
   branch:
     '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 4-6 3-11 8"/>',
   play: '<path d="m8 5 11 7-11 7Z"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronUp: '<path d="m18 15-6-6-6 6"/>',
+  chevronRight: '<path d="m9 6 6 6-6 6"/>',
+  unfold: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+  fold: '<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>',
+  plusSquare: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>',
+  minusSquare: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h8"/>',
+  dotSquare:
+    '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+  download: '<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>',
+  checkCircleFill:
+    '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="m7.5 12.2 3 3 6-6.4" stroke="#fff" stroke-width="2.2"/>',
+  xCircleFill:
+    '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="m8.8 8.8 6.4 6.4M15.2 8.8l-6.4 6.4" stroke="#fff" stroke-width="2.2"/>',
+  alertCircleFill:
+    '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M12 7v6M12 16.6h.01" stroke="#fff" stroke-width="2.4"/>',
+  skipCircle: '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
   hourglass: '<path d="M6 2h12M6 22h12"/><path d="M7 2v4l5 6 5-6V2M7 22v-4l5-6 5 6v4"/>',
 };
 
@@ -229,65 +247,8 @@ export function cellOf(c: Check | undefined): string {
   return c.after ? "ok" : "pre";
 }
 
-// ───────────── diff ─────────────
-
-export interface DiffFile {
-  path: string;
-  added: number;
-  removed: number;
-  lines: {
-    kind: "add" | "del" | "ctx" | "hunk";
-    text: string;
-    a: number | null;
-    b: number | null;
-  }[];
-}
-
-export function parseDiff(patch: string): DiffFile[] {
-  const files: DiffFile[] = [];
-  let cur: DiffFile | null = null;
-  let a = 0;
-  let b = 0;
-  for (const line of patch.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      const m = / b\/(.+)$/.exec(line);
-      cur = { path: m?.[1] ?? line, added: 0, removed: 0, lines: [] };
-      files.push(cur);
-      continue;
-    }
-    if (!cur) continue;
-    if (
-      /^(index |--- |\+\+\+ |new file|deleted file|similarity|rename |old mode|new mode|Binary)/.test(
-        line,
-      )
-    ) {
-      const m = /^\+\+\+ b\/(.+)$/.exec(line);
-      if (m?.[1]) cur.path = m[1];
-      continue;
-    }
-    const h = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(line);
-    if (h) {
-      a = Number(h[1]);
-      b = Number(h[2]);
-      cur.lines.push({ kind: "hunk", text: line, a: null, b: null });
-      continue;
-    }
-    if (line.startsWith("+")) {
-      cur.lines.push({ kind: "add", text: line.slice(1), a: null, b: b++ });
-      cur.added++;
-    } else if (line.startsWith("-")) {
-      cur.lines.push({ kind: "del", text: line.slice(1), a: a++, b: null });
-      cur.removed++;
-    } else if (line.startsWith(" ") || line === "") {
-      if (line === "" && cur.lines.length === 0) continue;
-      cur.lines.push({ kind: "ctx", text: line.slice(1), a: a++, b: b++ });
-    }
-  }
-  return files;
-}
-
 const KW =
-  /\b(import|from|export|default|const|let|var|function|return|async|await|if|else|for|while|class|new|extends|type|interface|def|lambda|with|as|try|except|catch|finally|raise|throw|yield|None|True|False|null|undefined|true|false|in|of|is|not|and|or|pass)\b/g;
+  /\b(import|from|export|default|const|let|var|function|return|async|await|if|else|elif|for|while|class|new|extends|implements|type|interface|enum|def|lambda|with|as|try|except|catch|finally|raise|throw|yield|None|True|False|null|undefined|true|false|in|of|is|not|and|or|pass|public|private|protected|readonly|static|this|self|typeof|instanceof|void|delete|switch|case|break|continue)\b/g;
 
 /** Escaped text with `backticks` shown as inline code. */
 export const md = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code class="ic">$1</code>');
@@ -298,7 +259,7 @@ export function highlight(code: string, path: string): string {
   if (/^\s*(\*|\/\*\*?|\*\/)(\s|$|\/)/.test(code)) return `<span class="tok-c">${esc(code)}</span>`;
   if (/\.(json|lock|ya?ml|toml|txt|cfg|in)$|lock\.json$|Pipfile/.test(path)) {
     return esc(code)
-      .replace(/(&quot;[^&]*?&quot;)(\s*:)/g, '<span class="tok-f">$1</span>$2')
+      .replace(/(&quot;[^&]*?&quot;)(\s*:)/g, '<span class="tok-p">$1</span>$2')
       .replace(/(:\s*)(&quot;[^&]*?&quot;)/g, '$1<span class="tok-s">$2</span>')
       .replace(/(==|&gt;=|~=|\^|~)(\d[\w.]*)/g, '$1<span class="tok-n">$2</span>');
   }
@@ -321,4 +282,46 @@ function plain(s: string) {
     .replace(KW, '<span class="tok-k">$1</span>')
     .replace(/(?<!&#)\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-n">$1</span>')
     .replace(/\b([A-Za-z_]\w*)(?=\()/g, '<span class="tok-f">$1</span>');
+}
+
+/**
+ * Wrap the visible characters [from, to) of escaped, highlighted HTML in a tag (the
+ * word-diff mark or a search match). Tags already in the HTML are not counted; the wrapper
+ * is closed and reopened around them so nesting stays valid, and an entity counts as one
+ * character.
+ */
+export function markRange(
+  html: string,
+  from: number,
+  to: number,
+  tag: "span" | "mark",
+  attrs = "",
+): string {
+  const open = `<${tag}${attrs}>`;
+  const close = `</${tag}>`;
+  let out = "";
+  let pos = 0;
+  let inside = false;
+  for (let i = 0; i < html.length; ) {
+    if (html[i] === "<") {
+      const end = html.indexOf(">", i) + 1;
+      const t = html.slice(i, end);
+      out += inside ? `${close}${t}${open}` : t;
+      i = end;
+      continue;
+    }
+    if (pos === from && !inside) {
+      out += open;
+      inside = true;
+    }
+    const ch = html[i] === "&" ? html.slice(i, html.indexOf(";", i) + 1) : (html[i] as string);
+    out += ch;
+    i += ch.length;
+    pos++;
+    if (pos === to && inside) {
+      out += close;
+      inside = false;
+    }
+  }
+  return (inside ? out + close : out).split(open + close).join("");
 }

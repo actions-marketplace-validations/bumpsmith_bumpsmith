@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -148,6 +148,11 @@ describe("dashboard server", () => {
     await writeFile(join(runDir, "job.json"), JSON.stringify(job()));
     // This patch touches src/a.ts, which does not exist here: applying must fail cleanly.
     await writeFile(join(runDir, "patch.diff"), PATCH);
+    // Full files kept for "expand context" in the diff view, plus a symlink that escapes.
+    await mkdir(join(runDir, "after", "src"), { recursive: true });
+    await writeFile(join(runDir, "after", "src", "a.ts"), "export const a = 1;\n");
+    await writeFile(join(repo, "secret.txt"), "do not serve\n");
+    await symlink(join(repo, "secret.txt"), join(runDir, "after", "escape.txt"));
     const d = await startDashboard({
       repoDir: repo,
       port: 4600 + Math.floor(Math.random() * 300),
@@ -201,6 +206,22 @@ describe("dashboard server", () => {
     );
     expect((await fetch(`${base}/api/runs/..%2F..%2Fetc`, { headers: h })).status).toBe(404);
     expect((await fetch(`${base}/api/runs/nope`, { headers: h })).status).toBe(404);
+  });
+
+  it("serves a run's stored full file for context, and nothing outside it", async () => {
+    const h = { "x-bumpsmith-token": token };
+    const file = (q: string, headers = h) =>
+      fetch(`${base}/api/runs/20261118000000-abc123/file?${q}`, { headers });
+    const ok = await file("side=after&path=src/a.ts");
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { text: string }).text).toBe("export const a = 1;\n");
+    expect((await file("side=after&path=src/a.ts", {} as typeof h)).status).toBe(403);
+    expect((await file("side=after&path=../job.json")).status).toBe(400);
+    expect((await file("side=after&path=%2E%2E%2F%2E%2E%2Fsecret.txt")).status).toBe(400);
+    expect((await file("side=after&path=")).status).toBe(400);
+    expect((await file("side=after&path=escape.txt")).status).toBe(404);
+    expect((await file("side=before&path=src/a.ts")).status).toBe(404);
+    expect((await file("side=after&path=src")).status).toBe(404);
   });
 
   it("explains a patch that does not apply instead of half-applying it", async () => {

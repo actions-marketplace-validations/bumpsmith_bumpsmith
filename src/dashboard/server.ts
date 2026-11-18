@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readdir, readFile, rm, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import http from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -443,6 +443,27 @@ export async function startDashboard(opts: DashboardOptions) {
           debt: existsSync(debtFile) ? JSON.parse(await readFile(debtFile, "utf8")) : null,
           live: [...live.values()].map(({ listeners: _l, ...r }) => r),
         });
+      }
+
+      // One file from a run's before/ or after/ snapshot (diff "expand context").
+      const fileMatch = /^\/api\/runs\/([\w.-]+)\/file$/.exec(path);
+      if (req.method === "GET" && fileMatch?.[1] && ID.test(fileMatch[1])) {
+        const side = url.searchParams.get("side") === "before" ? "before" : "after";
+        const rel = url.searchParams.get("path") ?? "";
+        const base = join(runsDir, fileMatch[1], side);
+        const file = resolve(base, rel);
+        if (!rel || rel.includes("\0") || !file.startsWith(base + sep))
+          return send(res, 400, { error: "bad path" });
+        // Symlinks in the repository must not lead outside the snapshot.
+        const real = await realpath(file).catch(() => null);
+        const realBase = await realpath(base).catch(() => null);
+        if (!real || !realBase || !real.startsWith(realBase + sep))
+          return send(res, 404, { error: "the full file is not stored for this run" });
+        const st = await stat(real).catch(() => null);
+        if (!st?.isFile())
+          return send(res, 404, { error: "the full file is not stored for this run" });
+        if (st.size > 2 * 1024 * 1024) return send(res, 413, { error: "file too large to show" });
+        return send(res, 200, { text: await readFile(real, "utf8") });
       }
 
       const runMatch = /^\/api\/runs\/([\w.-]+)(\/apply|\/delete)?$/.exec(path);

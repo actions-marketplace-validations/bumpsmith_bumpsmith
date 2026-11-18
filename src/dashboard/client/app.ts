@@ -1,20 +1,29 @@
 // Bumpsmith Local dashboard. Design notes: dashboard/DESIGN.md.
+
+import {
+  type FileDiff,
+  type FileView,
+  fileCard,
+  fileTree,
+  parsePatch,
+  snippetDiff,
+  whoOf,
+} from "./diff.ts";
+import { buildSteps, jobLog, type LogStep, lineOf, logLines, logText, outputLines } from "./log.ts";
+import { renderMarkdown } from "./markdown.ts";
 import {
   ago,
   agoLong,
   BRAND_MARK,
   checkStrip,
   confPill,
-  type DiffFile,
   dur,
   ecoBadge,
   esc,
-  highlight,
   icon,
   md,
   median,
   money,
-  parseDiff,
   type Run,
   stateOf,
   statePill,
@@ -93,7 +102,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body;
 }
 
-type Tab = "summary" | "changes" | "checks" | "breaking" | "log";
+type Tab = "summary" | "changes" | "checks" | "breaking" | "log" | "report";
 const ui = {
   data: null as State | null,
   route: "",
@@ -101,8 +110,17 @@ const ui = {
   query: "",
   detail: null as { id: string; job: Job; patch: string; evidence: string } | null,
   tab: "summary" as Tab,
-  diffFile: 0,
-  diffWrap: false,
+  /** Files changed: per-file view state, layout, tree filter, active file. */
+  files: [] as FileDiff[],
+  views: new Map<number, FileView>(),
+  split: false,
+  wrap: false,
+  treeFilter: "",
+  activeFile: 0,
+  steps: [] as LogStep[],
+  logOpen: new Set<string>(),
+  logQuery: "",
+  reportMode: "preview" as "preview" | "code",
   openCheck: null as string | null,
   drawer: null as null | {
     mode: "new" | "live";
@@ -159,6 +177,11 @@ function theme(): "light" | "dark" {
   const set = document.documentElement.dataset.theme;
   if (set === "light" || set === "dark") return set;
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+try {
+  ui.split = localStorage.getItem("bumpsmith-diff") === "split";
+} catch {
+  // default: unified
 }
 try {
   const saved = localStorage.getItem("bumpsmith-theme");
@@ -439,9 +462,10 @@ function runsPage(d: State) {
 // ───────────── run page ─────────────
 
 function pipeline(job: Job) {
-  const s: { t: string; sub: string; st: string; r?: string }[] = [];
+  const s: { t: string; sub: string; st: string; r?: string; log?: string }[] = [];
   const cr = job.change_record;
   s.push({
+    log: "changelog",
     t: "Read the changelog",
     st: cr ? "done" : job.gate && !job.gate.allowed ? "fail" : "pending",
     sub: cr
@@ -452,6 +476,7 @@ function pipeline(job: Job) {
   });
   const im = job.impact;
   s.push({
+    log: "impact",
     t: "Find affected code",
     st: im ? "done" : "pending",
     sub: im
@@ -460,12 +485,17 @@ function pipeline(job: Job) {
   });
   const base = job.baseline as { name: string; passed: boolean; duration_ms: number }[] | undefined;
   s.push({
+    log: base?.[0] ? `before-${base[0].name}` : undefined,
     t: "Run your checks before",
-    st: base ? (base.find((c) => c.name === "install")?.passed ? "done" : "fail") : "pending",
-    sub: base ? `${base.filter((c) => c.passed).length} of ${base.length} pass` : "not reached",
+    // A red baseline is the repository's own state before the upgrade: a warning, as in the log.
+    st: base ? (base.every((c) => c.passed) ? "done" : "warn") : "pending",
+    sub: base
+      ? `${base.filter((c) => c.passed).length} of ${base.length} pass${base.find((c) => c.name === "install" && !c.passed) ? " · install fails, so checks are limited" : base.some((c) => !c.passed) ? " · failures here are not counted" : ""}`
+      : "not reached",
     r: base ? dur(base.reduce((n, c) => n + c.duration_ms, 0)) : "",
   });
   s.push({
+    log: "bump",
     t: "Apply the bump",
     st: job.after_bump ? "done" : base ? "fail" : "pending",
     sub: job.after_bump
@@ -476,6 +506,7 @@ function pipeline(job: Job) {
   });
   const rounds = job.rounds?.length ?? 0;
   s.push({
+    log: "fix",
     t: "Fix what broke",
     st: job.after_bump ? "done" : "pending",
     sub: job.after_bump
@@ -485,6 +516,7 @@ function pipeline(job: Job) {
       : "not reached",
   });
   s.push({
+    log: "review",
     t: "Independent review",
     st: job.review ? (job.review.verdict === "approve" ? "done" : "warn") : "pending",
     sub: job.review
@@ -495,6 +527,7 @@ function pipeline(job: Job) {
   });
   const tone = stateOf(job.state).tone;
   s.push({
+    log: "result",
     t: stateOf(job.state).label,
     st: tone === "ok" ? "done" : tone === "bad" ? "fail" : "warn",
     sub: "result",
@@ -503,8 +536,8 @@ function pipeline(job: Job) {
     .map(
       (
         x,
-      ) => `<div class="step ${x.st}"><div class="step-i">${icon(x.st === "done" ? "check" : x.st === "fail" ? "x" : x.st === "warn" ? "minus" : "clock")}</div>
-      <div><div class="step-t">${esc(x.t)}</div><div class="step-s">${md(x.sub)}</div></div><div class="step-r">${x.r ?? ""}</div></div>`,
+      ) => `<div class="step ${x.st} ${x.log && x.st !== "pending" ? "link" : ""}" ${x.log && x.st !== "pending" ? `data-act="goto-log" data-v="${esc(x.log)}" title="Open in the log"` : ""}><div class="step-i">${icon(x.st === "done" ? "check" : x.st === "fail" ? "x" : x.st === "warn" ? "minus" : "clock")}</div>
+      <div><div class="step-t">${esc(x.t)}</div><div class="step-s">${md(x.sub)}</div></div><div class="step-r">${x.r ?? ""}${x.log && x.st !== "pending" ? icon("chevronRight", "step-go") : ""}</div></div>`,
     )
     .join("")}</div>`;
 }
@@ -515,19 +548,20 @@ function detailPage(d: State) {
     return `<div class="page"><div class="skel" style="height:96px;margin-bottom:16px"></div><div class="skel" style="height:480px"></div></div>`;
   const { job, patch } = det;
   const run = d.runs.find((r) => r.id === det.id);
-  const files = parseDiff(patch);
+  const files = ui.files;
   const edited = new Set<string>((job.edits ?? []).map((e: { path: string }) => e.path));
   const cmp = (job.verdict?.comparisons ?? []) as Cmp[];
   const changes = (job.change_record?.changes ?? []) as Change[];
   const canApply = job.state === "ready" && patch.trim().length > 0;
   const tabs: [Tab, string, string][] = [
     ["summary", "Summary", ""],
-    ["changes", "Changes", String(files.length)],
+    ["changes", "Files changed", String(files.length)],
     ["checks", "Checks", String(cmp.length || (job.baseline?.length ?? 0))],
     ["breaking", "Breaking changes", String(changes.length)],
     ["log", "Log", ""],
+    ["report", "Report", ""],
   ];
-  return `<div class="page">
+  return `<div class="page wide">
     <a class="back" href="#/runs">${icon("arrowL")}Upgrades</a>
     <div class="rh">
       <div style="min-width:0">
@@ -551,8 +585,10 @@ function detailPage(d: State) {
           : ui.tab === "breaking"
             ? breakingTab(job, changes)
             : ui.tab === "log"
-              ? `<div class="panel"><div class="panel-h"><h2>evidence.md</h2><div class="r"><span class="mono faint" style="font-size:12px">${esc(d.runsDir.replace(d.repo.path, "."))}/${esc(det.id)}/</span></div></div><pre class="log">${esc(det.evidence || "No evidence file.")}</pre></div>`
-              : summaryTab(job, run)
+              ? logTab(det.id)
+              : ui.tab === "report"
+                ? reportTab(det, d)
+                : summaryTab(job, run)
     }
   </div>`;
 }
@@ -653,34 +689,99 @@ function summaryTab(job: Job, run: Run | undefined) {
   </div>`;
 }
 
-function changesTab(files: DiffFile[], edited: Set<string>, job: Job) {
+function viewOf(i: number): FileView {
+  let v = ui.views.get(i);
+  if (!v) {
+    v = {
+      open: true,
+      viewed: viewedSet().has(ui.files[i]?.path ?? ""),
+      loaded: false,
+      full: null,
+      expanded: new Set(),
+    };
+    ui.views.set(i, v);
+  }
+  return v;
+}
+function viewedKey() {
+  return `bumpsmith-viewed:${ui.detail?.id ?? ""}`;
+}
+function viewedSet(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(viewedKey()) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function saveViewed() {
+  try {
+    const paths = ui.files.filter((_, i) => ui.views.get(i)?.viewed).map((f) => f.path);
+    localStorage.setItem(viewedKey(), JSON.stringify(paths));
+  } catch {
+    // not persisted
+  }
+}
+
+function changesTab(files: FileDiff[], edited: Set<string>, job: Job) {
   if (!files.length)
     return `<div class="panel"><div class="blank"><h3>No changes</h3><p>${job.state === "safe" ? "The upgrade needed no code change." : "This run produced no patch."}</p></div></div>`;
-  const i = Math.min(ui.diffFile, files.length - 1);
-  const f = files[i] as DiffFile;
-  const kind = (p: string) =>
-    edited.has(p) ? "agent" : /lock|\.lock$|lock\.json$|lock\.yaml$/.test(p) ? "lock" : "";
   const add = files.reduce((n, x) => n + x.added, 0);
   const del = files.reduce((n, x) => n + x.removed, 0);
-  return `<div class="panel">
-    <div class="panel-h"><h2>${plural(files.length, "file")} changed</h2><span class="diffstat"><span class="a">+${add}</span> <span class="d">−${del}</span></span>
-      <span class="sub" style="display:inline-flex;gap:12px;align-items:center"><span><i class="fdot agent"></i> agent</span><span><i class="fdot lock"></i> lockfile</span><span><i class="fdot"></i> manifest</span></span>
-      <div class="r"><button class="btn ${ui.diffWrap ? "primary" : ""}" data-act="wrap">${icon("wrap")}Wrap</button></div></div>
-    <div class="diff-wrap">
-      <div class="files">${files.map((x, j) => `<button class="file-b ${j === i ? "on" : ""}" data-act="diff-file" data-v="${j}" title="${esc(x.path)}"><i class="fdot ${kind(x.path)}"></i><span class="nm">${esc(x.path)}</span><span class="diffstat"><span class="a">+${x.added}</span> <span class="d">−${x.removed}</span></span></button>`).join("")}</div>
-      <div class="diff ${ui.diffWrap ? "wrap" : ""}">
-        <div class="diff-h">${icon("file")}<span>${esc(f.path)}</span>${kind(f.path) === "agent" ? `<span class="badge accent" style="margin-left:auto">edited by the agent</span>` : kind(f.path) === "lock" ? `<span class="badge" style="margin-left:auto">written by the package manager</span>` : ""}</div>
-        <table>${(f.lines.length > 1500 ? f.lines.slice(0, 1500) : f.lines)
-          .map((l) =>
-            l.kind === "hunk"
-              ? `<tr class="hunk"><td colspan="3">${esc(l.text)}</td></tr>`
-              : `<tr class="${l.kind}"><td class="ln">${l.a ?? ""}</td><td class="ln">${l.b ?? ""}</td><td class="code"><span class="mk">${l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}</span>${highlight(l.text, f.path)}</td></tr>`,
-          )
-          .join(
-            "",
-          )}${f.lines.length > 1500 ? `<tr class="hunk"><td colspan="3">${f.lines.length - 1500} more lines: copy the patch to see all</td></tr>` : ""}</table>
-      </div>
+  const viewed = files.filter((_, i) => viewOf(i).viewed).length;
+  const reasons = new Map<string, string>(
+    ((job.edits ?? []) as { path: string; reason: string | null }[])
+      .filter((e) => e.reason)
+      .map((e) => [e.path, e.reason as string]),
+  );
+  return `<div class="pr-bar">
+      <div class="pr-sum">Showing <b>${plural(files.length, "changed file")}</b> with <b class="a">${plural(add, "addition")}</b> and <b class="d">${plural(del, "deletion")}</b></div>
+      <div class="grow"></div>
+      <span class="legend-who"><span class="who who-agent">agent</span><span class="who who-manifest">version bump</span><span class="who who-lock">package manager</span></span>
+      <div class="seg"><button class="${ui.split ? "" : "on"}" data-act="diff-mode" data-v="unified">Unified</button><button class="${ui.split ? "on" : ""}" data-act="diff-mode" data-v="split">Split</button></div>
+      <button class="btn icon ${ui.wrap ? "on" : ""}" data-act="wrap" title="${ui.wrap ? "Do not wrap" : "Wrap"} long lines" aria-pressed="${ui.wrap}">${icon("wrap")}</button>
+      <div class="pr-viewed" title="Files you marked as viewed"><span class="mono">${viewed} / ${files.length}</span> viewed<div class="pv-bar"><i style="width:${(viewed / files.length) * 100}%"></i></div></div>
     </div>
+    <div class="pr-body">
+      <aside class="ftree">
+        <label class="ftree-q">${icon("search")}<input id="tree-q" placeholder="Filter changed files" value="${esc(ui.treeFilter)}" spellcheck="false" /></label>
+        <div class="ftree-l">${fileTree(files, { active: ui.activeFile, filter: ui.treeFilter, edited, viewed: (i) => viewOf(i).viewed })}</div>
+      </aside>
+      <div class="fds">${files
+        .map((f, i) =>
+          fileCard(f, i, viewOf(i), {
+            split: ui.split,
+            wrap: ui.wrap,
+            who: whoOf(f.path, edited),
+            reason: reasons.get(f.path) ?? null,
+          }),
+        )
+        .join("")}</div>
+    </div>`;
+}
+
+function logTab(id: string) {
+  return jobLog(ui.steps, { open: ui.logOpen, query: ui.logQuery, title: `Run ${id}` });
+}
+
+function reportTab(det: { id: string; evidence: string }, d: State) {
+  const text = det.evidence || "";
+  if (!text)
+    return `<div class="panel"><div class="blank"><h3>No report</h3><p>This run did not write an evidence report.</p></div></div>`;
+  const lines = text.replace(/\n$/, "").split("\n");
+  const kb = (new TextEncoder().encode(text).length / 1024).toFixed(1);
+  return `<div class="panel mdf">
+    <div class="mdf-h">
+      <div class="seg"><button class="${ui.reportMode === "preview" ? "on" : ""}" data-act="report-mode" data-v="preview">Preview</button><button class="${ui.reportMode === "code" ? "on" : ""}" data-act="report-mode" data-v="code">Code</button></div>
+      <span class="mono muted mdf-meta">evidence.md · ${lines.length} lines · ${kb} KB</span>
+      <div class="grow"></div>
+      <span class="mono faint mdf-path" title="${esc(d.runsDir)}/${esc(det.id)}/evidence.md">${esc(d.runsDir.replace(d.repo.path, "."))}/${esc(det.id)}/evidence.md</span>
+      <button class="btn icon ghost" data-act="copy-text" data-v="${esc(text)}" title="Copy raw file">${icon("copy")}</button>
+    </div>
+    ${
+      ui.reportMode === "preview"
+        ? `<article class="markdown">${renderMarkdown(text)}</article>`
+        : `<div class="blob"><table>${lines.map((l, i) => `<tr><td class="dn" data-n="${i + 1}"></td><td class="bl">${esc(l) || " "}</td></tr>`).join("")}</table></div>`
+    }
   </div>`;
 }
 
@@ -738,7 +839,7 @@ function checksTab(job: Job, cmp: Cmp[]) {
               ]
                 .map(
                   ([lbl, x]) =>
-                    `<div><div class="lbl">${lbl}</div><div class="term" style="height:240px">${esc(((x as typeof b)?.output_tail ?? "no output").slice(-5000))}</div></div>`,
+                    `<div><div class="lbl">${lbl}${(x as typeof b)?.command ? ` · <span class="faint">$ ${esc(((x as typeof b)?.command ?? "").slice(0, 90))}</span>` : ""}</div><div class="jl-out">${logLines(outputLines((x as typeof b)?.output_tail || "no output"))}</div></div>`,
                 )
                 .join("")}</div></td></tr>`
             : ""
@@ -758,10 +859,10 @@ function breakingTab(job: Job, changes: Change[]) {
           c,
         ) => `<div class="bc"><div class="bc-h"><code>${esc(c.symbols?.join(", ") || c.id)}</code><span class="badge">${esc(c.kind.replace(/_/g, " "))}</span><span class="badge ${c.confidence === "high" ? "ok" : c.confidence === "medium" ? "info" : "warn"}">${esc(c.confidence)}</span></div>
         <p>${md(c.instruction)}</p>
-        ${c.before || c.after ? `<div class="bc-code ${c.before && c.after ? "" : "one"}">${c.before ? `<div><div class="lbl">before</div><pre class="b">${esc(c.before)}</pre></div>` : ""}${c.after ? `<div><div class="lbl">after</div><pre class="a">${esc(c.after)}</pre></div>` : ""}</div>` : ""}
+        ${c.before || c.after ? snippetDiff(c.before, c.after, job.input.ecosystem === "pypi" ? "x.py" : "x.ts") : ""}
         ${
           c.evidence?.length
-            ? `<div class="bc-src">${c.evidence
+            ? `<div class="bc-src">${[...new Map(c.evidence.map((e) => [e.url, e])).values()]
                 .slice(0, 3)
                 .map(
                   (e) =>
@@ -914,7 +1015,7 @@ function drawer(d: State) {
           return `<div class="step ${c}"><div class="step-i">${icon(c === "done" ? "check" : c === "fail" ? "x" : c === "active" ? "bolt" : "clock")}</div><div><div class="step-t">${i === STAGES.length - 1 && result ? esc(stateOf(result.state).label) : s.label}</div></div><div class="step-r">${c === "active" ? "running" : c === "fail" && i < STAGES.length - 1 ? "stopped here" : ""}</div></div>`;
         }).join("")}</div></div>
         ${result && !good && result.reason ? `<div class="callout">${icon("alertCircle")}<div>${md(result.reason)}</div></div>` : ""}
-        <div><div class="field"><label>Log</label></div><div class="term" id="term">${(l?.lines ?? []).map((x) => `<div class="${/^job /.test(x) ? "j" : /^(READY|SAFE)/.test(x) ? "ok" : /error|fail/i.test(x) ? "bad" : ""}">${esc(x)}</div>`).join("")}${l?.done ? "" : `<span class="cur"></span>`}</div></div>
+        <div><div class="field"><label>Log</label></div><div class="jl-out live" id="term">${logLines((l?.lines ?? []).map((x) => lineOf(x, /^job /.test(x) ? "head" : /^(READY|SAFE) /.test(x) ? "ok" : undefined)))}${l?.done ? "" : `<div class="ll"><span class="lnum"></span><span class="ltx"><span class="cur"></span></span></div>`}</div></div>
       </div>
       <div class="drawer-f">${
         l?.done
@@ -1125,19 +1226,50 @@ async function loadDetail(id: string) {
   if (ui.detail?.id === id) return;
   ui.detail = null;
   ui.tab = "summary";
-  ui.diffFile = 0;
   ui.openCheck = null;
+  ui.views = new Map();
+  ui.files = [];
+  ui.treeFilter = "";
+  ui.activeFile = 0;
+  ui.logQuery = "";
   try {
     const r = await api<{ job: Job; patch: string; evidence: string }>(
       `/api/runs/${encodeURIComponent(id)}`,
     );
     ui.detail = { id, ...r };
+    ui.files = parsePatch(r.patch);
+    ui.steps = buildSteps(r.job);
+    // Failed and warning steps open by default, like a CI log.
+    ui.logOpen = new Set(
+      ui.steps.filter((s) => s.status === "fail" || s.status === "warn").map((s) => s.id),
+    );
   } catch (e) {
     toast((e as Error).message, true);
     go("runs");
   }
   render();
 }
+/** Show the unchanged lines hidden before hunk `g` (or after the last hunk). */
+async function expandGap(fi: number, g: number, rerender = true) {
+  const f = ui.files[fi];
+  const det = ui.detail;
+  if (!f || !det) return;
+  const vw = viewOf(fi);
+  if (!vw.full) {
+    try {
+      const r = await api<{ text: string }>(
+        `/api/runs/${encodeURIComponent(det.id)}/file?side=${f.status === "deleted" ? "before" : "after"}&path=${encodeURIComponent(f.path)}`,
+      );
+      vw.full = r.text.split("\n");
+    } catch (e) {
+      toast((e as Error).message, true);
+      return;
+    }
+  }
+  vw.expanded.add(g);
+  if (rerender) render();
+}
+
 async function apply(id: string) {
   if (!confirm("Apply this patch to your working tree and stage it?")) return;
   ui.busy.add(`apply:${id}`);
@@ -1208,6 +1340,14 @@ function render() {
   }
   const t2 = document.getElementById("term");
   if (t2 && atBottom) t2.scrollTop = t2.scrollHeight;
+  // On narrow screens the tab strip scrolls: keep the open tab in view.
+  const tabs = document.querySelector<HTMLElement>(".tabs");
+  const on = tabs?.querySelector<HTMLElement>(".tab.on");
+  if (tabs && on && tabs.scrollWidth > tabs.clientWidth)
+    tabs.scrollLeft = Math.max(
+      0,
+      on.getBoundingClientRect().left - tabs.getBoundingClientRect().left - 16,
+    );
 }
 
 async function onRoute() {
@@ -1273,12 +1413,88 @@ document.addEventListener("click", async (e) => {
     case "scan":
       scan();
       break;
-    case "diff-file":
-      ui.diffFile = Number(v);
+    case "diff-mode":
+      ui.split = v === "split";
+      try {
+        localStorage.setItem("bumpsmith-diff", v);
+      } catch {
+        // not persisted
+      }
       render();
       break;
     case "wrap":
-      ui.diffWrap = !ui.diffWrap;
+      ui.wrap = !ui.wrap;
+      render();
+      break;
+    case "file-toggle": {
+      const vw = viewOf(Number(t.dataset.f));
+      if (vw.viewed) vw.viewed = false;
+      else vw.open = !vw.open;
+      saveViewed();
+      render();
+      break;
+    }
+    case "file-viewed": {
+      const vw = viewOf(Number(t.dataset.f));
+      vw.viewed = (t as HTMLInputElement).checked;
+      if (!vw.viewed) vw.open = true;
+      saveViewed();
+      render();
+      break;
+    }
+    case "file-load":
+      viewOf(Number(t.dataset.f)).loaded = true;
+      render();
+      break;
+    case "file-jump": {
+      const fi = Number(t.dataset.f);
+      ui.activeFile = fi;
+      const vw = viewOf(fi);
+      vw.open = true;
+      render();
+      document.getElementById(`file-${fi}`)?.scrollIntoView({ block: "start" });
+      break;
+    }
+    case "diff-expand":
+      await expandGap(Number(t.dataset.f), Number(t.dataset.g));
+      break;
+    case "file-expand-all": {
+      const fi = Number(t.dataset.f);
+      const f = ui.files[fi];
+      if (f) for (let g = 0; g <= f.hunks.length; g++) await expandGap(fi, g, false);
+      render();
+      break;
+    }
+    case "copy-text":
+      await navigator.clipboard.writeText(t.dataset.v ?? "");
+      toast("Copied");
+      break;
+    case "log-step":
+      if (ui.logOpen.has(v)) ui.logOpen.delete(v);
+      else ui.logOpen.add(v);
+      render();
+      break;
+    case "log-all":
+      ui.logOpen = v === "open" ? new Set(ui.steps.map((s) => s.id)) : new Set();
+      render();
+      break;
+    case "log-download": {
+      const blob = new Blob([logText(ui.steps)], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `bumpsmith-${ui.detail?.id ?? "run"}.log`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      break;
+    }
+    case "goto-log":
+      ui.tab = "log";
+      ui.logOpen.add(v);
+      render();
+      document.getElementById(`step-${v}`)?.scrollIntoView({ block: "start" });
+      break;
+    case "report-mode":
+      ui.reportMode = v === "code" ? "code" : "preview";
       render();
       break;
     case "toggle-check":
@@ -1380,6 +1596,12 @@ document.addEventListener("input", (e) => {
   const el = e.target as HTMLInputElement;
   if (el.id === "q") {
     ui.query = el.value;
+    render();
+  } else if (el.id === "tree-q") {
+    ui.treeFilter = el.value;
+    render();
+  } else if (el.id === "log-q") {
+    ui.logQuery = el.value;
     render();
   } else if (el.id === "pal") {
     ui.palQuery = el.value;
