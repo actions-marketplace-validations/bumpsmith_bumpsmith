@@ -514,23 +514,53 @@ export const UV_SYNC = sh(
   ].join("\n"),
 );
 
+/** Install output that says the chosen Python is wrong for the pinned packages. */
+const WRONG_PYTHON =
+  "python version|Python>=|Python<|requires-python|Python ABI|python_requires|cp3[0-9]+|Failed to build|failed-wheel-build|no matching distribution|requires a different Python|Unable to find installation candidates";
+
+/**
+ * Run `body` (a shell snippet using $PY, the interpreter path) on the chosen Python; when
+ * it fails because pinned packages do not fit that Python (no wheels, builds from source
+ * that fail), try the image's other interpreters, older ones first.
+ */
+function withPythonFallback(python: string, body: string, reset: string): string[] {
+  const minor = (v: string) => Number(v.split(".")[1]);
+  const older = SANDBOX_PYTHONS.filter((v) => minor(v) < minor(python)).sort(
+    (a, b) => minor(b) - minor(a),
+  );
+  const newer = SANDBOX_PYTHONS.filter((v) => minor(v) > minor(python)).sort(
+    (a, b) => minor(a) - minor(b),
+  );
+  const others = [...older, ...newer].join(" ");
+  return sh(
+    [
+      `attempt() { PY="$(uv python find "$1" 2>/dev/null || command -v python3)"; ${body}; }`,
+      `out=$(attempt ${python} 2>&1); rc=$?; printf '%s\\n' "$out"`,
+      `if [ $rc -ne 0 ] && printf '%s' "$out" | grep -qiE '${WRONG_PYTHON}'; then`,
+      `  for v in ${others}; do echo "bumpsmith: retrying with Python $v"; ${reset}; if attempt "$v"; then rc=0; break; fi; done`,
+      "fi",
+      "exit $rc",
+    ].join("\n"),
+  );
+}
+
 /** Poetry: refresh a lock the bump made stale (versions otherwise kept), then install. */
 export function poetryInstall(python: string): string[] {
   const install = "poetry install --no-interaction --all-extras --all-groups";
-  return sh(
+  return withPythonFallback(
+    python,
     [
-      `poetry env use -q "$(uv python find ${python} 2>/dev/null || command -v python3)" >/dev/null`,
+      `poetry env use -q "$PY" >/dev/null`,
       "{ poetry check --lock >/dev/null 2>&1 || poetry lock --no-interaction; }",
       `{ ${install} || ${install} --no-root; }`,
     ].join(" && "),
+    "rm -rf .venv",
   );
 }
 
 /** Pipenv: installs from Pipfile, re-locking when the bump made Pipfile.lock stale. */
 export function pipenvInstall(python: string): string[] {
-  return sh(
-    `pipenv install --dev --python "$(uv python find ${python} 2>/dev/null || command -v python3)"`,
-  );
+  return withPythonFallback(python, 'pipenv install --dev --python "$PY"', "rm -rf .venv");
 }
 
 const PY_MANIFEST = /(^|\/)([^/]*requirements[^/]*\.(txt|in)|pyproject\.toml|Pipfile|setup\.cfg)$/;
@@ -701,6 +731,14 @@ async function inventoryPython(root: string): Promise<Inventory> {
       ensurePytest: hasTests && !djangoRunner,
     });
     runner = [];
+  }
+  // Tools with an in-project .venv: provide pytest when the project leaves it to CI. The
+  // lockfile is untouched (installed straight into the venv).
+  if (pm !== "pip" && hasTests && !djangoRunner) {
+    const quoted = installArgv.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+    installArgv = sh(
+      `${quoted} && { [ ! -x .venv/bin/python ] || .venv/bin/python -m pytest --version >/dev/null 2>&1 || uv pip install -q --python .venv pytest; }`,
+    );
   }
   const py = pm === "pip" ? [VPY] : [...runner, "python"];
   const checks: CheckCommand[] = [{ name: "install", argv: installArgv }];

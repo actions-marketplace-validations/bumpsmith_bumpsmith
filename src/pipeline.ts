@@ -52,6 +52,7 @@ import type { CheckName, CheckResult, Ecosystem, ImpactMap, JobState } from "./s
 import { runOk } from "./util/proc.ts";
 import { containedPath } from "./util/safe-fs.ts";
 import {
+  CHECK_TIMEOUT_SEC,
   compareWithBaseline,
   Deadline,
   filesFromOutput,
@@ -381,7 +382,7 @@ export function installFailureReason(baseline: CheckResult[]): string {
 
 /** Plain words for checks that already fail before the upgrade, when the cause is recognisable. */
 export function checkFailureReason(baseline: CheckResult[]): string | null {
-  const failing = baseline.filter((c) => c.name !== "install" && !c.passed);
+  const failing = baseline.filter((c) => c.name !== "install" && !c.passed && !c.timed_out);
   if (!failing.length) return null;
   const out = failing.map((c) => c.output_tail).join("\n");
   const names = failing.map((c) => c.name).join(", ");
@@ -708,7 +709,9 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     const timedOut = job.baseline.filter((c) => c.timed_out).map((c) => c.name);
     const checks = inv.checks.filter((c) => !timedOut.includes(c.name));
     if (timedOut.length)
-      job.notes.push(`Skipped checks that timed out at baseline: ${timedOut.join(", ")}.`);
+      job.notes.push(
+        `Skipped checks that take longer than the ${CHECK_TIMEOUT_SEC / 60}-minute limit: ${timedOut.join(", ")}. Set a faster command (for example a subset of the tests) under checks: in .bumpsmith.yml.`,
+      );
 
     /** Lockfile-only update of a transitive dependency, then report what version it reached. */
     const updateTransitive = async (pm: string, cwd: string | undefined) => {
@@ -739,171 +742,186 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     };
 
     // Bump the version inside the sandbox
-    const manifest = "package.json";
-    const cur =
-      eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
-    if (eco === "npm") {
-      const before = new Date(Date.now() - minAge * 86_400_000);
-      // "yarn" can be Yarn 1 handing off to a vendored Yarn 2+ (yarnPath in .yarnrc.yml);
-      // Yarn 2+ adds to the workspace in cwd and rejects Yarn 1's -W.
-      const vendoredBerry =
-        inv.packageManager === "yarn" &&
-        (existsSync(join(repoDir, ".yarnrc.yml")) || existsSync(join(repoRoot, ".yarnrc.yml")));
-      const isWorkspaceRoot =
-        existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0;
-      // Where the package is declared: this directory, and/or workspace members under it.
-      const targets: { dir: string; member: boolean; text: string }[] = [];
-      if (npmDepInfo(cur.stdout, input.packageName))
-        targets.push({ dir: sub, member: workspaceMember, text: cur.stdout });
-      for (const m of members) {
-        const text = (await sb.exec(["cat", "--", "package.json"], { cwd: `/workspace/${m.dir}` }))
-          .stdout;
-        targets.push({ dir: m.dir, member: true, text });
-      }
-      if (!targets.length && !transitive)
-        throw new Error(`could not find ${input.packageName} in ${manifest}`);
-      if (transitive) await updateTransitive(inv.packageManager, workspaceMember ? undefined : wd);
-
-      // Grouped updates: every extra package must pass the same release gate.
-      const extras: string[] = [];
-      for (const extra of input.alsoUpgrade ?? []) {
-        try {
-          const xrel = await getRelease("npm", extra.name, extra.to);
-          const xgate = releaseGate(
-            xrel,
-            await checkMalicious("npm", extra.name, extra.to),
-            minAge,
-          );
-          if (xgate.allowed) extras.push(`${extra.name}@${extra.to}`);
-          else
-            job.notes.push(
-              `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`,
-            );
-        } catch (err) {
-          job.notes.push(
-            `Not upgraded with the group: ${extra.name}@${extra.to} (${(err as Error).message.slice(0, 120)}).`,
-          );
+    // When the dependencies cannot install even before the upgrade, a failing bump is the
+    // same problem, not a crash: say so and stop.
+    const baselineInstalled = !!job.baseline.find((c) => c.name === "install")?.passed;
+    try {
+      const manifest = "package.json";
+      const cur =
+        eco === "npm" ? await sb.exec(["cat", "--", manifest], { cwd: wd }) : { stdout: "" };
+      if (eco === "npm") {
+        const before = new Date(Date.now() - minAge * 86_400_000);
+        // "yarn" can be Yarn 1 handing off to a vendored Yarn 2+ (yarnPath in .yarnrc.yml);
+        // Yarn 2+ adds to the workspace in cwd and rejects Yarn 1's -W.
+        const vendoredBerry =
+          inv.packageManager === "yarn" &&
+          (existsSync(join(repoDir, ".yarnrc.yml")) || existsSync(join(repoRoot, ".yarnrc.yml")));
+        const isWorkspaceRoot =
+          existsSync(join(repoDir, "pnpm-workspace.yaml")) || inv.workspaces.length > 0;
+        // Where the package is declared: this directory, and/or workspace members under it.
+        const targets: { dir: string; member: boolean; text: string }[] = [];
+        if (npmDepInfo(cur.stdout, input.packageName))
+          targets.push({ dir: sub, member: workspaceMember, text: cur.stdout });
+        for (const m of members) {
+          const text = (
+            await sb.exec(["cat", "--", "package.json"], { cwd: `/workspace/${m.dir}` })
+          ).stdout;
+          targets.push({ dir: m.dir, member: true, text });
         }
-      }
-      const gatedCompanions = new Map<string, boolean>();
-      const companionOk = async (c: string) => {
-        if (!gatedCompanions.has(c)) {
+        if (!targets.length && !transitive)
+          throw new Error(`could not find ${input.packageName} in ${manifest}`);
+        if (transitive)
+          await updateTransitive(inv.packageManager, workspaceMember ? undefined : wd);
+
+        // Grouped updates: every extra package must pass the same release gate.
+        const extras: string[] = [];
+        for (const extra of input.alsoUpgrade ?? []) {
           try {
-            const crel = await getRelease("npm", c, input.to);
-            gatedCompanions.set(
-              c,
-              releaseGate(crel, await checkMalicious("npm", c, input.to), minAge).allowed,
+            const xrel = await getRelease("npm", extra.name, extra.to);
+            const xgate = releaseGate(
+              xrel,
+              await checkMalicious("npm", extra.name, extra.to),
+              minAge,
             );
-          } catch {
-            gatedCompanions.set(c, false); // no such version of the companion
+            if (xgate.allowed) extras.push(`${extra.name}@${extra.to}`);
+            else
+              job.notes.push(
+                `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`,
+              );
+          } catch (err) {
+            job.notes.push(
+              `Not upgraded with the group: ${extra.name}@${extra.to} (${(err as Error).message.slice(0, 120)}).`,
+            );
           }
         }
-        return gatedCompanions.get(c) === true;
-      };
-
-      for (const t of targets) {
-        const info = npmDepInfo(t.text, input.packageName);
-        if (!info) continue;
-        // Companions must exist at the target version and pass the same release gate;
-        // grouped extras move only where this manifest already declares them.
-        const companions: string[] = [];
-        for (const c of npmCompanions(t.text, input.packageName, from))
-          if (await companionOk(c)) companions.push(c);
-        for (const x of extras) {
-          const name = x.slice(0, x.lastIndexOf("@"));
-          if (npmDepInfo(t.text, name)) companions.push(x);
-        }
-        if (companions.length)
-          job.notes.push(
-            `Upgraded together with ${input.packageName}${t.dir ? ` in ${t.dir}` : ""}: ${companions.join(", ")}.`,
-          );
-        const workspaceRoot = !t.member && !vendoredBerry && isWorkspaceRoot;
-        // npm adds to a workspace member from the root with --workspace.
-        const npmMember = t.member && inv.packageManager === "npm";
-        const upArgv = [
-          ...npmUpgradeArgv(
-            inv.packageManager,
-            input.packageName,
-            input.to,
-            info,
-            before,
-            workspaceRoot,
-            companions,
-          ),
-          ...(npmMember ? ["--workspace", t.dir] : []),
-        ];
-        const upOpts = {
-          network: true,
-          timeoutSec: 15 * 60,
-          cwd: npmMember || !t.dir ? undefined : `/workspace/${t.dir}`,
+        const gatedCompanions = new Map<string, boolean>();
+        const companionOk = async (c: string) => {
+          if (!gatedCompanions.has(c)) {
+            try {
+              const crel = await getRelease("npm", c, input.to);
+              gatedCompanions.set(
+                c,
+                releaseGate(crel, await checkMalicious("npm", c, input.to), minAge).allowed,
+              );
+            } catch {
+              gatedCompanions.set(c, false); // no such version of the companion
+            }
+          }
+          return gatedCompanions.get(c) === true;
         };
-        let up = await sb.exec(upArgv, upOpts);
-        if (up.exitCode !== 0 && inv.packageManager === "npm") {
-          const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
-          const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
-          if (peerConflict) {
-            job.notes.push(
-              "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does.",
-            );
-            up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
-            if (up.exitCode !== 0) up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
-          } else {
-            job.notes.push(
-              "npm could not apply the release-age limit to transitive dependencies (--before); installed without it.",
-            );
-            up = await sb.exec(noBefore, upOpts);
+
+        for (const t of targets) {
+          const info = npmDepInfo(t.text, input.packageName);
+          if (!info) continue;
+          // Companions must exist at the target version and pass the same release gate;
+          // grouped extras move only where this manifest already declares them.
+          const companions: string[] = [];
+          for (const c of npmCompanions(t.text, input.packageName, from))
+            if (await companionOk(c)) companions.push(c);
+          for (const x of extras) {
+            const name = x.slice(0, x.lastIndexOf("@"));
+            if (npmDepInfo(t.text, name)) companions.push(x);
           }
+          if (companions.length)
+            job.notes.push(
+              `Upgraded together with ${input.packageName}${t.dir ? ` in ${t.dir}` : ""}: ${companions.join(", ")}.`,
+            );
+          const workspaceRoot = !t.member && !vendoredBerry && isWorkspaceRoot;
+          // npm adds to a workspace member from the root with --workspace.
+          const npmMember = t.member && inv.packageManager === "npm";
+          const upArgv = [
+            ...npmUpgradeArgv(
+              inv.packageManager,
+              input.packageName,
+              input.to,
+              info,
+              before,
+              workspaceRoot,
+              companions,
+            ),
+            ...(npmMember ? ["--workspace", t.dir] : []),
+          ];
+          const upOpts = {
+            network: true,
+            timeoutSec: 15 * 60,
+            cwd: npmMember || !t.dir ? undefined : `/workspace/${t.dir}`,
+          };
+          let up = await sb.exec(upArgv, upOpts);
+          if (up.exitCode !== 0 && inv.packageManager === "npm") {
+            const noBefore = upArgv.filter((a) => !a.startsWith("--before"));
+            const peerConflict = /ERESOLVE|peer dep/i.test(`${up.stdout}${up.stderr}`);
+            if (peerConflict) {
+              job.notes.push(
+                "npm reported a peer dependency conflict; installed with --legacy-peer-deps, as the project's own install does.",
+              );
+              up = await sb.exec([...upArgv, "--legacy-peer-deps"], upOpts);
+              if (up.exitCode !== 0)
+                up = await sb.exec([...noBefore, "--legacy-peer-deps"], upOpts);
+            } else {
+              job.notes.push(
+                "npm could not apply the release-age limit to transitive dependencies (--before); installed without it.",
+              );
+              up = await sb.exec(noBefore, upOpts);
+            }
+          }
+          if (up.exitCode !== 0)
+            throw new Error(
+              `could not install ${input.packageName}@${input.to}${t.dir ? ` in ${t.dir}` : ""}: ${(up.stderr || up.stdout).slice(-1500)}`,
+            );
         }
-        if (up.exitCode !== 0)
+      } else {
+        // Every manifest that declares the package moves together (requirements*.txt,
+        // requirements*.in, pyproject.toml); one stale file would reinstall the old version.
+        const extras: { name: string; to: string }[] = [];
+        for (const extra of input.alsoUpgrade ?? []) {
+          const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
+          const ok =
+            xrel &&
+            releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
+          if (ok) extras.push(extra);
+          else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
+        }
+        const touched: string[] = [];
+        for (const m of inv.manifests) {
+          const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
+          let next = bumpFile(eco, m, text, input.packageName, input.to);
+          if (!next) continue;
+          for (const x of extras) next = bumpFile(eco, m, next, x.name, x.to) ?? next;
+          await sb.exec(["sh", "-c", 'cat > "$1"', "sh", m], { input: next, cwd: wd });
+          touched.push(m);
+        }
+        if (!touched.length && transitive) await updateTransitive(inv.packageManager, wd);
+        else if (!touched.length)
           throw new Error(
-            `could not install ${input.packageName}@${input.to}${t.dir ? ` in ${t.dir}` : ""}: ${(up.stderr || up.stdout).slice(-1500)}`,
+            `could not find ${input.packageName} in ${inv.manifests.join(", ") || "any manifest"}`,
           );
-      }
-    } else {
-      // Every manifest that declares the package moves together (requirements*.txt,
-      // requirements*.in, pyproject.toml); one stale file would reinstall the old version.
-      const extras: { name: string; to: string }[] = [];
-      for (const extra of input.alsoUpgrade ?? []) {
-        const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
-        const ok =
-          xrel &&
-          releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
-        if (ok) extras.push(extra);
-        else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
-      }
-      const touched: string[] = [];
-      for (const m of inv.manifests) {
-        const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
-        let next = bumpFile(eco, m, text, input.packageName, input.to);
-        if (!next) continue;
-        for (const x of extras) next = bumpFile(eco, m, next, x.name, x.to) ?? next;
-        await sb.exec(["sh", "-c", 'cat > "$1"', "sh", m], { input: next, cwd: wd });
-        touched.push(m);
-      }
-      if (!touched.length && transitive) await updateTransitive(inv.packageManager, wd);
-      else if (!touched.length)
-        throw new Error(
-          `could not find ${input.packageName} in ${inv.manifests.join(", ") || "any manifest"}`,
-        );
-      // pip-tools: hash-pinned requirements compiled from a .in file are regenerated from
-      // it (uv keeps every other pin as it was); editing the version alone breaks the hashes.
-      for (const m of touched.filter((f) => f.endsWith(".txt"))) {
-        const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
-        if (!text.includes("--hash=")) continue;
-        const source = m.replace(/\.txt$/, ".in");
-        if (!inv.manifests.includes(source)) {
-          job.notes.push(
-            `${m} pins hashes but has no ${source} to compile from; its hashes were not regenerated.`,
+        // pip-tools: hash-pinned requirements compiled from a .in file are regenerated from
+        // it (uv keeps every other pin as it was); editing the version alone breaks the hashes.
+        for (const m of touched.filter((f) => f.endsWith(".txt"))) {
+          const text = (await sb.exec(["cat", "--", m], { cwd: wd })).stdout;
+          if (!text.includes("--hash=")) continue;
+          const source = m.replace(/\.txt$/, ".in");
+          if (!inv.manifests.includes(source)) {
+            job.notes.push(
+              `${m} pins hashes but has no ${source} to compile from; its hashes were not regenerated.`,
+            );
+            continue;
+          }
+          const r = await sb.exec(
+            ["uv", "pip", "compile", "--quiet", "--generate-hashes", source, "-o", m],
+            { network: true, timeoutSec: 10 * 60, cwd: wd },
           );
-          continue;
+          if (r.exitCode !== 0)
+            job.notes.push(`Could not recompile ${m} from ${source}: ${r.stderr.slice(-300)}`);
         }
-        const r = await sb.exec(
-          ["uv", "pip", "compile", "--quiet", "--generate-hashes", source, "-o", m],
-          { network: true, timeoutSec: 10 * 60, cwd: wd },
-        );
-        if (r.exitCode !== 0)
-          job.notes.push(`Could not recompile ${m} from ${source}: ${r.stderr.slice(-300)}`);
       }
+    } catch (err) {
+      if (baselineInstalled) throw err;
+      job.state = "needs_human";
+      job.notes.push(
+        `The version bump could not be applied either, because the dependencies do not install in the sandbox (see the baseline install). Details: ${String((err as Error).message ?? err).slice(0, 300)}`,
+      );
+      return job;
     }
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
