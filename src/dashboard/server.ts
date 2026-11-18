@@ -7,8 +7,11 @@ import https from "node:https";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import QRCode from "qrcode";
 import { inventory } from "../inventory/inventory.ts";
+import { bumpsmithVersion } from "../mcp/local.ts";
+import { createMcpServer, type McpHost, type McpRepo } from "../mcp/tools.ts";
 import type { JobRecord } from "../pipeline.ts";
 import { latestRelease } from "../registry/registry.ts";
 import { audit, verifyAudit } from "../server/audit.ts";
@@ -2154,6 +2157,9 @@ export async function startDashboard(opts: DashboardOptions) {
           : send(res, 404, { error: "not found" });
       }
 
+      // MCP for applications and agents (Streamable HTTP), authenticated by a personal API token.
+      if (path === "/mcp") return await serveMcp(req, res, host);
+
       let route: Route | undefined;
       let m: RegExpExecArray | null = null;
       for (const r of routes) {
@@ -2227,6 +2233,117 @@ export async function startDashboard(opts: DashboardOptions) {
         return send(res, 500, { error: String((err as Error).message ?? err).slice(0, 300) });
     }
   };
+  /**
+   * `/mcp`: Bumpsmith's tools for applications and agents, over Streamable HTTP. Each request
+   * carries a personal API token (Authorization: Bearer bs_pat_…); the token's scopes and the
+   * access matrix decide which repositories and tools it can use. Runs it starts show up live in
+   * the dashboard and in the audit log, like any other.
+   */
+  const serveMcp = async (req: http.IncomingMessage, res: http.ServerResponse, host: string) => {
+    const deny = (code: number, message: string) => {
+      res.writeHead(code, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        ...(code === 401
+          ? { "www-authenticate": 'Bearer realm="bumpsmith", error="invalid_token"' }
+          : {}),
+      });
+      res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message }, id: null }));
+    };
+    const origin = req.headers.origin;
+    if (origin && origin !== (publicUrl ? publicUrl.origin : `http${secure ? "s" : ""}://${host}`))
+      return deny(403, "cross-origin request refused");
+    const ip = clientIp(req, trusted);
+    const bearer = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
+    const p = bearer ? auth.principalFromToken(bearer) : null;
+    if (!p) {
+      if (auth.rateLimited(ip)) return deny(429, "Too many attempts. Wait a few minutes.");
+      return deny(
+        401,
+        "Create a personal API token in Bumpsmith (Account → API tokens) and send it as Authorization: Bearer <token>.",
+      );
+    }
+    const orgId = p.user.org_id;
+    const env = orgEnv(orgId, await environment());
+    const repoOf = (w: Workspace): McpRepo | null => {
+      const e = org.effective(p.user, p.permissions, w);
+      const scoped = p.apiToken
+        ? e.permissions.filter((x) => p.permissions.includes(x))
+        : e.permissions;
+      if (!scoped.includes("runs.view")) return null;
+      return {
+        id: w.slug,
+        name: w.name,
+        path: w.path,
+        runsDir: w.runs_dir,
+        can: (perm) => scoped.includes(perm),
+      };
+    };
+    const visible = () =>
+      org
+        .workspaces(orgId)
+        .map((w) => ({ w, r: repoOf(w) }))
+        .filter((x): x is { w: Workspace; r: McpRepo } => !!x.r);
+    const mcpHost: McpHost = {
+      mode: "server",
+      repos: async () => visible().map((x) => x.r),
+      repo: async (id) => {
+        const all = visible();
+        if (!id) {
+          if (all.length === 1) return (all[0] as { r: McpRepo }).r;
+          throw new Error("Name the repository: call list_repositories for the slugs.");
+        }
+        const hit = all.find((x) => x.r.id === id);
+        if (!hit) throw new Error(`No repository "${id}" that you can access.`);
+        return hit.r;
+      },
+      start: (repo, pkg, version, o) => {
+        const w = visible().find((x) => x.r.id === repo.id)?.w as Workspace;
+        const provider = o.provider ?? env.defaultProvider;
+        const lr = startRun(w, pkg, version, provider, o.budget);
+        audit(db, {
+          orgId,
+          actorId: p.user.id,
+          actor: p.user.email,
+          action: "run.started",
+          target: `${pkg}@${version}`,
+          ip,
+          detail: { provider, budget: o.budget, via: "mcp" },
+        });
+        return lr;
+      },
+      live: (id) => {
+        const lr = live.get(id);
+        return lr && visible().some((x) => x.w.id === lr.ws) ? lr : undefined;
+      },
+      exec: (repo, args) =>
+        new Promise((ok) => {
+          const w = visible().find((x) => x.r.id === repo.id)?.w as Workspace;
+          const child = cli(args, w.path, orgId);
+          let out = "";
+          child.stdout.on("data", (d: Buffer) => {
+            out += d.toString("utf8");
+          });
+          child.stderr.on("data", (d: Buffer) => {
+            out += d.toString("utf8");
+          });
+          const timer = setTimeout(() => child.kill("SIGTERM"), 10 * 60_000);
+          child.on("close", (code) => {
+            clearTimeout(timer);
+            ok({ code: code ?? 1, out: out.replace(ANSI, "") });
+          });
+        }),
+    };
+    const mcp = createMcpServer(mcpHost, bumpsmithVersion());
+    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await mcp.connect(transport);
+    res.on("close", () => {
+      void transport.close();
+      void mcp.close();
+    });
+    await transport.handleRequest(req, res);
+  };
+
   const server = opts.tls
     ? https.createServer({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.2" }, handle)
     : http.createServer(handle);

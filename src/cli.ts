@@ -16,6 +16,7 @@ import { runBench, summarise } from "./bench/run.ts";
 import { mineZoo, runZoo, saveZoo, summariseZoo, ZOO_RUNS, type ZooTask } from "./bench/zoo.ts";
 import { npmApiDiff, renderApiDiff } from "./change/dts-diff.ts";
 import { buildChangeRecord } from "./change/extract.ts";
+import { repoConfig } from "./config/load.ts";
 import { CONFIG_PATHS, parseConfig } from "./config/repo-config.ts";
 import { tokenClient } from "./github/client.ts";
 import { cloneAtCommit } from "./github/clone.ts";
@@ -23,12 +24,14 @@ import { buildImpactMap } from "./impact/impact.ts";
 import { computeDebt } from "./inventory/debt.ts";
 import { inventory } from "./inventory/inventory.ts";
 import { collectComponents, cycloneDx } from "./inventory/sbom.ts";
+import { scanRepository } from "./inventory/scan.ts";
 import { AnthropicProvider } from "./model/anthropic.ts";
 import { ClaudeCodeProvider } from "./model/claude-code.ts";
 import { CodexProvider } from "./model/codex.ts";
 import { Ledger } from "./model/ledger.ts";
 import { compatibleProvider, PRESETS } from "./model/openai-compatible.ts";
 import type { Effort, ModelProvider } from "./model/provider.ts";
+import { defaultProvider, provider } from "./model/select.ts";
 import { runJob } from "./pipeline.ts";
 import { getRelease } from "./registry/registry.ts";
 import { cleanupStale } from "./sandbox/docker.ts";
@@ -46,6 +49,7 @@ Usage (run inside your repository):
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
   bumpsmith dashboard [--data dir]              the dashboard (sign-in required): review diffs, apply patches, start upgrades live
+  bumpsmith mcp [--repo dir]                    MCP server over stdio, for AI agents and editors (see docs/mcp.md)
   bumpsmith server --public-url https://host    self-hosted, multi-user dashboard (see docs/self-hosting.md)
              [--host 0.0.0.0] [--port 4477] [--data dir]
              [--tls-cert file --tls-key file | --behind-proxy [--trusted-proxy ip,ip]]
@@ -79,36 +83,10 @@ GitHub (--github, rescue): uses GITHUB_TOKEN, or your GitHub CLI login (gh auth 
 
 Requires Docker (untrusted install/test steps run in an isolated container).`;
 
-function defaultProvider(): string {
-  return process.env.ANTHROPIC_API_KEY ? "anthropic-api" : "claude-code";
-}
-
 function parseSpec(spec: string | undefined): { name: string; version: string } {
   const m = /^(@?[^@\s]+)@(\d[\w.+-]*)$/.exec(spec ?? "");
   if (!m?.[1] || !m[2]) throw new Error("expected <package>@<version>, e.g. zod@4.1.0");
   return { name: m[1], version: m[2] };
-}
-
-async function repoConfig(dir: string) {
-  for (const f of CONFIG_PATHS) {
-    try {
-      const r = parseConfig(await readFile(join(dir, f), "utf8"));
-      for (const p of r.problems)
-        process.stderr.write(`${f}:${p.line ?? "?"} ${p.path} ${p.message}\n`);
-      return r.config;
-    } catch {
-      // not present
-    }
-  }
-  return parseConfig(null).config;
-}
-
-function provider(name: string, model?: string, baseURL?: string): ModelProvider {
-  if (name in PRESETS || name === "custom") return compatibleProvider(name, model ?? "", baseURL);
-  if (name === "anthropic-api") return new AnthropicProvider(model);
-  if (name === "claude-code") return new ClaudeCodeProvider(model);
-  if (name === "codex") return new CodexProvider(model);
-  throw new Error(`unknown provider ${name}`);
 }
 
 const INIT_CONFIG = `# Bumpsmith configuration (optional). Reference: https://github.com/bumpsmith/bumpsmith#configuration-bumpsmithyml-optional
@@ -380,29 +358,7 @@ async function main() {
     }
     case "scan": {
       const dir = resolve(values.repo ?? ".");
-      const inv = await inventory(dir);
-      const { components, complete } = await collectComponents(inv);
-      const resolved = new Map(components.filter((c) => c.direct).map((c) => [c.name, c.version]));
-      const cfg = await repoConfig(dir);
-      const report = await computeDebt({
-        inv,
-        commit: "working-tree",
-        resolved,
-        botPrs: [],
-        unsupported: [],
-        minReleaseAgeDays: cfg.release_age_days,
-      });
-      const outDir = join(dir, ".bumpsmith");
-      await mkdir(outDir, { recursive: true });
-      await writeFile(
-        join(outDir, "sbom.cdx.json"),
-        JSON.stringify(
-          cycloneDx({ repoFullName: basename(dir), commit: "working-tree", components, complete }),
-          null,
-          2,
-        ),
-      );
-      await writeFile(join(outDir, "debt.json"), JSON.stringify(report, null, 2));
+      const { inv, report } = await scanRepository(dir);
       console.log(
         `${inv.ecosystem} (${inv.packageManager}), ${report.directDependencies} direct dependencies, ${report.behind.length} a major version or more behind:\n`,
       );
@@ -572,6 +528,11 @@ async function main() {
         return;
       }
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
+    }
+    case "mcp": {
+      const { serveLocal } = await import("./mcp/local.ts");
+      await serveLocal(resolve(values.repo ?? "."), process.argv[1] ?? "");
+      return;
     }
     case "server": {
       quietSqliteWarning();

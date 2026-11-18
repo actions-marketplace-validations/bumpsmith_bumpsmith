@@ -16,7 +16,7 @@ it reads the changelog, fixes your code in a sandbox, proves it with your own te
 [![npm and PyPI](https://img.shields.io/badge/ecosystems-npm%20%C2%B7%20PyPI-3c3c3a)](#supported)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-1a7f4b)](CONTRIBUTING.md)
 
-[**Quick start**](#quick-start) · [**How it works**](#how-it-works) · [**Benchmarks**](#benchmarks) · [**Self-hosting**](docs/self-hosting.md) · [**Security**](#how-it-stays-safe)
+[**Quick start**](#quick-start) · [**MCP & skill**](docs/mcp.md) · [**How it works**](#how-it-works) · [**Benchmarks**](#benchmarks) · [**Self-hosting**](docs/self-hosting.md) · [**Security**](#how-it-stays-safe)
 
 <a href="docs/media/hero.mp4">
   <picture>
@@ -116,6 +116,29 @@ page maps every control to SOC 2, ISO 27001, NIST 800-63B and OWASP ASVS.
 <div align="center">
 <img alt="Inviting a teammate, granting access per repository, single sign-on settings and the hash-chained audit log" src="docs/media/team.webp" width="80%">
 </div>
+
+### From your AI agent: MCP server and skill
+
+Give Claude Code, Codex, Cursor, VS Code or any MCP client the tools to upgrade dependencies with proof. They can:
+
+- check whether a release is safe to adopt;
+- explain what breaks;
+- run a verified upgrade;
+- read the evidence and apply the result.
+
+```text
+/plugin marketplace add bumpsmith/bumpsmith      # Claude Code: MCP server + skill
+/plugin install bumpsmith@bumpsmith
+```
+
+```sh
+claude mcp add bumpsmith -- npx -y bumpsmith@latest mcp     # or: codex mcp add bumpsmith -- npx -y bumpsmith@latest mcp
+```
+
+[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bumpsmith&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJ1bXBzbWl0aEBsYXRlc3QiLCJtY3AiXX0=) · [Install in VS Code](https://vscode.dev/redirect/mcp/install?name=bumpsmith&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D) · [Skill file](skills/bumpsmith/SKILL.md) · [All clients, tools, and HTTP access for teams](docs/mcp.md)
+
+A self-hosted Bumpsmith also serves MCP at `/mcp` for your applications, with personal API tokens.
+The access matrix and the audit log apply there too.
 
 ## How it works
 

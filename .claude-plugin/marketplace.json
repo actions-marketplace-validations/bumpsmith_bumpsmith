@@ -1,0 +1,16 @@
+{
+  "name": "bumpsmith",
+  "owner": { "name": "Bumpsmith", "url": "https://github.com/bumpsmith" },
+  "metadata": {
+    "description": "Bumpsmith: dependency upgrades that are verified in a sandbox before you see them."
+  },
+  "plugins": [
+    {
+      "name": "bumpsmith",
+      "source": "./",
+      "description": "Upgrade npm and PyPI dependencies across breaking changes, verified with your own tests in a sandbox. MCP server plus skill.",
+      "category": "development",
+      "tags": ["dependencies", "upgrades", "mcp", "security"]
+    }
+  ]
+}

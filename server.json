@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.bumpsmith/bumpsmith",
+  "title": "Bumpsmith",
+  "description": "Upgrade npm and PyPI dependencies across breaking changes, verified with your tests in a sandbox.",
+  "websiteUrl": "https://github.com/bumpsmith/bumpsmith",
+  "repository": {
+    "url": "https://github.com/bumpsmith/bumpsmith",
+    "source": "github",
+    "id": "1460534879"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "bumpsmith",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [{ "type": "positional", "value": "mcp" }],
+      "environmentVariables": [
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Anthropic API key for the model. Optional: without it Bumpsmith uses your signed-in Claude Code CLI.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "Key for OpenAI or any OpenAI-compatible provider (pass provider in start_upgrade). Optional.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
