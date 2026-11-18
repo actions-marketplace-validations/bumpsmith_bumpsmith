@@ -112,14 +112,54 @@ async function ensureImage(kind: ImageKind, buildArgs: string[] = []): Promise<s
  * deleted immediately after signing: the CA can never issue anything else.
  */
 export async function ensureMirrorCerts(dir = CERT_DIR): Promise<string> {
-  const { existsSync } = await import("node:fs");
+  const { existsSync, statSync } = await import("node:fs");
   const { writeFile, rm } = await import("node:fs/promises");
   // Regenerate when the served host list changes (the certificate names every host).
   const hostsFile = join(dir, "hosts.txt");
   const wanted = REGISTRY_HOSTS.join(",");
-  const current = existsSync(hostsFile) ? (await readFile(hostsFile, "utf8")).trim() : "";
-  if (existsSync(join(dir, "mirror.crt")) && existsSync(join(dir, "ca.crt")) && current === wanted)
+  const current = async () =>
+    existsSync(join(dir, "mirror.crt")) &&
+    existsSync(join(dir, "ca.crt")) &&
+    existsSync(hostsFile) &&
+    (await readFile(hostsFile, "utf8")).trim() === wanted;
+  if (await current()) return dir;
+  // Several processes (parallel test files, concurrent jobs) may get here at once: only
+  // the holder of the lock regenerates, and everyone re-checks after taking it, so no one
+  // replaces a key another process just paired with its certificate.
+  await mkdir(dirname(dir), { recursive: true });
+  const lock = `${dir}.lock`;
+  for (let i = 0; ; i++) {
+    try {
+      await mkdir(lock);
+      break;
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 120_000)
+          await rm(lock, { recursive: true, force: true });
+      } catch {
+        // lock released meanwhile
+      }
+      if (i > 600) throw new Error("timed out waiting for the mirror certificate lock");
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  try {
+    if (await current()) return dir;
+    await generateMirrorCerts(dir, wanted, hostsFile, writeFile, rm);
     return dir;
+  } finally {
+    await rm(lock, { recursive: true, force: true });
+  }
+}
+
+async function generateMirrorCerts(
+  dir: string,
+  wanted: string,
+  hostsFile: string,
+  writeFile: typeof import("node:fs/promises").writeFile,
+  rm: typeof import("node:fs/promises").rm,
+): Promise<void> {
+  await rm(hostsFile, { force: true });
   for (const f of ["mirror.crt", "mirror.key", "ca.crt"]) await rm(join(dir, f), { force: true });
   // Readable by the mirror container's own (different) user on Linux hosts. The leaf key
   // is only good for the registry hostnames, and its CA's private key is destroyed below.
@@ -199,8 +239,8 @@ export async function ensureMirrorCerts(dir = CERT_DIR): Promise<string> {
   await chmod(join(dir, "mirror.key"), 0o644);
   await chmod(join(dir, "mirror.crt"), 0o644);
   await chmod(join(dir, "ca.crt"), 0o644);
+  // Written last: its presence means the set above is complete.
   await writeFile(hostsFile, `${wanted}\n`);
-  return dir;
 }
 
 /**

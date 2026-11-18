@@ -303928,13 +303928,38 @@ async function ensureImage(kind, buildArgs = []) {
   return tag;
 }
 async function ensureMirrorCerts(dir = CERT_DIR) {
-  const { existsSync: existsSync7 } = await import("node:fs");
+  const { existsSync: existsSync7, statSync } = await import("node:fs");
   const { writeFile: writeFile5, rm: rm5 } = await import("node:fs/promises");
   const hostsFile = join11(dir, "hosts.txt");
   const wanted = REGISTRY_HOSTS.join(",");
-  const current = existsSync7(hostsFile) ? (await readFile8(hostsFile, "utf8")).trim() : "";
-  if (existsSync7(join11(dir, "mirror.crt")) && existsSync7(join11(dir, "ca.crt")) && current === wanted)
+  const current = async () => existsSync7(join11(dir, "mirror.crt")) && existsSync7(join11(dir, "ca.crt")) && existsSync7(hostsFile) && (await readFile8(hostsFile, "utf8")).trim() === wanted;
+  if (await current()) return dir;
+  await mkdir7(dirname3(dir), { recursive: true });
+  const lock = `${dir}.lock`;
+  for (let i = 0; ; i++) {
+    try {
+      await mkdir7(lock);
+      break;
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 12e4)
+          await rm5(lock, { recursive: true, force: true });
+      } catch {
+      }
+      if (i > 600) throw new Error("timed out waiting for the mirror certificate lock");
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  try {
+    if (await current()) return dir;
+    await generateMirrorCerts(dir, wanted, hostsFile, writeFile5, rm5);
     return dir;
+  } finally {
+    await rm5(lock, { recursive: true, force: true });
+  }
+}
+async function generateMirrorCerts(dir, wanted, hostsFile, writeFile5, rm5) {
+  await rm5(hostsFile, { force: true });
   for (const f of ["mirror.crt", "mirror.key", "ca.crt"]) await rm5(join11(dir, f), { force: true });
   await mkdir7(dir, { recursive: true, mode: 493 });
   const { chmod: chmodDir } = await import("node:fs/promises");
@@ -304013,7 +304038,6 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
   await chmod(join11(dir, "ca.crt"), 420);
   await writeFile5(hostsFile, `${wanted}
 `);
-  return dir;
 }
 var infraReady = null;
 function ensureInfra() {
