@@ -243,7 +243,6 @@ function sidebar(d: State) {
   const behind = d.debt?.behind.filter((b) => b.majorsBehind > 0).length;
   const link = (id: string, label: string, ic: string, n = "", hot = false) =>
     `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "on" : ""}">${icon(ic)}<span>${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
-  const prov = d.env.providers.find((p) => p.id === d.env.defaultProvider);
   const orgLink = (id: string, label: string, ic: string) =>
     `<a href="#/org/${id}" class="${ui.route === `org/${id}` ? "on" : ""}">${icon(ic)}<span>${label}</span></a>`;
   return `<aside class="sidebar">
@@ -285,12 +284,6 @@ function sidebar(d: State) {
     <div class="side-foot">
       <div class="sep"></div>
       ${userRow()}
-      <div class="sep"></div>
-      <div class="env">
-        <div class="env-row"><span class="dot ${d.env.docker ? "ok" : "bad"}"></span><b>Sandbox</b>${d.env.docker ? `Docker ${esc(d.env.docker)}` : "Docker not running"}</div>
-        <div class="env-row"><span class="dot ${prov?.ok ? "ok" : "warn"}"></span><b>Model</b>${esc(prov?.label ?? d.env.defaultProvider)}</div>
-        <div class="env-row"><span class="dot ${r.changes ? "warn" : "ok"}"></span><b>Tree</b>${r.changes === null ? "no git" : r.changes ? `${r.changes} uncommitted` : "clean"}</div>
-      </div>
     </div>
   </aside>`;
 }
@@ -1063,7 +1056,7 @@ function sandboxPage(d: State) {
         <div class="tw"><table class="t"><tbody>${d.env.providers.map((p) => `<tr style="cursor:default"><td><b>${esc(p.label)}</b>${p.id === d.env.defaultProvider ? ` <span class="badge accent">default</span>` : ""}<div class="mono muted" style="font-size:12px">${esc(p.detail)}</div></td><td class="r">${p.ok ? `<span class="st ok">${icon("checkCircle")}available</span>` : `<span class="muted">not set up</span>`}</td></tr>`).join("")}</tbody></table></div></div>
       <div class="grid" style="align-content:start">
         <div class="panel"><div class="panel-h"><h2>Sandbox</h2><div class="r">${d.env.docker ? `<span class="badge ok"><span class="dot ok"></span>ready</span>` : `<span class="badge bad">Docker not running</span>`}</div></div>
-          <div class="panel-b"><dl class="kv"><dt>Docker</dt><dd class="mono">${esc(d.env.docker ?? "start Docker Desktop or OrbStack")}</dd><dt>Network</dt><dd>registry mirror only, while installing</dd><dt>Node</dt><dd class="mono">22 · 24 · 26</dd><dt>Python</dt><dd class="mono">3.10 – 3.15</dd><dt>Runs</dt><dd class="mono">${esc(d.runsDir)}</dd></dl></div></div>
+          <div class="panel-b"><dl class="kv"><dt>Docker</dt><dd class="mono">${esc(d.env.docker ?? "start Docker Desktop or OrbStack")}</dd><dt>Network</dt><dd>registry mirror only, while installing</dd><dt>Node</dt><dd class="mono">22 · 24 · 26</dd><dt>Python</dt><dd class="mono">3.10 – 3.15</dd><dt>Runs</dt><dd class="mono">${esc(d.runsDir)}</dd><dt>Working tree</dt><dd>${d.repo.changes === null ? "not a git repository" : d.repo.changes ? `${d.repo.changes} uncommitted ${d.repo.changes === 1 ? "change" : "changes"}` : "clean"}</dd></dl></div></div>
         <div class="panel"><div class="panel-h"><h2>Privacy</h2></div><div class="panel-b muted" style="font-size:13px">This dashboard listens on 127.0.0.1 only and reads files in this repository. It sends nothing anywhere: fonts are bundled and there is no analytics. Every action is checked against your role and recorded in the audit log.</div></div>
       </div>
     </div>
