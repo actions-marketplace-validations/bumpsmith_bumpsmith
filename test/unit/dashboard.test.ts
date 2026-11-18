@@ -173,7 +173,7 @@ describe("dashboard server", () => {
   it("serves the page with a per-session token and bundled assets", async () => {
     expect(token).toMatch(/^[a-f0-9]{48}$/);
     expect((await fetch(`${base}/app.css`)).headers.get("content-type")).toMatch(/text\/css/);
-    const font = await fetch(`${base}/fonts/mona-sans.woff2`);
+    const font = await fetch(`${base}/fonts/geist.woff2`);
     expect(font.headers.get("content-type")).toBe("font/woff2");
     expect(new Uint8Array(await font.arrayBuffer()).slice(0, 4)).toEqual(
       new Uint8Array([0x77, 0x4f, 0x46, 0x32]),

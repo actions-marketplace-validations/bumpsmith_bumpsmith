@@ -92,13 +92,23 @@ const P: Record<string, string> = {
   wrap: '<path d="M3 6h18M3 12h15a3 3 0 0 1 0 6h-4"/><path d="m16 16-2 2 2 2"/><path d="M3 18h7"/>',
   route:
     '<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H12"/>',
+  checkCircle: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  xCircle: '<circle cx="12" cy="12" r="9"/><path d="m9.5 9.5 5 5M14.5 9.5l-5 5"/>',
+  alertCircle: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>',
+  minus: '<path d="M6 12h12"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
+  branch:
+    '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 4-6 3-11 8"/>',
+  play: '<path d="m8 5 11 7-11 7Z"/>',
   hourglass: '<path d="M6 2h12M6 22h12"/><path d="M7 2v4l5 6 5-6V2M7 22v-4l5-6 5 6v4"/>',
 };
 
 export const icon = (name: string, cls = "") =>
   `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] ?? ""}</svg>`;
 
-export const BRAND_MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a4c"/><stop offset="1" stop-color="#e2410c"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="#0b0b0c"/><path d="M7 18.5h18l-2.4 4.5H9.4z" fill="url(#bm)"/><path d="M11 21.5h10v3H11z" fill="#3a2a22"/><path d="M12.5 8.5 16 14l3.5-5.5" stroke="#ffb48c" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.5" cy="9" r="1.4" fill="#ff7a3d"/><circle cx="8.5" cy="11.5" r="1" fill="#ff7a3d" opacity=".7"/></svg>`;
+/** A simple mark: a bar being bumped up. Follows the theme through CSS variables. */
+export const BRAND_MARK = `<svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="var(--text)"/><path d="M7 17h10" stroke="var(--bg)" stroke-width="2" stroke-linecap="round"/><path d="m8 11.5 4-4 4 4" fill="none" stroke="#f25a1d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 // ───────────── formatting ─────────────
 
@@ -107,17 +117,17 @@ export const STATES: Record<string, { label: string; tone: string; short: string
   safe: { label: "Safe, no code change", tone: "ok", short: "Safe" },
   needs_human: { label: "Needs a human", tone: "warn", short: "Needs a human" },
   blocked_policy: { label: "Blocked", tone: "bad", short: "Blocked" },
-  failed_infra: { label: "Could not run", tone: "bad", short: "Failed" },
+  failed_infra: { label: "Could not run", tone: "bad", short: "Could not run" },
   waiting_release_age: { label: "Waiting for release age", tone: "info", short: "Waiting" },
 };
 export const stateOf = (s: string) => STATES[s] ?? { label: s, tone: "", short: s };
 export const statePill = (s: string) => {
   const st = stateOf(s);
-  return `<span class="pill ${st.tone}">${esc(st.short)}</span>`;
+  return `<span class="badge ${st.tone}"><span class="dot ${st.tone}"></span>${esc(st.short)}</span>`;
 };
 export const confPill = (c: string | null) =>
   c
-    ? `<span class="pill no-dot ${c === "high" ? "ok" : c === "medium" ? "info" : "warn"}">${esc(c)} confidence</span>`
+    ? `<span class="badge ${c === "high" ? "ok" : c === "medium" ? "info" : "warn"}">${esc(c)} confidence</span>`
     : "";
 
 export function ago(iso: string | null): string {
@@ -132,9 +142,12 @@ export function ago(iso: string | null): string {
 export const agoLong = (iso: string | null) => {
   const a = ago(iso);
   if (a === "now") return "just now";
-  return /^\d+[mhd]$/.test(a)
-    ? `${a.slice(0, -1)} ${{ m: "min", h: "h", d: "d" }[a.slice(-1) as "m" | "h" | "d"]} ago`
-    : a;
+  const m = /^(\d+)([mhd])$/.exec(a);
+  if (!m) return a;
+  const n = Number(m[1]);
+  const unit =
+    m[2] === "m" ? "min" : m[2] === "h" ? (n === 1 ? "hour" : "hours") : n === 1 ? "day" : "days";
+  return `${n} ${unit} ago`;
 };
 export function dur(ms: number): string {
   const s = Math.round(ms / 1000);
@@ -151,193 +164,60 @@ export const median = (xs: number[]) => {
   return s.length % 2 ? (s[m] ?? 0) : ((s[m - 1] ?? 0) + (s[m] ?? 0)) / 2;
 };
 
-/** Deterministic colours per package for the monogram tiles. */
-const TILES = [
-  ["#ff7a3d", "#7a1f04"],
-  ["#2b2a28", "#0b0b0c"],
-  ["#3d6df2", "#0f1f5c"],
-  ["#1f9d5c", "#063b22"],
-  ["#d64a8d", "#4a0b2b"],
-  ["#e8a317", "#5c3a02"],
-  ["#7a5af5", "#22125e"],
-  ["#14a3a3", "#043b3b"],
-];
-export function tileColors(name: string) {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return TILES[h % TILES.length] ?? TILES[0] ?? ["#ff7a3d", "#7a1f04"];
-}
-export function monogram(name: string) {
-  const scoped = /^@([^/]+)\/(.+)$/.exec(name);
-  if (scoped?.[1] && scoped[2]) return `${scoped[1][0]}${scoped[2][0]}`.toUpperCase();
-  const base = name
-    .replace(/^@[^/]+\//, "")
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim();
-  const parts = base.split(" ").filter(Boolean);
-  const m = parts.length > 1 ? (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "") : base.slice(0, 2);
-  return m.toUpperCase() || "?";
-}
-export function pkgTile(
-  r: { package: string; ecosystem: string; to?: string },
-  size: "lg" | "sm" = "lg",
-) {
-  const [a, b] = tileColors(r.package);
-  const bg = `background: radial-gradient(130% 110% at 15% 0%, ${a} 0%, ${b} 100%)`;
-  if (size === "sm")
-    return `<div class="pkg-tile sm" style="${bg}"><div class="mon">${esc(monogram(r.package))}</div></div>`;
-  return `<div class="pkg-tile" style="${bg}"><div class="eco">${esc(r.ecosystem === "pypi" ? "PyPI" : "npm")}</div><div class="mon">${esc(monogram(r.package))}</div><div class="ver">${r.to ? `v${esc(r.to)}` : ""}</div></div>`;
+/** Tone of a state for status dots and icons. */
+export const toneOf = (state: string) => stateOf(state).tone || "";
+
+/** Status with an icon, GitHub-style: never colour alone. */
+export function status(state: string, label?: string) {
+  const st = stateOf(state);
+  const ic =
+    st.tone === "ok"
+      ? "checkCircle"
+      : st.tone === "bad"
+        ? "xCircle"
+        : st.tone === "info"
+          ? "clock"
+          : "alertCircle";
+  return `<span class="st ${st.tone}">${icon(ic)}${esc(label ?? st.short)}</span>`;
 }
 
-export function flip(text: string, cls = "") {
-  let i = 0;
-  return `<div class="flip ${cls}">${[...text]
-    .map((ch) =>
-      /\d/.test(ch)
-        ? `<div class="d"><span style="--dl:${120 + i++ * 90}ms">${ch}</span></div>`
-        : `<div class="c">${esc(ch)}</div>`,
-    )
-    .join("")}</div>`;
+/** Segmented meter: `on` of `total` ticks lit (at most 24 ticks). */
+export function ticks(value: number, total: number, cls = "", n = 24) {
+  const lit = total > 0 ? Math.round((value / total) * n) : 0;
+  return `<div class="ticks ${cls}">${Array.from({ length: n }, (_, i) => `<i class="${i < lit ? "on" : ""}"></i>`).join("")}</div>`;
 }
 
-// ───────────── charts ─────────────
-
-export function sparkline(values: number[], ink = false) {
-  const w = 112;
-  const h = 46;
-  const vs = values.length > 1 ? values : [0, ...(values.length ? values : [0])];
-  const max = Math.max(...vs, 1);
-  const min = Math.min(...vs, 0);
-  const pts: [number, number][] = vs.map((v, i) => [
-    (i / (vs.length - 1)) * w,
-    h - 6 - ((v - min) / (max - min || 1)) * (h - 14),
-  ]);
-  // Smooth with a light Catmull-Rom.
-  let d = `M${pts[0]?.[0]},${pts[0]?.[1]}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p1: [number, number] = pts[i] ?? [0, 0];
-    const p0: [number, number] = pts[i - 1] ?? p1;
-    const p2: [number, number] = pts[i + 1] ?? p1;
-    const p3: [number, number] = pts[i + 2] ?? p2;
-    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
-    d += ` C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`;
-  }
-  const last = pts[pts.length - 1] ?? [w, h];
-  return `<svg class="spark ${ink ? "ink" : ""}" viewBox="0 0 ${w} ${h}"><path class="a" d="${d} L${w},${h} L0,${h} Z"/><path class="l" d="${d}"/><circle cx="${last[0]}" cy="${last[1]}" r="3"/></svg>`;
+/** GitHub-style check strip: one circle per check, by what happened after the bump. */
+export function checkStrip(checks: Check[]) {
+  return `<span class="cs" title="${esc(
+    checks
+      .map(
+        (c) =>
+          `${c.name}: ${c.before === null ? "not run" : c.before ? "passed" : "failed"} before, ${c.after === null ? "not re-run" : c.after ? "passes" : c.sameFailures ? "same failures" : "fails"} after`,
+      )
+      .join("\n"),
+  )}">${checks
+    .map((c) => {
+      const k = cellOf(c);
+      const ic =
+        k === "ok" || k === "same"
+          ? icon("check")
+          : k === "reg"
+            ? icon("x")
+            : k === "pre"
+              ? icon("minus")
+              : "";
+      return `<i class="${k}">${ic}</i>`;
+    })
+    .join("")}</span>`;
 }
 
-export const GRADIENTS = `<svg width="0" height="0" style="position:absolute"><defs>
-<linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2541b" stop-opacity=".22"/><stop offset="1" stop-color="#f2541b" stop-opacity="0"/></linearGradient>
-<linearGradient id="sparkink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b0b0c" stop-opacity=".14"/><stop offset="1" stop-color="#0b0b0c" stop-opacity="0"/></linearGradient>
-<linearGradient id="areafill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2541b" stop-opacity=".2"/><stop offset="1" stop-color="#f2541b" stop-opacity="0"/></linearGradient>
-</defs></svg>`;
+/** "6.0.0 → 11.5.3" in mono. */
+export const versions = (from: string | null, to: string) =>
+  `<span class="ver">${esc(from ?? "?")}<span class="ar">→</span><b>${esc(to)}</b></span>`;
 
-export const OUTCOME_GROUPS: { key: string; label: string; color: string; states: string[] }[] = [
-  { key: "ready", label: "Ready or safe", color: "#18834a", states: ["ready", "safe"] },
-  {
-    key: "human",
-    label: "Needs a human",
-    color: "#e3a43b",
-    states: ["needs_human", "waiting_release_age"],
-  },
-  { key: "blocked", label: "Blocked", color: "#c8121f", states: ["blocked_policy"] },
-  { key: "failed", label: "Could not run", color: "#b9b4ab", states: ["failed_infra"] },
-];
-
-export interface Bucket {
-  label: string;
-  start: number;
-  runs: Run[];
-}
-
-/** Day buckets ending today; `days` = 0 means from the first run. */
-export function buckets(runs: Run[], days: number): Bucket[] {
-  const dayMs = 86_400_000;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const end = today.getTime();
-  const first = runs.length ? Math.min(...runs.map((r) => Date.parse(r.created_at))) : end;
-  let n = days || Math.max(7, Math.ceil((end - first) / dayMs) + 1);
-  let step = 1;
-  while (n / step > 42) step++;
-  n = Math.ceil(n / step) * step;
-  const out: Bucket[] = [];
-  for (let i = n - step; i >= 0; i -= step) {
-    const start = end - i * dayMs;
-    out.push({
-      start,
-      label: new Date(start).toLocaleDateString(undefined, { day: "numeric", month: "short" }),
-      runs: runs.filter((r) => {
-        const t = Date.parse(r.created_at);
-        return t >= start && t < start + step * dayMs;
-      }),
-    });
-  }
-  return out;
-}
-
-export function barChart(bs: Bucket[], mode: "outcomes" | "spend" | "time"): string {
-  const W = 760;
-  const H = 290;
-  const pad = { l: 44, r: 8, t: 14, b: 26 };
-  const iw = W - pad.l - pad.r;
-  const ih = H - pad.t - pad.b;
-  const val = (b: Bucket) =>
-    mode === "outcomes"
-      ? b.runs.length
-      : mode === "spend"
-        ? b.runs.reduce((n, r) => n + r.cost_usd, 0)
-        : median(b.runs.map((r) => r.duration_ms / 60000));
-  const max = Math.max(...bs.map(val), mode === "outcomes" ? 4 : 0.5);
-  const nice = niceMax(max);
-  const fmt = (v: number) =>
-    mode === "spend"
-      ? `$${v < 10 ? v.toFixed(1) : Math.round(v)}`
-      : mode === "time"
-        ? `${Math.round(v)}m`
-        : String(Math.round(v));
-  let g = "";
-  for (let i = 0; i <= 4; i++) {
-    const y = pad.t + ih - (i / 4) * ih;
-    g += `<line class="grid-l" x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l - 10}" y="${y + 3.5}" text-anchor="end">${fmt((nice * i) / 4)}</text>`;
-  }
-  const bw = iw / bs.length;
-  const barW = Math.max(4, Math.min(26, bw * 0.58));
-  let bars = "";
-  const labelEvery = Math.ceil(bs.length / 8);
-  bs.forEach((b, i) => {
-    const x = pad.l + i * bw + (bw - barW) / 2;
-    const lastLabel = i === bs.length - 1 && (bs.length - 1) % labelEvery >= labelEvery / 2;
-    if (i % labelEvery === 0 || lastLabel)
-      bars += `<text x="${pad.l + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${esc(b.label)}</text>`;
-    if (mode === "outcomes") {
-      let y = pad.t + ih;
-      for (const grp of OUTCOME_GROUPS) {
-        const n = b.runs.filter((r) => grp.states.includes(r.state)).length;
-        if (!n) continue;
-        const h = (n / nice) * ih;
-        y -= h;
-        bars += `<rect class="col" style="animation-delay:${i * 18}ms" x="${x}" y="${y}" width="${barW}" height="${Math.max(h - 1.5, 1)}" rx="${Math.min(4, barW / 3)}" fill="${grp.color}"/>`;
-      }
-    } else {
-      const v = val(b);
-      const h = (v / nice) * ih;
-      if (v > 0)
-        bars += `<rect class="col" style="animation-delay:${i * 18}ms" x="${x}" y="${pad.t + ih - h}" width="${barW}" height="${h}" rx="${Math.min(4, barW / 3)}" fill="${mode === "spend" ? "#f2541b" : "#0b0b0c"}"/>`;
-    }
-    bars += `<rect class="hit" data-tip="${i}" x="${pad.l + i * bw}" y="${pad.t}" width="${bw}" height="${ih}"/>`;
-  });
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}${bars}</svg>`;
-}
-
-function niceMax(v: number) {
-  if (v <= 0) return 1;
-  const exp = 10 ** Math.floor(Math.log10(v));
-  const f = v / exp;
-  const n = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
-  return n * exp;
-}
+export const ecoBadge = (eco: string) =>
+  `<span class="eco">${eco === "pypi" ? "pypi" : "npm"}</span>`;
 
 /** Cell class for the check-health heatmap. */
 export function cellOf(c: Check | undefined): string {

@@ -1,29 +1,26 @@
+// Bumpsmith Local dashboard. Design notes: dashboard/DESIGN.md.
 import {
   ago,
   agoLong,
   BRAND_MARK,
-  type Bucket,
-  barChart,
-  buckets,
-  cellOf,
+  checkStrip,
   confPill,
   type DiffFile,
   dur,
+  ecoBadge,
   esc,
-  flip,
-  GRADIENTS,
   highlight,
   icon,
   md,
   median,
   money,
-  OUTCOME_GROUPS,
   parseDiff,
-  pkgTile,
   type Run,
-  sparkline,
   stateOf,
   statePill,
+  status,
+  ticks,
+  versions,
 } from "./ui.ts";
 
 // ───────────── data ─────────────
@@ -37,8 +34,6 @@ interface DebtItem {
   latestEligible: boolean;
 }
 interface LiveRun {
-  /** Last pipeline stage reached before the result (client-side). */
-  reached?: string;
   id: string;
   package: string;
   version: string;
@@ -46,6 +41,7 @@ interface LiveRun {
   started_at: string;
   lines: string[];
   stage: string;
+  reached?: string;
   jobId: string | null;
   done: boolean;
   exitCode: number | null;
@@ -97,14 +93,14 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body;
 }
 
+type Tab = "summary" | "changes" | "checks" | "breaking" | "log";
 const ui = {
   data: null as State | null,
   route: "",
   filter: "all",
   query: "",
-  chartMode: "outcomes" as "outcomes" | "spend" | "time",
-  chartRange: 30,
   detail: null as { id: string; job: Job; patch: string; evidence: string } | null,
+  tab: "summary" as Tab,
   diffFile: 0,
   diffWrap: false,
   openCheck: null as string | null,
@@ -115,6 +111,8 @@ const ui = {
     provider: string;
     budget: number;
     liveId?: string;
+    /** The version was filled in automatically (cleared when the package changes). */
+    auto?: boolean;
   },
   live: new Map<string, LiveRun>(),
   palette: false,
@@ -123,81 +121,50 @@ const ui = {
   busy: new Set<string>(),
   latest: {} as Record<string, string | null>,
 };
-
 const $app = document.getElementById("app") as HTMLElement;
 
 // ───────────── helpers ─────────────
 
+const isGood = (r: Run) => r.state === "ready" || r.state === "safe";
 const verified = (r: Run) =>
   r.checks.some((c) => c.name !== "install" && (c.after === true || c.sameFailures));
-const installed = (r: Run) => r.checks.find((c) => c.name === "install")?.before === true;
-const isGood = (r: Run) => r.state === "ready" || r.state === "safe";
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-function windowed(runs: Run[], fromDays: number, toDays: number) {
-  const now = Date.now();
-  return runs.filter((r) => {
-    const age = (now - Date.parse(r.created_at)) / 86_400_000;
-    return age >= fromDays && age < toDays;
-  });
+function diffstat(r: { files: number; lines: number }) {
+  return r.files
+    ? `<span class="diffstat">${plural(r.files, "file")} <span class="faint">·</span> ${r.lines} lines</span>`
+    : `<span class="faint">—</span>`;
 }
-function delta(cur: number, prev: number, invert = false) {
-  if (!prev && !cur) return `<span class="delta flat">—</span>`;
-  if (!prev) return `<span class="delta up">new</span>`;
-  const pct = Math.round(((cur - prev) / prev) * 100);
-  const good = invert ? pct <= 0 : pct >= 0;
-  return `<span class="delta ${pct === 0 ? "flat" : good ? "up" : "down"}">${pct > 0 ? "▲" : pct < 0 ? "▼" : ""} ${Math.abs(pct)}%</span>`;
-}
-/** A trend line from the first run to now, in equal steps (adapts to how long you have used it). */
-function series(runs: Run[], f: (rs: Run[]) => number, points = 14) {
-  const now = Date.now();
-  const first = Math.min(now, ...runs.map((r) => Date.parse(r.created_at)));
-  const span = Math.max(now - first, 3_600_000);
-  const step = span / points;
-  const out: number[] = [];
-  for (let i = 0; i < points; i++) {
-    const a = first + i * step;
-    const b = i === points - 1 ? now + 1 : a + step;
-    out.push(
-      f(
-        runs.filter((r) => {
-          const t = Date.parse(r.created_at);
-          return t >= a && t < b;
-        }),
-      ),
-    );
-  }
-  return out;
-}
-const greeting = () => {
-  const h = new Date().getHours();
-  return h < 5
-    ? "Working late"
-    : h < 12
-      ? "Good morning"
-      : h < 18
-        ? "Good afternoon"
-        : "Good evening";
-};
-const today = () =>
-  new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
 function toast(msg: string, bad = false) {
-  let wrap = document.querySelector(".toast-wrap");
+  let wrap = document.querySelector(".toasts");
   if (!wrap) {
     wrap = document.createElement("div");
-    wrap.className = "toast-wrap";
+    wrap.className = "toasts";
     document.body.append(wrap);
   }
   const t = document.createElement("div");
   t.className = `toast ${bad ? "bad" : ""}`;
-  t.innerHTML = `${icon(bad ? "alert" : "check")}<span>${esc(msg)}</span>`;
+  t.innerHTML = `${icon(bad ? "alertCircle" : "checkCircle")}<span>${esc(msg)}</span>`;
   wrap.append(t);
   setTimeout(() => {
-    t.style.transition = "opacity 300ms, transform 300ms";
+    t.style.transition = "opacity 240ms";
     t.style.opacity = "0";
-    t.style.transform = "translateY(8px)";
-    setTimeout(() => t.remove(), 320);
+    setTimeout(() => t.remove(), 260);
   }, 3600);
+}
+
+// Theme: system by default; the toggle stores an explicit choice.
+function theme(): "light" | "dark" {
+  const set = document.documentElement.dataset.theme;
+  if (set === "light" || set === "dark") return set;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+try {
+  const saved = localStorage.getItem("bumpsmith-theme");
+  if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+} catch {
+  // storage unavailable: follow the system
 }
 
 // ───────────── shell ─────────────
@@ -206,48 +173,49 @@ function sidebar(d: State) {
   const r = d.repo;
   const ready = d.runs.filter((x) => x.state === "ready").length;
   const route = ui.route.split("/")[0] || "overview";
-  const link = (id: string, label: string, ic: string, extra = "") =>
-    `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "active" : ""}">${icon(ic)}<span>${label}</span>${extra}</a>`;
-  const liveN = [...ui.live.values()].filter((l) => !l.done).length;
+  const live = [...ui.live.values()].filter((l) => !l.done).length;
+  const behind = d.debt?.behind.filter((b) => b.majorsBehind > 0).length;
+  const link = (id: string, label: string, ic: string, n = "", hot = false) =>
+    `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "on" : ""}">${icon(ic)}<span>${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
   const prov = d.env.providers.find((p) => p.id === d.env.defaultProvider);
   return `<aside class="sidebar">
-    <div class="brand">${BRAND_MARK}<span class="brand-word">bumpsmith</span><span class="brand-pill">Local</span></div>
-    <div class="ctx-card">
-      <div class="ctx-tile">${esc(r.name.slice(0, 2).toUpperCase())}</div>
-      <div style="min-width:0">
-        <div class="ctx-name">${esc(r.name)}</div>
-        <div class="ctx-sub"><span class="dot ${r.changes ? "warn" : r.changes === 0 ? "" : "idle"}"></span>${esc(r.branch ?? "no git")}${r.changes === null ? "" : r.changes ? ` · ${r.changes} changed` : " · clean"}</div>
-      </div>
+    <div class="brand">${BRAND_MARK}<span class="brand-word">bumpsmith</span><span class="brand-tag">local</span></div>
+    <div class="ctx" title="${esc(r.path)}">
+      <div class="ctx-av">${esc(r.name.slice(0, 2).toUpperCase())}</div>
+      <div style="min-width:0"><div class="ctx-name">${esc(r.name)}</div>
+        <div class="ctx-sub">${icon("branch")}${esc(r.branch ?? "no git")}${r.commit ? ` · ${esc(r.commit)}` : ""}</div></div>
+      ${icon("chevron")}
     </div>
+    <div class="sep"></div>
     <nav class="nav">
       ${link("overview", "Overview", "grid")}
-      ${link("runs", "Upgrades", "layers", liveN ? `<span class="count">${liveN} live</span>` : ready ? `<span class="count">${ready}</span>` : "")}
-      ${link("deps", "Dependencies", "package", d.debt ? `<span class="count soft">${d.debt.behind.filter((b) => b.majorsBehind > 0).length}</span>` : "")}
-      <div class="nav-label">This repository</div>
-      ${link("safety", "Safety & evidence", "shield")}
+      ${link("runs", "Upgrades", "layers", live ? `${live} live` : ready ? String(ready) : "", !!(live || ready))}
+      ${link("deps", "Dependencies", "package", behind ? String(behind) : "")}
+    </nav>
+    <div class="sep"></div>
+    <nav class="nav">
+      <div class="nav-h">Repository</div>
+      ${link("safety", "Safety", "shield")}
       ${link("sandbox", "Sandbox & models", "cpu")}
     </nav>
     <div class="side-foot">
-      <div class="who" data-act="go" data-to="sandbox">
-        <div class="who-av">${prov?.label === "Codex" ? "CX" : prov?.label.startsWith("Claude") ? "CC" : "AI"}</div>
-        <div style="min-width:0;flex:1">
-          <div class="who-name">${esc(prov?.label ?? d.env.defaultProvider)}</div>
-          <div class="who-sub"><span class="dot ${d.env.docker ? "" : "bad"}"></span>${d.env.docker ? `Sandbox ready · Docker ${esc(d.env.docker)}` : "Docker is not running"}</div>
-        </div>
-        ${icon("chevron")}
+      <div class="sep"></div>
+      <div class="env">
+        <div class="env-row"><span class="dot ${d.env.docker ? "ok" : "bad"}"></span><b>Sandbox</b>${d.env.docker ? `Docker ${esc(d.env.docker)}` : "Docker not running"}</div>
+        <div class="env-row"><span class="dot ${prov?.ok ? "ok" : "warn"}"></span><b>Model</b>${esc(prov?.label ?? d.env.defaultProvider)}</div>
+        <div class="env-row"><span class="dot ${r.changes ? "warn" : "ok"}"></span><b>Tree</b>${r.changes === null ? "no git" : r.changes ? `${r.changes} uncommitted` : "clean"}</div>
       </div>
     </div>
   </aside>`;
 }
 
 function topbar(crumbs: string[]) {
-  const ready = ui.data?.runs.filter((r) => r.state === "ready").length ?? 0;
   return `<header class="topbar">
-    <div class="crumbs">${crumbs.map((c, i) => (i === crumbs.length - 1 ? `<b>${esc(c)}</b>` : `<span>${esc(c)}</span><span class="sep">/</span>`)).join("")}</div>
-    <div class="spacer"></div>
+    <div class="crumbs">${crumbs.map((c, i) => (i === crumbs.length - 1 ? `<b>${esc(c)}</b>` : `<span>${esc(c)}</span><span class="s">/</span>`)).join("")}</div>
+    <div class="grow"></div>
     <div class="search" data-act="palette">${icon("search")}<span>Search upgrades and packages</span><kbd>⌘K</kbd></div>
-    <button class="icon-btn" data-act="go" data-to="runs" title="Ready to apply">${icon("bell")}${ready ? `<span class="badge">${ready}</span>` : ""}</button>
-    <button class="btn ember" data-act="new">${icon("plus")}<span class="hide-sm">New upgrade</span></button>
+    <button class="btn icon" data-act="theme" title="Switch theme">${icon(theme() === "dark" ? "sun" : "moon")}</button>
+    <button class="btn primary" data-act="new">${icon("plus")}<span class="hide-sm">New upgrade</span></button>
   </header>`;
 }
 
@@ -255,206 +223,154 @@ function topbar(crumbs: string[]) {
 
 function overview(d: State) {
   const runs = d.runs;
-  if (!runs.length && !ui.live.size) return emptyOverview(d);
-  const last7 = windowed(runs, 0, 7);
-  const prev7 = windowed(runs, 7, 14);
-  const readyN = runs.filter((r) => r.state === "ready").length;
-  const hero = runs.find((r) => r.state === "ready") ?? runs[0];
-  const verifiedPct = (rs: Run[]) =>
-    rs.length ? Math.round((rs.filter(verified).length / rs.length) * 100) : 0;
-  const spend = (rs: Run[]) => rs.reduce((n, r) => n + r.cost_usd, 0);
-  const goodTimes = runs.filter(isGood).map((r) => r.duration_ms);
-  const kpis = [
-    {
-      ic: "layers",
-      t: "Upgrades run",
-      v: String(runs.length),
-      s: series(runs, (rs) => rs.length),
-      d: delta(last7.length, prev7.length),
-      f: "vs previous 7 days",
-    },
-    {
-      ic: "check",
-      t: "Ready to apply",
-      v: String(readyN),
-      s: series(runs, (rs) => rs.filter((r) => r.state === "ready").length),
-      d: delta(
-        last7.filter((r) => r.state === "ready").length,
-        prev7.filter((r) => r.state === "ready").length,
-      ),
-      f: "verified and reviewed",
-    },
-    {
-      ic: "wrench",
-      t: "Lines fixed by the agent",
-      v: runs.reduce((n, r) => n + r.agent_lines, 0).toLocaleString(),
-      s: series(runs, (rs) => rs.reduce((n, r) => n + r.agent_lines, 0)),
-      d: "",
-      f: `${runs.reduce((n, r) => n + r.edited_by_agent, 0)} files edited across ${runs.filter((r) => r.edited_by_agent).length} upgrades`,
-    },
-    {
-      ic: "shield",
-      t: "Verified in the sandbox",
-      v: `${verifiedPct(runs)}<small>%</small>`,
-      s: series(runs, (rs) => verifiedPct(rs)),
-      d: delta(verifiedPct(last7), verifiedPct(prev7)),
-      f: "a check passed after the bump",
-    },
-    {
-      ic: "dollar",
-      t: "Model spend",
-      v: money(spend(runs)),
-      s: series(runs, spend),
-      ink: true,
-      d: delta(spend(last7), spend(prev7), true),
-      f: "API-equivalent, all time",
-    },
-    {
-      ic: "clock",
-      t: "Median time to green",
-      v: goodTimes.length ? dur(median(goodTimes)) : "—",
-      s: series(runs, (rs) => median(rs.filter(isGood).map((r) => r.duration_ms / 60000))),
-      ink: true,
-      d: "",
-      f: "from start to a verified result",
-    },
-  ];
-  const bs = buckets(runs, ui.chartRange);
-  const total =
-    ui.chartMode === "outcomes"
-      ? `${bs.reduce((n, b) => n + b.runs.length, 0)}`
-      : ui.chartMode === "spend"
-        ? money(bs.reduce((n, b) => n + b.runs.reduce((m, r) => m + r.cost_usd, 0), 0))
-        : dur(median(bs.flatMap((b) => b.runs.filter(isGood).map((r) => r.duration_ms))));
-  return `<div class="page">
-    <div class="hello in">
-      <div>
-        <h1>${greeting()}${d.repo.user ? `, ${esc(d.repo.user.split(" ")[0])}` : ""}</h1>
-        <p>${today()} · ${readyN ? `<b style="color:var(--ink)">${readyN} upgrade${readyN === 1 ? "" : "s"} ready to apply</b>` : "nothing waiting on you"} in ${esc(d.repo.name)}</p>
-      </div>
-      <div class="actions">
-        <button class="btn" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan dependencies"}</button>
-        ${hero ? `<a class="btn dark" href="#/runs/${esc(hero.id)}">${icon("eye")}Review latest</a>` : ""}
-      </div>
-    </div>
-    ${liveBanner()}
-    ${hero ? heroCard(hero) : ""}
-    <div class="grid g-kpi">
-      ${kpis
-        .map(
-          (k, i) => `<div class="card kpi in" style="--dl:${80 + i * 50}ms">
-        <div class="kpi-h"><span class="ico">${icon(k.ic)}</span>${k.t}</div>
-        <div class="kpi-v num">${k.v}</div>
-        ${sparkline(k.s, !!k.ink)}
-        <div class="kpi-f">${k.d}${k.f}</div>
-      </div>`,
-        )
-        .join("")}
-    </div>
-    <div class="grid g-main mt">
-      <div class="card in" style="--dl:200ms">
-        <div class="card-h">
-          <div><div class="card-s" style="margin:0">${ui.chartMode === "outcomes" ? "Upgrades" : ui.chartMode === "spend" ? "Model spend" : "Median time to green"} · ${ui.chartRange ? `last ${ui.chartRange} days` : "all time"}</div><div class="big-num num">${total}</div></div>
-          <div class="right">
-            <div class="seg">${(["outcomes", "spend", "time"] as const).map((m) => `<button data-act="chart-mode" data-v="${m}" class="${ui.chartMode === m ? "on" : ""}">${m === "outcomes" ? "Outcomes" : m === "spend" ? "Spend" : "Time"}</button>`).join("")}</div>
-            <div class="seg">${[7, 30, 0].map((n) => `<button data-act="chart-range" data-v="${n}" class="${ui.chartRange === n ? "on" : ""}">${n ? `${n}D` : "All"}</button>`).join("")}</div>
-          </div>
-        </div>
-        <div id="chart" class="${replayChart ? "replay" : ""}">${barChart(bs, ui.chartMode)}</div>
-        ${ui.chartMode === "outcomes" ? `<div class="legend">${OUTCOME_GROUPS.map((g) => `<span><i style="background:${g.color}"></i>${g.label}</span>`).join("")}</div>` : ""}
-      </div>
-      ${activityCard(d)}
-    </div>
-    <div class="grid g-half mt">
-      ${recentTable(runs.slice(0, 7), "Recent upgrades", `${runs.length} in this repository`)}
-      <div class="grid" style="align-content:start">
-        ${spendCard(runs)}
-        ${debtMini(d)}
-      </div>
-    </div>
-    <div class="grid g-half mt">
-      ${heatCard(runs)}
-      ${funnelCard(runs)}
-    </div>
-  </div>`;
-}
-
-function heroCard(r: Run) {
-  const checks = r.checks.filter((c) => c.name !== "install");
-  const passed = checks.filter((c) => c.after === true || c.sameFailures).length;
-  const s = Math.round(r.duration_ms / 1000);
-  const time =
-    s >= 3600
-      ? `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`
-      : `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-  return `<div class="card hero in" style="--dl:40ms">
-    ${pkgTile(r)}
-    <div style="min-width:0;position:relative;z-index:1">
-      <div class="hero-title"><h2>${esc(r.package)}</h2>${statePill(r.state)}${confPill(r.confidence)}</div>
-      <div class="hero-meta">
-        <span class="arrow-v">${esc(r.from ?? "?")} → <b>${esc(r.to)}</b></span>
-        <span>${icon("file")}${r.files} file${r.files === 1 ? "" : "s"} · ${r.lines} lines</span>
-        <span>${icon("wrench")}${r.rounds ? `${r.rounds} fix round${r.rounds === 1 ? "" : "s"}` : "no code change needed"}</span>
-        <span>${icon("clock")}${agoLong(r.created_at)}</span>
-      </div>
-      <div class="hero-bar"><div class="bar ok"><i style="width:${checks.length ? (passed / checks.length) * 100 : 0}%"></i></div><span class="lbl num">${passed} / ${checks.length} checks verified</span></div>
-    </div>
-    <div class="hero-right">
-      <div class="lbl">Time to ${isGood(r) ? "green" : "result"} · min : sec</div>
-      ${flip(time, "lg")}
-      <div><a class="link" href="#/runs/${esc(r.id)}">Open upgrade ${icon("arrowR")}</a></div>
-    </div>
-  </div>`;
-}
-
-function activityCard(d: State) {
   const live = [...ui.live.values()].filter((l) => !l.done);
-  const items = d.runs.slice(0, live.length ? 5 : 6).map((r) => {
-    const st = stateOf(r.state);
-    const ic =
-      r.state === "ready"
-        ? "check"
-        : r.state === "safe"
-          ? "shield"
-          : r.state === "blocked_policy"
-            ? "lock"
-            : r.state === "failed_infra"
-              ? "x"
-              : "alert";
-    return `<div class="feed-i" data-act="open-run" data-id="${esc(r.id)}">
-      <div class="feed-ic ${st.tone}">${icon(ic)}</div>
-      <div style="min-width:0"><div class="feed-t">${esc(r.package)} · ${esc(r.from ?? "?")} → ${esc(r.to)}</div><div class="feed-s">${esc(r.reason ?? st.label)}</div></div>
-      <div class="feed-w">${ago(r.created_at)}</div>
-    </div>`;
+  if (!runs.length && !live.length) return emptyOverview(d);
+  const ready = runs.filter((r) => r.state === "ready");
+  const human = runs.filter((r) => r.state === "needs_human" || r.state === "waiting_release_age");
+  const blocked = runs.filter((r) => r.state === "blocked_policy");
+  const ver = runs.filter(verified).length;
+  const month = new Date();
+  const monthRuns = runs.filter((r) => {
+    const t = new Date(r.created_at);
+    return t.getMonth() === month.getMonth() && t.getFullYear() === month.getFullYear();
   });
-  const liveItems = live.map(
-    (l) => `<div class="feed-i" data-act="open-live" data-id="${l.id}">
-      <div class="feed-ic ember">${icon("bolt")}</div>
-      <div style="min-width:0"><div class="feed-t">${esc(l.package)} → ${esc(l.version)}</div><div class="feed-s">${esc(STAGES.find((s) => s.id === l.stage)?.label ?? l.stage)} · ${esc(l.lines[l.lines.length - 1] ?? "starting")}</div></div>
-      <div class="feed-w">live</div>
-    </div>`,
-  );
-  return `<div class="card in" style="--dl:240ms">
-    <div class="card-h"><div><div class="live-h"><span class="dot ${live.length ? "live" : ""}"></span>${live.length ? "Live" : "Activity"}</div><div class="card-s">${live.length ? `${live.length} upgrade${live.length === 1 ? "" : "s"} running in the sandbox` : "Latest results in this repository"}</div></div>
-    <div class="right"><a class="btn sm" href="#/runs">All upgrades</a></div></div>
-    <div class="feed">${[...liveItems, ...items].join("")}</div>
+  const spend = monthRuns.reduce((n, r) => n + r.cost_usd, 0);
+  const monthReady = monthRuns.filter((r) => r.state === "ready").length;
+  const goodTimes = runs.filter(isGood).map((r) => r.duration_ms);
+  const sortedTimes = [...goodTimes].sort((a, b) => a - b);
+  const p90 = sortedTimes[Math.floor(sortedTimes.length * 0.9)] ?? 0;
+  const last = runs[0];
+  return `<div class="page">
+    <div class="ph">
+      <div><h1>Overview</h1>
+        <p><span><span class="dot ok"></span>${ready.length} ready to apply</span><span><span class="dot warn"></span>${human.length} need a human</span><span><span class="dot bad"></span>${blocked.length} blocked</span>${last ? `<span class="faint">Last run ${agoLong(last.created_at)}</span>` : ""}</p></div>
+      <div class="act"><button class="btn" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan dependencies"}</button></div>
+    </div>
+    ${liveRows(live)}
+    <div class="grid g4">
+      ${stat("check", "Ready to apply", String(ready.length), `of ${runs.length}`, ticks(ready.length, runs.length), "Verified in the sandbox and approved by review")}
+      ${stat("shield", "Verified", `${runs.length ? Math.round((ver / runs.length) * 100) : 0}%`, `${ver} runs`, ticks(ver, runs.length, "ink"), "A build, typecheck or test passed after the bump")}
+      ${stat("dollar", "Model spend", money(spend), month.toLocaleDateString(undefined, { month: "short" }), spendSplit(monthRuns), monthReady ? `${money(spend / monthReady)} per ready upgrade · API-equivalent` : "API-equivalent; subscriptions are not billed per run")}
+      ${stat("clock", "Time to green", goodTimes.length ? dur(median(goodTimes)) : "—", "median", "", goodTimes.length ? `p90 ${dur(p90)} · from start to a verified result` : "No verified results yet")}
+    </div>
+    <div class="grid g-2-1 mt">
+      ${readyQueue(ready)}
+      ${activity(runs)}
+    </div>
+    <div class="mt">${runsTable(runs.slice(0, 8), "Recent runs", `<a class="btn" href="#/runs">View all</a>`)}</div>
   </div>`;
 }
 
-function recentTable(runs: Run[], title: string, sub: string, full = false) {
-  return `<div class="card flush in" style="--dl:260ms">
-    <div class="card-h"><div><div class="card-t">${title}</div><div class="card-s">${esc(sub)}</div></div>${full ? "" : `<div class="right"><a class="btn sm" href="#/runs">View all</a></div>`}</div>
-    <div class="table-scroll"><table class="t ${full ? "" : "compact"}">
-      <thead><tr><th>Package</th><th>Upgrade</th><th>Status</th><th>Checks</th>${full ? `<th class="r">Changes</th><th class="r">Cost</th>` : ""}<th class="r">When</th></tr></thead>
-      <tbody>${runs
+/** Spend split by pipeline stage, as one segmented bar with a legend. */
+function spendSplit(runs: Run[]) {
+  const roles: [string, string, string][] = [
+    ["extractor", "Changelog", "color-mix(in srgb, var(--accent) 40%, var(--inset))"],
+    ["fixer", "Fixer", "var(--accent)"],
+    ["reviewer", "Review", "var(--text-2)"],
+  ];
+  const sums = roles.map(([k]) => runs.reduce((n, r) => n + (r.cost_by_role[k] ?? 0), 0));
+  const total = sums.reduce((a, b) => a + b, 0);
+  if (!total)
+    return `<div class="split"><i style="flex:1;background:var(--inset);box-shadow:inset 0 0 0 1px var(--line)"></i></div>`;
+  return `<div class="split">${roles.map(([, label, c], i) => `<i style="flex:${sums[i]};background:${c}" data-hint="${label} ${money(sums[i] ?? 0)}"></i>`).join("")}</div>
+    <div class="split-l">${roles.map(([, label, c], i) => `<span><i style="background:${c}"></i>${label} ${money(sums[i] ?? 0, 0)}</span>`).join("")}</div>`;
+}
+
+function stat(ic: string, label: string, value: string, unit: string, meter: string, foot: string) {
+  return `<div class="panel stat"><div class="stat-l">${icon(ic)}${label}</div>
+    <div class="stat-v"><b>${value}</b><span>${esc(unit)}</span></div>${meter}<div class="stat-f">${esc(foot)}</div></div>`;
+}
+
+function readyQueue(ready: Run[]) {
+  const rows = ready.slice(0, 6);
+  return `<div class="panel">
+    <div class="panel-h"><h2>Ready to apply</h2><span class="cnt">${ready.length}</span><div class="r"><a class="btn ghost" href="#/runs" data-act="filter-ready">See all</a></div></div>
+    ${
+      rows.length
+        ? rows
+            .map(
+              (r) => `<div class="queue-i" data-act="open-run" data-id="${esc(r.id)}">
+        <div style="min-width:0"><div class="queue-t"><span class="pkg"><b>${esc(r.package)}</b></span>${versions(r.from, r.to)}${ecoBadge(r.ecosystem)}</div>
+          <div class="queue-s">${checkStrip(r.checks)}<span>${r.edited_by_agent ? `${plural(r.edited_by_agent, "file")} fixed by the agent` : "version bump only"}</span><span class="faint">${ago(r.created_at)} ago</span></div></div>
+        ${confPill(r.confidence)}
+        <div class="queue-a"><a class="btn" href="#/runs/${esc(r.id)}">Review</a><button class="btn primary" data-act="apply" data-id="${esc(r.id)}">${icon("apply")}Apply</button></div>
+      </div>`,
+            )
+            .join("")
+        : `<div class="empty-s"><b>Nothing waiting</b>Verified upgrades land here, ready to apply to your working tree.</div>`
+    }
+  </div>`;
+}
+
+function activity(runs: Run[]) {
+  const weeks = 17;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - (weeks - 1) * 7 - today.getDay());
+  const counts = new Map<string, number>();
+  for (const r of runs) {
+    const k = new Date(r.created_at).toDateString();
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const max = Math.max(1, ...counts.values());
+  const cells: string[] = [];
+  for (let i = 0; i < weeks * 7; i++) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    if (day > today) {
+      cells.push(`<i style="visibility:hidden"></i>`);
+      continue;
+    }
+    const n = counts.get(day.toDateString()) ?? 0;
+    const lvl = n === 0 ? "" : `l${Math.min(4, Math.ceil((n / max) * 4))}`;
+    cells.push(
+      `<i class="${lvl}" data-hint="${esc(`${plural(n, "upgrade")} on ${day.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`)}"></i>`,
+    );
+  }
+  const groups: [string, string, number][] = [
+    ["Ready or safe", "ok", runs.filter(isGood).length],
+    [
+      "Needs a human",
+      "warn",
+      runs.filter((r) => r.state === "needs_human" || r.state === "waiting_release_age").length,
+    ],
+    ["Blocked", "bad", runs.filter((r) => r.state === "blocked_policy").length],
+    ["Could not run", "", runs.filter((r) => r.state === "failed_infra").length],
+  ];
+  const total = Math.max(runs.length, 1);
+  return `<div class="panel">
+    <div class="panel-h"><h2>Activity</h2><span class="sub">last ${weeks} weeks</span></div>
+    <div class="panel-b">
+      <div class="contrib-wrap"><div class="contrib-d"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+      <div class="contrib">${cells.join("")}</div></div>
+      <div class="legend">Less<i style="background:var(--inset);box-shadow:inset 0 0 0 1px var(--line)"></i><i style="background:color-mix(in srgb,var(--accent) 25%,var(--inset))"></i><i style="background:color-mix(in srgb,var(--accent) 50%,var(--inset))"></i><i style="background:color-mix(in srgb,var(--accent) 75%,var(--inset))"></i><i style="background:var(--accent)"></i>More</div>
+      <div class="oc">${groups
         .map(
-          (r) => `<tr data-act="open-run" data-id="${esc(r.id)}">
-        <td><div class="pkg-cell">${pkgTile(r, "sm")}<div><div class="pkg-name">${esc(r.package)}</div><div class="pkg-sub">${esc(r.ecosystem)}</div></div></div></td>
-        <td class="mono ver">${esc(r.from ?? "?")} → <b>${esc(r.to)}</b></td>
-        <td>${statePill(r.state)}</td>
-        <td><span class="checks" title="${esc(r.checks.map((c) => `${c.name}: ${c.before === null ? "—" : c.before ? "pass" : "fail"} → ${c.after === null ? "not run" : c.after ? "pass" : c.sameFailures ? "same failures" : "fail"}`).join("\n"))}">${r.checks.map((c) => `<i class="${cellOf(c) === "ok" ? "ok" : cellOf(c) === "same" ? "same" : cellOf(c) === "reg" ? "bad" : cellOf(c) === "pre" ? "pre" : ""}"></i>`).join("")}</span></td>
-        ${full ? `<td class="r mono muted">${r.files ? `${r.files} file${r.files === 1 ? "" : "s"} · ${r.lines}` : "—"}</td><td class="r mono">${money(r.cost_usd)}</td>` : ""}
-        <td class="r muted">${ago(r.created_at)}</td>
+          ([label, tone, n]) =>
+            `<div class="oc-r"><span><span class="dot ${tone}"></span>${label}</span><div class="bar"><i style="width:${(n / total) * 100}%;background:${tone ? `var(--${tone})` : "var(--faint)"}"></i></div><span class="v">${n}</span></div>`,
+        )
+        .join("")}</div>
+    </div>
+  </div>`;
+}
+
+function runsTable(rows: Run[], title: string, right = "") {
+  return `<div class="panel">
+    <div class="panel-h"><h2>${title}</h2><span class="cnt">${rows.length}</span><div class="r">${right}</div></div>
+    <div class="tw"><table class="t">
+      <thead><tr><th>Status</th><th>Package</th><th>Upgrade</th><th>Checks</th><th>Change</th><th class="r">Duration</th><th class="r">Cost</th><th class="r">Started</th></tr></thead>
+      <tbody>${rows
+        .map(
+          (r) => `<tr data-act="open-run" data-id="${esc(r.id)}" title="${esc(r.reason ?? "")}">
+        <td>${status(r.state)}</td>
+        <td><span class="pkg"><b>${esc(r.package)}</b>${ecoBadge(r.ecosystem)}</span></td>
+        <td>${versions(r.from, r.to)}</td>
+        <td>${checkStrip(r.checks)}</td>
+        <td>${diffstat(r)}</td>
+        <td class="r mono muted">${dur(r.duration_ms)}</td>
+        <td class="r mono">${money(r.cost_usd)}</td>
+        <td class="r muted">${ago(r.created_at)} ago</td>
       </tr>`,
         )
         .join("")}</tbody>
@@ -462,142 +378,30 @@ function recentTable(runs: Run[], title: string, sub: string, full = false) {
   </div>`;
 }
 
-function spendCard(runs: Run[]) {
-  const month = new Date();
-  const monthRuns = runs.filter((r) => {
-    const d = new Date(r.created_at);
-    return d.getMonth() === month.getMonth() && d.getFullYear() === month.getFullYear();
-  });
-  const total = monthRuns.reduce((n, r) => n + r.cost_usd, 0);
-  const roles: Record<string, number> = {};
-  for (const r of monthRuns)
-    for (const [k, v] of Object.entries(r.cost_by_role)) roles[k] = (roles[k] ?? 0) + v;
-  const ready = monthRuns.filter((r) => r.state === "ready").length;
-  const colors: Record<string, string> = {
-    extractor: "#ffb48c",
-    fixer: "#f2541b",
-    reviewer: "#7a3416",
-  };
-  const sum = Object.values(roles).reduce((a, b) => a + b, 0) || 1;
-  const digits = total.toFixed(2).padStart(5, "0");
-  return `<div class="card dark-card in" style="--dl:300ms">
-    <div class="card-h" style="margin-bottom:14px"><div class="card-s" style="display:flex;gap:8px;align-items:center;margin:0">${icon("dollar")} Model spend in ${month.toLocaleDateString(undefined, { month: "long" })}</div><span class="chip">${ready} ready</span></div>
-    <div style="display:flex;align-items:center;gap:6px">${flip(`$${digits}`, "light")}</div>
-    <div class="roles">${
-      Object.entries(roles)
-        .map(
-          ([k, v]) => `<i style="width:${(v / sum) * 100}%;background:${colors[k] ?? "#555"}"></i>`,
-        )
-        .join("") || `<i style="width:100%;background:#2a2927"></i>`
-    }</div>
-    <div class="cols">
-      ${["extractor", "fixer", "reviewer"].map((k) => `<div><div class="k" style="display:flex;gap:6px;align-items:center"><i style="width:8px;height:8px;border-radius:2px;background:${colors[k]}"></i>${k === "extractor" ? "Changelog" : k === "fixer" ? "Fixer" : "Review"}</div><div class="v">${money(roles[k] ?? 0)}</div></div>`).join("")}
-    </div>
-    <div class="k" style="margin:-4px 0 16px">${ready ? `${money(total / Math.max(ready, 1))} per ready upgrade` : "Spend shows API-equivalent cost; subscriptions are not billed per run"}</div>
-    <a class="btn ember" href="#/runs">${icon("layers")}View upgrades</a>
-  </div>`;
-}
-
-function debtMini(d: State) {
-  const behind = (d.debt?.behind ?? [])
-    .filter((b) => b.majorsBehind > 0)
-    .sort((a, b) => b.majorsBehind - a.majorsBehind)
-    .slice(0, 4);
-  return `<div class="card in" style="--dl:340ms">
-    <div class="card-h"><div><div class="card-t">Upgrade debt</div><div class="card-s">${d.debt ? `${behind.length ? "Most majors behind" : "Nothing major behind"} · scanned ${agoLong(d.debt.generatedAt)}` : "Scan to see what is behind"}</div></div>
-      <div class="right"><a class="btn sm" href="#/deps">All</a></div></div>
-    ${
-      d.debt
-        ? behind
-            .map(
-              (
-                b,
-              ) => `<div class="feed-i" data-act="new" data-pkg="${esc(b.package)}" data-ver="${esc(b.latest ?? "")}">
-        ${pkgTile({ package: b.package, ecosystem: d.repo.ecosystem ?? "npm" }, "sm")}
-        <div style="min-width:0"><div class="feed-t">${esc(b.package)}</div><div class="feed-s mono">${esc(b.current ?? "?")} → ${esc(b.latest ?? "?")}</div></div>
-        <span class="pill ${b.majorsBehind >= 2 ? "bad" : "warn"} no-dot">${b.majorsBehind} major${b.majorsBehind === 1 ? "" : "s"}</span>
-      </div>`,
-            )
-            .join("") || `<div class="card-s">Every direct dependency is on its latest major.</div>`
-        : `<button class="btn" data-act="scan" style="width:100%;justify-content:center">${icon("scan")}Scan dependencies</button>`
-    }
-  </div>`;
-}
-
-const CHECK_ROWS = ["install", "build", "typecheck", "lint", "test"];
-function heatCard(runs: Run[]) {
-  const cols = runs.slice(0, 24).reverse();
-  const n = Math.max(cols.length, 1);
-  return `<div class="card in" style="--dl:360ms">
-    <div class="card-h"><div><div class="card-t">Check health</div><div class="card-s">Before and after the bump, for the last ${cols.length} upgrades</div></div></div>
-    <div class="heat" style="grid-template-columns:auto repeat(${n}, minmax(0,1fr))">
-      ${CHECK_ROWS.map(
-        (name, ri) =>
-          `<div class="lbl">${name}</div>${cols
-            .map((r, ci) => {
-              const c = r.checks.find((x) => x.name === name);
-              const cls = cellOf(c);
-              return `<div class="cell ${cls}" style="animation-delay:${(ri * n + ci) * 8}ms" data-act="open-run" data-id="${esc(r.id)}" data-hint="${esc(`${r.package} ${r.to} · ${name}: ${!c || c.before === null ? "not run" : `${c.before ? "passed" : "failed"} before, ${c.after === null ? "not re-run" : c.after ? "passes" : c.sameFailures ? "same failures" : "fails"} after`}`)}"></div>`;
-            })
-            .join("")}`,
-      ).join("")}
-    </div>
-    <div class="heat-legend">
-      <span><i style="background:var(--ok)"></i>Passes after</span>
-      <span><i style="background:#9bd0b0"></i>Same failures as before</span>
-      <span><i style="background:#edd3a5"></i>Already failing</span>
-      <span><i style="background:var(--bad)"></i>Broken by the bump</span>
-      <span><i style="background:var(--chalk-2)"></i>No such check</span>
-    </div>
-  </div>`;
-}
-
-function funnelCard(runs: Run[]) {
-  const steps = [
-    { t: "Upgrades started", n: runs.length },
-    { t: "Dependencies installed", n: runs.filter(installed).length },
-    { t: "Verified in the sandbox", n: runs.filter(verified).length },
-    { t: "Ready or safe", n: runs.filter(isGood).length },
-  ];
-  const top = Math.max(steps[0]?.n ?? 1, 1);
-  return `<div class="card in" style="--dl:400ms">
-    <div class="card-h"><div><div class="card-t">Pipeline</div><div class="card-s">Where upgrades stop, and how many reach a verified result</div></div></div>
-    ${steps
-      .map((s, i) => {
-        return `<div class="fn-step"><div class="fn-top"><span>${s.t}</span><b>${s.n} <span>· ${Math.round((s.n / top) * 100)}%</span></b></div>
-        <div class="fn-bar"><i style="width:${(s.n / top) * 100}%;animation-delay:${i * 120}ms;${i === steps.length - 1 ? "background:var(--ember)" : i ? `background:${["#0b0b0c", "#3b3a37", "#6d6a64"][i]}` : ""}"></i></div>
-        ${i < steps.length - 1 && steps[i + 1] ? `<div class="fn-drop">↓ ${steps[i + 1] && s.n ? Math.round(((s.n - (steps[i + 1]?.n ?? 0)) / s.n) * 100) : 0}% stop here</div>` : ""}</div>`;
-      })
-      .join("")}
-  </div>`;
+function liveRows(live: LiveRun[]) {
+  if (!live.length) return "";
+  return `<div class="panel" style="margin-bottom:16px">${live
+    .map(
+      (l) => `<div class="queue-i" data-act="open-live" data-id="${l.id}">
+      <div style="min-width:0"><div class="queue-t"><span class="dot live"></span><span class="pkg"><b>${esc(l.package)}</b></span><span class="ver"><span class="ar">→</span><b>${esc(l.version)}</b></span></div>
+        <div class="queue-s"><span>${esc(STAGES.find((s) => s.id === l.stage)?.label ?? l.stage)}</span><span class="faint mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.lines[l.lines.length - 1] ?? "starting")}</span></div></div>
+      <span></span><div class="queue-a"><span class="btn">Watch</span></div></div>`,
+    )
+    .join("")}</div>`;
 }
 
 function emptyOverview(d: State) {
-  return `<div class="page"><div class="hello in"><div><h1>${greeting()}${d.repo.user ? `, ${esc(d.repo.user.split(" ")[0])}` : ""}</h1><p>${today()} · ${esc(d.repo.name)}</p></div></div>
-    <div class="card in"><div class="empty">
-      <svg class="anvil" viewBox="0 0 120 90"><path d="M14 40h80c0 10-8 16-18 16H46l-4 14h36v8H30v-8h4l4-14C24 56 14 50 14 40Z" fill="#0b0b0c"/><path d="M94 40h12c0 6-4 9-12 9Z" fill="#2b2a28"/><circle cx="60" cy="22" r="4" fill="#f2541b"><animate attributeName="opacity" values="1;.2;1" dur="1.6s" repeatCount="indefinite"/></circle><circle cx="74" cy="14" r="2.5" fill="#ff9a6b"><animate attributeName="cy" values="16;6;16" dur="1.8s" repeatCount="indefinite"/></circle><circle cx="48" cy="12" r="2" fill="#ffb48c"><animate attributeName="cy" values="14;4;14" dur="2.1s" repeatCount="indefinite"/></circle></svg>
+  return `<div class="page"><div class="ph"><div><h1>Overview</h1><p>${esc(d.repo.name)}</p></div></div>
+    <div class="panel"><div class="blank">
+      <div class="blank-i">${icon("layers")}</div>
       <h3>No upgrades yet</h3>
-      <p>Pick a dependency and Bumpsmith upgrades it in a sandbox, fixes what breaks, and proves it with your own checks. Results land here.</p>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button class="btn ember" data-act="new">${icon("plus")}Start an upgrade</button>
+      <p>Pick a dependency. Bumpsmith upgrades it in a sandbox, fixes what breaks, and proves it with your own checks.</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn primary" data-act="new">${icon("plus")}New upgrade</button>
         <button class="btn" data-act="scan">${icon("scan")}Scan dependencies</button>
       </div>
-      <p style="margin-top:22px;font-size:13px">Or from the terminal:</p><pre>bumpsmith fix zod@4.1.0</pre>
+      <div><pre>$ bumpsmith fix zod@4.1.0</pre></div>
     </div></div></div>`;
-}
-
-function liveBanner() {
-  const live = [...ui.live.values()].filter((l) => !l.done);
-  if (!live.length) return "";
-  return live
-    .map(
-      (
-        l,
-      ) => `<div class="card in" style="margin-bottom:18px;display:flex;align-items:center;gap:16px;cursor:pointer;border-color:rgba(242,84,27,.35)" data-act="open-live" data-id="${l.id}">
-      <span class="dot live"></span><div style="flex:1;min-width:0"><b>${esc(l.package)} → ${esc(l.version)}</b><div class="card-s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(STAGES.find((s) => s.id === l.stage)?.label ?? l.stage)} · ${esc(l.lines[l.lines.length - 1] ?? "starting")}</div></div>
-      <span class="btn sm">Watch live ${icon("arrowR")}</span></div>`,
-    )
-    .join("");
 }
 
 // ───────────── upgrades list ─────────────
@@ -621,115 +425,266 @@ function runsPage(d: State) {
     (r) => f(r) && (!q || r.package.toLowerCase().includes(q) || r.to.includes(q)),
   );
   return `<div class="page">
-    <div class="hello in"><div><h1>Upgrades</h1><p>Every upgrade Bumpsmith ran here, with its proof. Stored in <span class="mono" style="font-size:13px">${esc(d.runsDir.replace(d.repo.path, "."))}</span></p></div>
-      <div class="actions"><button class="btn ember" data-act="new">${icon("plus")}New upgrade</button></div></div>
-    ${liveBanner()}
-    <div class="toolbar in" style="--dl:60ms">
-      <div class="chips">${groups.map(([id, label, fn]) => `<button class="chip-f ${ui.filter === id ? "on" : ""}" data-act="filter" data-v="${id}">${label}<span>${d.runs.filter(fn).length}</span></button>`).join("")}</div>
-      <div class="spacer"></div>
-      <input class="input" id="q" placeholder="Filter by package or version" value="${esc(ui.query)}" style="width:260px" />
+    <div class="ph"><div><h1>Upgrades</h1><p><span class="mono faint" style="font-size:12px">${esc(d.runsDir.replace(d.repo.path, "."))}</span></p></div></div>
+    ${liveRows([...ui.live.values()].filter((l) => !l.done))}
+    <div class="toolbar">
+      <div class="seg">${groups.map(([id, label, fn]) => `<button class="${ui.filter === id ? "on" : ""}" data-act="filter" data-v="${id}">${label}<span>${d.runs.filter(fn).length}</span></button>`).join("")}</div>
+      <div class="grow"></div>
+      <input class="input" id="q" placeholder="Filter by package or version" value="${esc(ui.query)}" style="width:240px" />
     </div>
-    ${rows.length ? recentTable(rows, "Results", `${rows.length} of ${d.runs.length}`, true) : `<div class="card"><div class="empty"><h3>Nothing here</h3><p>No upgrade matches this filter.</p></div></div>`}
+    ${rows.length ? runsTable(rows, "Runs") : `<div class="panel"><div class="blank"><h3>No runs match</h3><p>Try another filter.</p></div></div>`}
   </div>`;
 }
 
-// ───────────── detail ─────────────
+// ───────────── run page ─────────────
 
-const STEP_DEFS = [
-  { t: "Change record", ic: "book" },
-  { t: "Impact", ic: "search" },
-  { t: "Baseline", ic: "flask" },
-  { t: "Bump", ic: "package" },
-  { t: "Fix", ic: "wrench" },
-  { t: "Review", ic: "eye" },
-  { t: "Result", ic: "shield" },
-];
-
-function detailSteps(job: Job) {
-  const s: { st: string; sub: string }[] = [];
+function pipeline(job: Job) {
+  const s: { t: string; sub: string; st: string; r?: string }[] = [];
   const cr = job.change_record;
-  s.push(
-    cr
-      ? {
-          st: "done",
-          sub: `${cr.changes.length} breaking change${cr.changes.length === 1 ? "" : "s"} from ${cr.sources?.length ?? 0} source${cr.sources?.length === 1 ? "" : "s"}`,
-        }
-      : {
-          st: job.gate && !job.gate.allowed ? "fail" : "",
-          sub: job.gate && !job.gate.allowed ? "stopped at the release gate" : "not built",
-        },
-  );
+  s.push({
+    t: "Read the changelog",
+    st: cr ? "done" : job.gate && !job.gate.allowed ? "fail" : "pending",
+    sub: cr
+      ? `${plural(cr.changes.length, "breaking change")} from ${plural(cr.sources?.length ?? 0, "source")}`
+      : job.gate && !job.gate.allowed
+        ? (job.gate.reasons?.[0] ?? "stopped at the release gate")
+        : "not reached",
+  });
   const im = job.impact;
-  s.push(
-    im
-      ? {
-          st: "done",
-          sub: `${im.items.length} place${im.items.length === 1 ? "" : "s"} in your code · ${im.upgrade_class}`,
-        }
-      : { st: "", sub: "—" },
-  );
-  const base = job.baseline as { name: string; passed: boolean }[] | undefined;
-  s.push(
-    base
-      ? {
-          st: base.find((c) => c.name === "install")?.passed ? "done" : "fail",
-          sub: `${base.filter((c) => c.passed).length} of ${base.length} checks pass before`,
-        }
-      : { st: "", sub: "—" },
-  );
-  s.push(
-    job.after_bump
-      ? { st: "done", sub: `${esc(job.from ?? "?")} → ${esc(job.input.to)}` }
-      : { st: base ? "fail" : "", sub: base ? "could not apply" : "—" },
-  );
+  s.push({
+    t: "Find affected code",
+    st: im ? "done" : "pending",
+    sub: im
+      ? `${plural(im.items.length, "place")} in your code · ${im.upgrade_class}`
+      : "not reached",
+  });
+  const base = job.baseline as { name: string; passed: boolean; duration_ms: number }[] | undefined;
+  s.push({
+    t: "Run your checks before",
+    st: base ? (base.find((c) => c.name === "install")?.passed ? "done" : "fail") : "pending",
+    sub: base ? `${base.filter((c) => c.passed).length} of ${base.length} pass` : "not reached",
+    r: base ? dur(base.reduce((n, c) => n + c.duration_ms, 0)) : "",
+  });
+  s.push({
+    t: "Apply the bump",
+    st: job.after_bump ? "done" : base ? "fail" : "pending",
+    sub: job.after_bump
+      ? `${job.from ?? "?"} → ${job.input.to}`
+      : base
+        ? "could not apply"
+        : "not reached",
+  });
   const rounds = job.rounds?.length ?? 0;
-  s.push(
-    job.after_bump
-      ? {
-          st: "done",
-          sub: rounds
-            ? `${rounds} round${rounds === 1 ? "" : "s"} · ${job.edits?.length ?? 0} file${job.edits?.length === 1 ? "" : "s"} edited`
-            : "no code change needed",
-        }
-      : { st: "", sub: "—" },
-  );
-  s.push(
-    job.review
-      ? {
-          st: job.review.verdict === "approve" ? "done" : "warn",
-          sub: job.review.verdict === "approve" ? "approved" : "changes requested",
-        }
-      : { st: "", sub: "not reviewed" },
-  );
+  s.push({
+    t: "Fix what broke",
+    st: job.after_bump ? "done" : "pending",
+    sub: job.after_bump
+      ? rounds
+        ? `${plural(rounds, "round")} · ${plural(job.edits?.length ?? 0, "file")} edited`
+        : "no code change needed"
+      : "not reached",
+  });
+  s.push({
+    t: "Independent review",
+    st: job.review ? (job.review.verdict === "approve" ? "done" : "warn") : "pending",
+    sub: job.review
+      ? job.review.verdict === "approve"
+        ? "approved"
+        : "changes requested"
+      : "not reviewed",
+  });
   const tone = stateOf(job.state).tone;
   s.push({
+    t: stateOf(job.state).label,
     st: tone === "ok" ? "done" : tone === "bad" ? "fail" : "warn",
-    sub: stateOf(job.state).label,
+    sub: "result",
   });
-  const lastDone = s.reduce((n, x, i) => (x.st ? i : n), 0);
-  return `<div class="steps">
-    <div class="prog" style="width:${(lastDone / (STEP_DEFS.length - 1)) * 88}%"></div>
-    ${STEP_DEFS.map((d, i) => `<div class="step ${s[i]?.st ?? ""}"><div class="step-dot">${icon(s[i]?.st === "fail" ? "x" : s[i]?.st === "warn" ? "alert" : s[i]?.st === "done" ? "check" : d.ic)}</div><div class="step-n">0${i + 1}</div><div class="step-t">${d.t}</div><div class="step-s">${s[i]?.sub ?? ""}</div></div>`).join("")}
-  </div>`;
+  return `<div class="steps">${s
+    .map(
+      (
+        x,
+      ) => `<div class="step ${x.st}"><div class="step-i">${icon(x.st === "done" ? "check" : x.st === "fail" ? "x" : x.st === "warn" ? "minus" : "clock")}</div>
+      <div><div class="step-t">${esc(x.t)}</div><div class="step-s">${md(x.sub)}</div></div><div class="step-r">${x.r ?? ""}</div></div>`,
+    )
+    .join("")}</div>`;
 }
 
 function detailPage(d: State) {
   const det = ui.detail;
   if (!det)
-    return `<div class="page"><div class="skel" style="height:120px;margin-bottom:18px"></div><div class="skel" style="height:420px"></div></div>`;
+    return `<div class="page"><div class="skel" style="height:96px;margin-bottom:16px"></div><div class="skel" style="height:480px"></div></div>`;
   const { job, patch } = det;
   const run = d.runs.find((r) => r.id === det.id);
   const files = parseDiff(patch);
   const edited = new Set<string>((job.edits ?? []).map((e: { path: string }) => e.path));
-  const cmp = (job.verdict?.comparisons ?? []) as {
-    name: string;
-    baseline: boolean | null;
-    after: boolean | null;
-    flaky: boolean;
-    regression: boolean;
-    sameFailures?: { failing: string[]; passed: number };
-    newFailures?: string[];
+  const cmp = (job.verdict?.comparisons ?? []) as Cmp[];
+  const changes = (job.change_record?.changes ?? []) as Change[];
+  const canApply = job.state === "ready" && patch.trim().length > 0;
+  const tabs: [Tab, string, string][] = [
+    ["summary", "Summary", ""],
+    ["changes", "Changes", String(files.length)],
+    ["checks", "Checks", String(cmp.length || (job.baseline?.length ?? 0))],
+    ["breaking", "Breaking changes", String(changes.length)],
+    ["log", "Log", ""],
+  ];
+  return `<div class="page">
+    <a class="back" href="#/runs">${icon("arrowL")}Upgrades</a>
+    <div class="rh">
+      <div style="min-width:0">
+        <h1>${status(job.state, "")}<span>Upgrade</span><code>${esc(job.input.packageName)}</code>${versions(job.from ?? job.input.from ?? null, job.input.to)}</h1>
+        <div class="rmeta">${statePill(job.state)}${confPill(job.confidence ?? null)}${ecoBadge(job.input.ecosystem ?? run?.ecosystem ?? "npm")}
+          <span class="mono">${esc(det.id)}</span><span>${esc(job.provider)}${job.model ? ` · <span class="mono">${esc(job.model)}</span>` : ""}</span>
+          <span>${dur(job.duration_ms ?? 0)}</span><span class="mono">${money(job.cost_usd ?? 0, 3)}</span><span>${agoLong(job.created_at)}</span></div>
+      </div>
+      <div class="act">
+        <button class="btn ghost danger icon" data-act="delete" data-id="${esc(det.id)}" title="Delete this run">${icon("trash")}</button>
+        <button class="btn" data-act="copy-patch" ${patch.trim() ? "" : "disabled"}>${icon("copy")}Copy patch</button>
+        <button class="btn ${canApply ? "primary" : ""}" data-act="apply" data-id="${esc(det.id)}" ${patch.trim() ? "" : "disabled"} title="${canApply ? "git apply --index, after git apply --check" : "Only verified results apply in one click; copy the patch to use it anyway"}">${icon("apply")}${ui.busy.has(`apply:${det.id}`) ? "Applying…" : "Apply patch"}</button>
+      </div>
+    </div>
+    <div class="tabs">${tabs.map(([id, label, n]) => `<button class="tab ${ui.tab === id ? "on" : ""}" data-act="tab" data-v="${id}">${label}${n && n !== "0" ? `<span class="cnt">${n}</span>` : ""}</button>`).join("")}</div>
+    ${
+      ui.tab === "changes"
+        ? changesTab(files, edited, job)
+        : ui.tab === "checks"
+          ? checksTab(job, cmp)
+          : ui.tab === "breaking"
+            ? breakingTab(job, changes)
+            : ui.tab === "log"
+              ? `<div class="panel"><div class="panel-h"><h2>evidence.md</h2><div class="r"><span class="mono faint" style="font-size:12px">${esc(d.runsDir.replace(d.repo.path, "."))}/${esc(det.id)}/</span></div></div><pre class="log">${esc(det.evidence || "No evidence file.")}</pre></div>`
+              : summaryTab(job, run)
+    }
+  </div>`;
+}
+
+interface Cmp {
+  name: string;
+  baseline: boolean | null;
+  after: boolean | null;
+  flaky: boolean;
+  regression: boolean;
+  sameFailures?: { failing: string[]; passed: number };
+  newFailures?: string[];
+}
+interface Change {
+  id: string;
+  kind: string;
+  symbols: string[];
+  instruction: string;
+  confidence: string;
+  before: string;
+  after: string;
+  evidence?: { url: string }[];
+}
+
+function summaryTab(job: Job, run: Run | undefined) {
+  const notes = [
+    ...(job.error ? [`Stopped: ${job.error}`] : []),
+    ...((job.notes ?? []) as string[]),
+  ];
+  const usage = (job.usage ?? []) as {
+    role: string;
+    api_equivalent_usd: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens: number;
   }[];
+  const byRole: Record<string, number> = {};
+  let tin = 0;
+  let tout = 0;
+  for (const u of usage) {
+    byRole[u.role] = (byRole[u.role] ?? 0) + u.api_equivalent_usd;
+    tin += u.input_tokens + u.cache_read_input_tokens;
+    tout += u.output_tokens;
+  }
+  const maxRole = Math.max(0.0001, ...Object.values(byRole));
+  const label = (k: string) =>
+    k === "extractor" ? "Changelog" : k === "fixer" ? "Fixer" : k === "reviewer" ? "Review" : k;
+  return `<div class="grid g-2-1">
+    <div class="grid" style="align-content:start">
+      <div class="panel"><div class="panel-h"><h2>Pipeline</h2></div>${pipeline(job)}</div>
+      <div class="panel"><div class="panel-h"><h2>What happened</h2>${notes.length ? `<span class="cnt">${notes.length}</span>` : ""}</div>
+        <div class="notes">${
+          notes.length
+            ? notes
+                .map((n) => {
+                  const warn =
+                    /fail|not verified|unsupported|could not|stopped|blocked|malicious|timed out|longer than|conflict/i.test(
+                      n,
+                    );
+                  return `<div class="note ${warn ? "warn" : ""}">${icon(warn ? "alertCircle" : "info")}<div>${md(n)}</div></div>`;
+                })
+                .join("")
+            : `<div class="note">${icon("checkCircle")}<div>Verified in the sandbox with nothing unusual to report.</div></div>`
+        }</div></div>
+      ${
+        job.review
+          ? `<div class="panel"><div class="panel-h"><h2>Independent review</h2><div class="r">${job.review.verdict === "approve" ? `<span class="badge ok">approved</span>` : `<span class="badge warn">changes requested</span>`}</div></div>
+          ${job.review.summary ? `<div class="review-sum">${md(job.review.summary)}</div>` : ""}
+          ${(job.review.criteria ?? []).map((c: { id: string; pass: boolean; reason: string }) => `<div class="crit"><span style="color:${c.pass ? "var(--ok)" : "var(--bad)"}">${icon(c.pass ? "checkCircle" : "xCircle")}</span><div><b>${esc(c.id.replace(/_/g, " "))}</b><p>${md(c.reason)}</p></div></div>`).join("")}</div>`
+          : ""
+      }
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="panel"><div class="panel-h"><h2>Details</h2></div><div class="panel-b"><dl class="kv">
+        <dt>Package</dt><dd class="mono">${esc(job.input.packageName)}</dd>
+        <dt>From</dt><dd class="mono">${esc(job.from ?? "?")}</dd>
+        <dt>To</dt><dd class="mono">${esc(job.input.to)}</dd>
+        <dt>Directory</dt><dd class="mono">${esc(job.input.dir || ".")}</dd>
+        <dt>Upgrade class</dt><dd>${esc(job.impact?.upgrade_class ?? "—")}</dd>
+        <dt>Files changed</dt><dd class="mono">${run ? `${run.files} (${run.lines} lines)` : "—"}</dd>
+        <dt>Agent edits</dt><dd class="mono">${run ? `${run.edited_by_agent} files · ${run.agent_lines} lines` : "—"}</dd>
+        <dt>Fix rounds</dt><dd class="mono">${job.rounds?.length ?? 0}</dd>
+        <dt>Duration</dt><dd class="mono">${dur(job.duration_ms ?? 0)}</dd>
+        <dt>Tokens</dt><dd class="mono">${tin.toLocaleString()} in · ${tout.toLocaleString()} out</dd>
+      </dl></div></div>
+      <div class="panel"><div class="panel-h"><h2>Cost</h2><div class="r"><span class="mono">${money(job.cost_usd ?? 0, 3)}</span></div></div><div class="panel-b">
+        ${
+          Object.entries(byRole)
+            .map(
+              ([k, v]) =>
+                `<div class="costbar"><span>${label(k)}</span><div class="bar"><i style="width:${(v / maxRole) * 100}%"></i></div><span class="v">${money(v, 3)}</span></div>`,
+            )
+            .join("") || `<span class="muted">No model calls.</span>`
+        }
+        <div class="stat-f" style="margin-top:8px">API-equivalent. Subscriptions are not billed per run.</div>
+      </div></div>
+    </div>
+  </div>`;
+}
+
+function changesTab(files: DiffFile[], edited: Set<string>, job: Job) {
+  if (!files.length)
+    return `<div class="panel"><div class="blank"><h3>No changes</h3><p>${job.state === "safe" ? "The upgrade needed no code change." : "This run produced no patch."}</p></div></div>`;
+  const i = Math.min(ui.diffFile, files.length - 1);
+  const f = files[i] as DiffFile;
+  const kind = (p: string) =>
+    edited.has(p) ? "agent" : /lock|\.lock$|lock\.json$|lock\.yaml$/.test(p) ? "lock" : "";
+  const add = files.reduce((n, x) => n + x.added, 0);
+  const del = files.reduce((n, x) => n + x.removed, 0);
+  return `<div class="panel">
+    <div class="panel-h"><h2>${plural(files.length, "file")} changed</h2><span class="diffstat"><span class="a">+${add}</span> <span class="d">−${del}</span></span>
+      <span class="sub" style="display:inline-flex;gap:12px;align-items:center"><span><i class="fdot agent"></i> agent</span><span><i class="fdot lock"></i> lockfile</span><span><i class="fdot"></i> manifest</span></span>
+      <div class="r"><button class="btn ${ui.diffWrap ? "primary" : ""}" data-act="wrap">${icon("wrap")}Wrap</button></div></div>
+    <div class="diff-wrap">
+      <div class="files">${files.map((x, j) => `<button class="file-b ${j === i ? "on" : ""}" data-act="diff-file" data-v="${j}" title="${esc(x.path)}"><i class="fdot ${kind(x.path)}"></i><span class="nm">${esc(x.path)}</span><span class="diffstat"><span class="a">+${x.added}</span> <span class="d">−${x.removed}</span></span></button>`).join("")}</div>
+      <div class="diff ${ui.diffWrap ? "wrap" : ""}">
+        <div class="diff-h">${icon("file")}<span>${esc(f.path)}</span>${kind(f.path) === "agent" ? `<span class="badge accent" style="margin-left:auto">edited by the agent</span>` : kind(f.path) === "lock" ? `<span class="badge" style="margin-left:auto">written by the package manager</span>` : ""}</div>
+        <table>${(f.lines.length > 1500 ? f.lines.slice(0, 1500) : f.lines)
+          .map((l) =>
+            l.kind === "hunk"
+              ? `<tr class="hunk"><td colspan="3">${esc(l.text)}</td></tr>`
+              : `<tr class="${l.kind}"><td class="ln">${l.a ?? ""}</td><td class="ln">${l.b ?? ""}</td><td class="code"><span class="mk">${l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}</span>${highlight(l.text, f.path)}</td></tr>`,
+          )
+          .join(
+            "",
+          )}${f.lines.length > 1500 ? `<tr class="hunk"><td colspan="3">${f.lines.length - 1500} more lines: copy the patch to see all</td></tr>` : ""}</table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function checksTab(job: Job, cmp: Cmp[]) {
   const base = (job.baseline ?? []) as {
     name: string;
     passed: boolean;
@@ -741,269 +696,135 @@ function detailPage(d: State) {
   const after = ((job.rounds?.length ? job.rounds[job.rounds.length - 1].checks : job.after_bump) ??
     []) as typeof base;
   const names = [...new Set([...base.map((c) => c.name), ...cmp.map((c) => c.name)])];
-  const canApply = job.state === "ready" && patch.trim().length > 0;
-  const usage = (job.usage ?? []) as {
-    role: string;
-    api_equivalent_usd: number;
-    input_tokens: number;
-    output_tokens: number;
-    cache_read_input_tokens: number;
-  }[];
-  const byRole: Record<string, { usd: number; tin: number; tout: number }> = {};
-  for (const u of usage) {
-    const x = byRole[u.role] ?? { usd: 0, tin: 0, tout: 0 };
-    byRole[u.role] = x;
-    x.usd += u.api_equivalent_usd;
-    x.tin += u.input_tokens + u.cache_read_input_tokens;
-    x.tout += u.output_tokens;
-  }
-  const maxRole = Math.max(...Object.values(byRole).map((x) => x.usd), 0.0001);
-  const changes = (job.change_record?.changes ?? []) as {
-    id: string;
-    kind: string;
-    symbols: string[];
-    instruction: string;
-    confidence: string;
-    before: string;
-    after: string;
-  }[];
-  const pass = (v: boolean | null | undefined) =>
+  const res = (v: boolean | null | undefined) =>
     v === null || v === undefined
-      ? `<span class="pill no-dot">not run</span>`
+      ? `<span class="badge">not run</span>`
       : v
-        ? `<span class="pill ok">pass</span>`
-        : `<span class="pill bad">fail</span>`;
-  return `<div class="page">
-    <a class="back" href="#/runs">${icon("arrowL")}All upgrades</a>
-    <div class="d-head in">
-      ${pkgTile({ package: job.input.packageName, ecosystem: job.input.ecosystem ?? run?.ecosystem ?? "npm", to: job.input.to })}
-      <div style="min-width:0">
-        <h1>${esc(job.input.packageName)}</h1>
-        <div class="meta"><span class="arrow-v">${esc(job.from ?? job.input.from ?? "?")} → <b>${esc(job.input.to)}</b></span>${statePill(job.state)}${confPill(job.confidence ?? null)}<span>·</span><span>${agoLong(job.created_at)}</span><span>·</span><span class="mono" style="font-size:12.5px">${esc(job.provider)}${job.model ? ` · ${esc(job.model)}` : ""}</span></div>
-      </div>
-      <div class="actions">
-        <button class="btn ${canApply ? "ember" : ""}" data-act="apply" data-id="${esc(det.id)}" ${patch.trim() ? "" : "disabled"} title="${canApply ? "Apply to your working tree and stage it" : "Only verified results apply in one click; you can still copy the patch"}">${icon("apply")}${ui.busy.has(`apply:${det.id}`) ? "Applying…" : "Apply patch"}</button>
-        <button class="btn" data-act="copy-patch" ${patch.trim() ? "" : "disabled"}>${icon("copy")}Copy patch</button>
-        <button class="btn ghost danger" data-act="delete" data-id="${esc(det.id)}" title="Delete this run">${icon("trash")}</button>
-      </div>
-    </div>
-    <div class="card in" style="--dl:60ms;padding:22px 20px 20px">${detailSteps(job)}</div>
-    <div class="grid g-half mt">
-      <div class="card flush in" style="--dl:120ms">
-        <div class="card-h"><div><div class="card-t">Checks</div><div class="card-s">Your own commands, run in the sandbox before and after. Click one for its output.</div></div></div>
-        <div class="table-scroll"><table class="t"><thead><tr><th>Check</th><th>Before</th><th>After</th><th>What it means</th><th class="r">Time</th></tr></thead><tbody>
-        ${names
-          .map((n) => {
-            const c = cmp.find((x) => x.name === n);
-            const b = base.find((x) => x.name === n);
-            const a = after.find((x) => x.name === n);
-            const meaning = !c
-              ? b && !b.passed && n === "install"
-                ? "dependencies did not install"
-                : "not compared"
-              : c.regression
-                ? `<b style="color:var(--bad)">broken by the bump</b>${c.newFailures?.length ? `: ${esc(c.newFailures.slice(0, 2).join(", "))}` : ""}`
-                : c.sameFailures
-                  ? `same ${c.sameFailures.failing.length} failing test${c.sameFailures.failing.length === 1 ? "" : "s"} as before; ${c.sameFailures.passed} pass`
-                  : c.after === null
-                    ? c.baseline === false
-                      ? "already failing; not re-run"
-                      : "not re-run"
-                    : c.baseline && c.after
-                      ? c.flaky
-                        ? "passes (flaky once)"
-                        : "still passes"
-                      : c.after
-                        ? "fixed"
-                        : "still failing, as before";
-            const open = ui.openCheck === n;
-            return `<tr data-act="toggle-check" data-v="${esc(n)}"><td class="mono" style="font-weight:600">${esc(n)}</td><td>${pass(c?.baseline ?? b?.passed)}</td><td>${c?.sameFailures ? `<span class="pill ok no-dot">same failures</span>` : pass(c?.after)}</td><td class="muted" style="font-size:13px">${meaning}</td><td class="r mono muted">${b ? dur(b.duration_ms) : ""}</td></tr>
-            ${
-              open
-                ? `<tr><td colspan="5" style="padding:0 20px 16px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${[
-                    ["Before", b],
-                    ["After", a],
-                  ]
-                    .map(
-                      ([lbl, x]) =>
-                        `<div><div class="card-s" style="margin:6px 0">${lbl} · <span class="mono">${esc((x as typeof b)?.command?.slice(0, 80) ?? "")}</span></div><div class="term" style="height:220px">${esc(((x as typeof b)?.output_tail ?? "no output").slice(-4000))}</div></div>`,
-                    )
-                    .join("")}</div></td></tr>`
-                : ""
-            }`;
-          })
-          .join("")}
-        </tbody></table></div>
-      </div>
-      <div class="card in" style="--dl:160ms">
-        <div class="card-h"><div><div class="card-t">What happened</div><div class="card-s">In plain words, from the run</div></div></div>
-        <div class="reasons">${
-          (job.notes as string[]).length || job.error
-            ? [...(job.error ? [`Stopped: ${job.error}`] : []), ...(job.notes as string[])]
-                .slice(0, 10)
-                .map((n) => {
-                  const warn =
-                    /fail|not verified|unsupported|could not|stopped|blocked|malicious|timed out|longer than|not re-run|conflict/i.test(
-                      n,
-                    );
-                  return `<div class="reason ${warn ? "warn" : "ok"}"><div class="ri">${icon(warn ? "alert" : "info")}</div><div>${md(n)}</div></div>`;
-                })
-                .join("")
-            : `<div class="reason ok"><div class="ri">${icon("check")}</div><div>Everything went to plan: verified in the sandbox with no surprises.</div></div>`
-        }</div>
-      </div>
-    </div>
-    <div class="card flush in mt" style="--dl:200ms">
-      <div class="card-h"><div><div class="card-t">The change</div><div class="card-s">${files.length ? `${files.length} file${files.length === 1 ? "" : "s"} · <span style="color:var(--ok)">+${files.reduce((n, f) => n + f.added, 0)}</span> <span style="color:var(--bad)">−${files.reduce((n, f) => n + f.removed, 0)}</span> · <span style="display:inline-flex;gap:6px;align-items:center"><i class="fdot agent"></i>edited by the agent</span> <span style="display:inline-flex;gap:6px;align-items:center;margin-left:8px"><i class="fdot lock"></i>lockfile</span>` : "No changes"}</div></div>
-        <div class="right"><button class="btn sm ${ui.diffWrap ? "dark" : ""}" data-act="wrap">${icon("wrap")}Wrap</button></div></div>
-      ${files.length ? diffView(files, edited) : `<div class="diff-empty">This run produced no patch${job.state === "safe" ? ": the upgrade needed no change beyond what the package manager did, or nothing at all." : "."}</div>`}
-    </div>
-    <div class="grid g-half mt">
-      <div class="card in" style="--dl:240ms">
-        <div class="card-h"><div><div class="card-t">Breaking changes</div><div class="card-s">${job.change_record ? `Read from the changelog, release notes and API diff of ${esc(job.input.packageName)}` : "No change record for this run"}</div></div></div>
+        ? `<span class="badge ok">pass</span>`
+        : `<span class="badge bad">fail</span>`;
+  return `<div class="panel"><div class="panel-h"><h2>Checks</h2><span class="sub">Your own commands, run in the sandbox before and after the bump. Select one for its output.</span></div>
+    <div class="tw"><table class="t"><thead><tr><th>Check</th><th>Command</th><th>Before</th><th>After</th><th>Meaning</th><th class="r">Time</th></tr></thead><tbody>
+    ${names
+      .map((n) => {
+        const c = cmp.find((x) => x.name === n);
+        const b = base.find((x) => x.name === n);
+        const a = after.find((x) => x.name === n);
+        const meaning = !c
+          ? b && !b.passed && n === "install"
+            ? "dependencies did not install"
+            : "not compared"
+          : c.regression
+            ? `<b style="color:var(--bad)">broken by the bump</b>${c.newFailures?.length ? `: ${esc(c.newFailures.slice(0, 2).join(", "))}` : ""}`
+            : c.sameFailures
+              ? `same ${plural(c.sameFailures.failing.length, "failing test")} as before; ${c.sameFailures.passed} pass`
+              : c.after === null
+                ? c.baseline === false
+                  ? "already failing; not re-run"
+                  : "not re-run"
+                : c.baseline && c.after
+                  ? c.flaky
+                    ? "passes (flaky once)"
+                    : "still passes"
+                  : c.after
+                    ? "fixed"
+                    : "still failing";
+        const open = ui.openCheck === n;
+        return `<tr data-act="toggle-check" data-v="${esc(n)}"><td><b class="mono">${esc(n)}</b></td><td class="mono muted" style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${esc((b?.command ?? "").slice(0, 120))}</td><td>${res(c?.baseline ?? b?.passed)}</td><td>${c?.sameFailures ? `<span class="badge ok">same failures</span>` : res(c?.after)}</td><td class="muted" style="white-space:normal;min-width:200px">${meaning}</td><td class="r mono muted">${b ? dur(b.duration_ms) : ""}</td></tr>
         ${
-          changes.length
-            ? changes
-                .slice(0, 12)
+          open
+            ? `<tr><td colspan="6" style="padding:0;cursor:default"><div class="chk-out">${[
+                ["before", b],
+                ["after", a],
+              ]
                 .map(
-                  (c) =>
-                    `<div class="change"><div class="change-h"><code>${esc(c.symbols?.join(", ") || c.id)}</code><span class="pill no-dot">${esc(c.kind.replace(/_/g, " "))}</span><span class="pill no-dot ${c.confidence === "high" ? "ok" : c.confidence === "medium" ? "info" : "warn"}">${esc(c.confidence)}</span></div><p>${md(c.instruction)}</p></div>`,
+                  ([lbl, x]) =>
+                    `<div><div class="lbl">${lbl}</div><div class="term" style="height:240px">${esc(((x as typeof b)?.output_tail ?? "no output").slice(-5000))}</div></div>`,
                 )
-                .join("")
-            : `<div class="card-s">${job.change_record ? "None found between these versions." : "The run stopped before reading the changelog."}</div>`
-        }
-      </div>
-      <div class="grid" style="align-content:start">
-        <div class="card in" style="--dl:280ms">
-          <div class="card-h"><div><div class="card-t">Cost</div><div class="card-s">API-equivalent; subscriptions are not billed per run</div></div><div class="right"><span class="big-num num" style="font-size:24px">${money(job.cost_usd ?? 0, 3)}</span></div></div>
-          ${
-            Object.entries(byRole)
-              .map(
-                ([k, v]) =>
-                  `<div class="cost-row"><span>${k === "extractor" ? "Changelog" : k === "fixer" ? "Fixer" : k === "reviewer" ? "Review" : esc(k)}</span><div class="mini-bar"><i class="ember" style="width:${(v.usd / maxRole) * 100}%"></i></div><span class="mono">${money(v.usd, 3)}</span></div>`,
-              )
-              .join("") || `<div class="card-s">No model calls.</div>`
-          }
-          <dl class="kv" style="margin-top:14px"><dt>Duration</dt><dd>${dur(job.duration_ms ?? 0)}</dd><dt>Tokens</dt><dd>${Object.values(
-            byRole,
-          )
-            .reduce((n, x) => n + x.tin, 0)
-            .toLocaleString()} in · ${Object.values(byRole)
-            .reduce((n, x) => n + x.tout, 0)
-            .toLocaleString()} out</dd><dt>Run</dt><dd>${esc(det.id)}</dd></dl>
-        </div>
+                .join("")}</div></td></tr>`
+            : ""
+        }`;
+      })
+      .join("")}
+    </tbody></table></div></div>`;
+}
+
+function breakingTab(job: Job, changes: Change[]) {
+  if (!changes.length)
+    return `<div class="panel"><div class="blank"><h3>${job.change_record ? "No breaking changes found" : "No change record"}</h3><p>${job.change_record ? "Nothing in the changelog, release notes or API diff breaks between these versions." : "The run stopped before reading the changelog."}</p></div></div>`;
+  return `<div class="panel"><div class="panel-h"><h2>Breaking changes</h2><span class="sub">From the changelog, release notes and API diff of <code class="ic">${esc(job.input.packageName)}</code></span></div>
+    ${changes
+      .map(
+        (
+          c,
+        ) => `<div class="bc"><div class="bc-h"><code>${esc(c.symbols?.join(", ") || c.id)}</code><span class="badge">${esc(c.kind.replace(/_/g, " "))}</span><span class="badge ${c.confidence === "high" ? "ok" : c.confidence === "medium" ? "info" : "warn"}">${esc(c.confidence)}</span></div>
+        <p>${md(c.instruction)}</p>
+        ${c.before || c.after ? `<div class="bc-code ${c.before && c.after ? "" : "one"}">${c.before ? `<div><div class="lbl">before</div><pre class="b">${esc(c.before)}</pre></div>` : ""}${c.after ? `<div><div class="lbl">after</div><pre class="a">${esc(c.after)}</pre></div>` : ""}</div>` : ""}
         ${
-          job.review
-            ? `<div class="card in" style="--dl:320ms"><div class="card-h"><div><div class="card-t">Independent review</div><div class="card-s">A second model checks the diff against five rules</div></div><div class="right">${job.review.verdict === "approve" ? `<span class="pill ok">approved</span>` : `<span class="pill warn">changes requested</span>`}</div></div>
-          ${job.review.summary ? `<div class="review-sum">${md(job.review.summary)}</div>` : ""}
-          ${(job.review.criteria ?? []).map((c: { id: string; pass: boolean; reason: string }) => `<div class="cost-row" style="grid-template-columns:22px 1fr;align-items:start"><span style="color:${c.pass ? "var(--ok)" : "var(--bad)"}">${icon(c.pass ? "check" : "x")}</span><div><b style="font-weight:600">${esc(c.id.replace(/_/g, " "))}</b><div class="card-s" style="margin-top:2px">${md(c.reason)}</div></div></div>`).join("")}</div>`
+          c.evidence?.length
+            ? `<div class="bc-src">${c.evidence
+                .slice(0, 3)
+                .map(
+                  (e) =>
+                    `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.url.replace(/^https?:\/\//, "").slice(0, 64))}</a>`,
+                )
+                .join("")}</div>`
             : ""
         }
-      </div>
-    </div>
-  </div>`;
+      </div>`,
+      )
+      .join("")}</div>`;
 }
 
-function diffView(files: DiffFile[], edited: Set<string>) {
-  const i = Math.min(ui.diffFile, files.length - 1);
-  const f = files[i] as DiffFile;
-  const kind = (p: string) =>
-    edited.has(p) ? "agent" : /lock|\.lock$|lock\.json$|lock\.yaml$/.test(p) ? "lock" : "";
-  return `<div class="diff-wrap">
-    <div class="files">${files.map((x, j) => `<button class="file-b ${j === i ? "on" : ""}" data-act="diff-file" data-v="${j}" title="${esc(x.path)}"><i class="fdot ${kind(x.path)}"></i><span class="nm">${esc(x.path)}</span><span class="st"><span class="a">+${x.added}</span> <span class="r">−${x.removed}</span></span></button>`).join("")}</div>
-    <div class="diff ${ui.diffWrap ? "wrap" : ""}">
-      <div class="diff-file-h">${icon("file")}<span>${esc(f.path)}</span>${kind(f.path) === "agent" ? `<span class="pill ember no-dot" style="margin-left:auto">edited by the agent</span>` : kind(f.path) === "lock" ? `<span class="pill no-dot" style="margin-left:auto">lockfile, written by the package manager</span>` : ""}</div>
-      <table>${(f.lines.length > 1500 ? f.lines.slice(0, 1500) : f.lines)
-        .map((l) =>
-          l.kind === "hunk"
-            ? `<tr class="hunk"><td colspan="3">${esc(l.text)}</td></tr>`
-            : `<tr class="${l.kind}"><td class="ln">${l.a ?? ""}</td><td class="ln">${l.b ?? ""}</td><td class="code"><span class="mk">${l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span>${highlight(l.text, f.path)}</td></tr>`,
-        )
-        .join(
-          "",
-        )}${f.lines.length > 1500 ? `<tr class="hunk"><td colspan="3">… ${f.lines.length - 1500} more lines (copy the patch to see all)</td></tr>` : ""}</table>
-    </div>
-  </div>`;
-}
-
-// ───────────── dependencies ─────────────
+// ───────────── dependencies, safety, sandbox ─────────────
 
 function depsPage(d: State) {
   const debt = d.debt;
-  const deps = Object.entries(d.repo.dependencies);
   if (!debt)
-    return `<div class="page"><div class="hello in"><div><h1>Dependencies</h1><p>${deps.length} direct dependencies${d.repo.packageManager ? ` · ${esc(d.repo.packageManager)}` : ""}</p></div></div>
-      <div class="card in"><div class="empty"><div class="ico" style="width:56px;height:56px;margin:0 auto;border-radius:16px">${icon("scan")}</div><h3>Find your upgrade debt</h3><p>A scan looks up the latest version of each direct dependency on the public registry (only package names leave your machine) and shows how far behind you are.</p>
-      <button class="btn ember" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan now"}</button></div></div></div>`;
+    return `<div class="page"><div class="ph"><div><h1>Dependencies</h1><p>${Object.keys(d.repo.dependencies).length} direct dependencies${d.repo.packageManager ? ` · ${esc(d.repo.packageManager)}` : ""}</p></div></div>
+      <div class="panel"><div class="blank"><div class="blank-i">${icon("scan")}</div><h3>Find your upgrade debt</h3><p>A scan looks up the latest version of each direct dependency on the public registry. Only package names leave your machine.</p>
+      <button class="btn primary" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan now"}</button></div></div></div>`;
   const behind = [...debt.behind].sort(
     (a, b) => b.majorsBehind - a.majorsBehind || a.package.localeCompare(b.package),
   );
   const majors = behind.filter((b) => b.majorsBehind > 0);
   const maxM = Math.max(...behind.map((b) => b.majorsBehind), 1);
   return `<div class="page">
-    <div class="hello in"><div><h1>Dependencies</h1><p>Scanned ${agoLong(debt.generatedAt)} · ${esc(debt.packageManager)}</p></div>
-      <div class="actions"><button class="btn" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan again"}</button></div></div>
-    <div class="grid g-kpi">
-      ${[
-        [
-          "package",
-          "Direct dependencies",
-          String(debt.directDependencies),
-          "declared in your manifests",
-        ],
-        [
-          "alert",
-          "Behind a major",
-          String(majors.length),
-          `${majors.reduce((n, b) => n + b.majorsBehind, 0)} majors in total`,
-        ],
-        [
-          "check",
-          "Upgrade-ready today",
-          String(majors.filter((b) => b.latestEligible).length),
-          "past the release-age rule",
-        ],
-      ]
-        .map(
-          ([ic, t, v, f], i) =>
-            `<div class="card kpi in" style="--dl:${60 + i * 50}ms"><div class="kpi-h"><span class="ico">${icon(ic as string)}</span>${t}</div><div class="kpi-v num">${v}</div><div class="kpi-f">${f}</div></div>`,
-        )
-        .join("")}
+    <div class="ph"><div><h1>Dependencies</h1><p><span>${esc(debt.packageManager)}</span><span class="faint">Scanned ${agoLong(debt.generatedAt)}</span></p></div>
+      <div class="act"><button class="btn" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan again"}</button></div></div>
+    <div class="grid g4">
+      ${stat("package", "Direct dependencies", String(debt.directDependencies), "", "", "Declared in your manifests")}
+      ${stat("alertCircle", "Behind a major", String(majors.length), `of ${debt.directDependencies}`, ticks(majors.length, Math.max(debt.directDependencies, 1), "accent"), `${majors.reduce((n, b) => n + b.majorsBehind, 0)} majors in total`)}
+      ${stat("checkCircle", "Upgradable today", String(majors.filter((b) => b.latestEligible).length), "", "", "Past the release-age rule")}
+      ${stat("clock", "Oldest gap", majors[0] ? `${majors[0].majorsBehind}` : "0", "majors", "", majors[0] ? majors[0].package : "Nothing behind")}
     </div>
-    <div class="card flush in mt" style="--dl:200ms">
-      <div class="card-h"><div><div class="card-t">Behind</div><div class="card-s">Upgrade one and Bumpsmith fixes what breaks</div></div></div>
-      <div class="table-scroll"><table class="t"><thead><tr><th>Package</th><th>Current</th><th>Latest</th><th>Majors behind</th><th>Released</th><th></th></tr></thead><tbody>
+    <div class="panel mt"><div class="panel-h"><h2>Behind</h2><span class="cnt">${behind.length}</span></div>
+      <div class="tw"><table class="t"><thead><tr><th>Package</th><th>Current</th><th>Latest</th><th>Majors behind</th><th>Released</th><th></th></tr></thead><tbody>
       ${behind
         .map(
           (b) => `<tr data-act="new" data-pkg="${esc(b.package)}" data-ver="${esc(b.latest ?? "")}">
-        <td><div class="pkg-cell">${pkgTile({ package: b.package, ecosystem: d.repo.ecosystem ?? "npm" }, "sm")}<div class="pkg-name">${esc(b.package)}</div></div></td>
-        <td class="mono">${esc(b.current ?? "?")}</td><td class="mono"><b>${esc(b.latest ?? "?")}</b></td>
-        <td><div style="display:flex;gap:10px;align-items:center"><div class="mini-bar"><i class="${b.majorsBehind >= 2 ? "ember" : ""}" style="width:${(b.majorsBehind / maxM) * 100}%"></i></div><span class="mono">${b.majorsBehind}</span></div></td>
-        <td class="muted">${b.latestPublishedAt ? agoLong(b.latestPublishedAt) : "—"}${b.latestEligible ? "" : ` <span class="pill info no-dot">too new</span>`}</td>
-        <td class="r"><span class="btn sm">${icon("bolt")}Upgrade</span></td>
+        <td><span class="pkg"><b>${esc(b.package)}</b></span></td>
+        <td class="mono muted">${esc(b.current ?? "?")}</td><td class="mono"><b>${esc(b.latest ?? "?")}</b></td>
+        <td><div style="display:flex;gap:12px;align-items:center"><div class="bar" style="width:96px"><i style="width:${(b.majorsBehind / maxM) * 100}%"></i></div><span class="mono">${b.majorsBehind}</span></div></td>
+        <td class="muted">${b.latestPublishedAt ? agoLong(b.latestPublishedAt) : "—"}${b.latestEligible ? "" : ` <span class="badge info">too new</span>`}</td>
+        <td class="r"><span class="btn">${icon("play")}Upgrade</span></td>
       </tr>`,
         )
-        .join("")}
-      </tbody></table></div>
-    </div>
+        .join("")}</tbody></table></div></div>
   </div>`;
 }
 
-// ───────────── safety, sandbox ─────────────
-
 function safetyPage(d: State) {
-  const runs = d.runs;
-  const blocked = runs.filter((r) => r.state === "blocked_policy");
-  const items = [
+  const blocked = d.runs.filter((r) => r.state === "blocked_policy");
+  const items: [string, string, string][] = [
     [
       "box",
       "Isolated sandbox",
-      "Your code runs in a throwaway container with no internet, no host files and no secrets. Network is on only while installing, and then reaches only a read-only registry mirror.",
+      "A throwaway container with no internet, host files or secrets. Network is on only while installing, through a read-only registry mirror.",
     ],
     [
       "shield",
       "Release gate",
-      "New versions must be a few days old, not yanked, and not listed as malicious (OSV) before anything installs.",
+      "A new version must be a few days old, not yanked, and not listed as malicious (OSV) before anything installs.",
     ],
     [
       "lock",
@@ -1013,50 +834,49 @@ function safetyPage(d: State) {
     [
       "eye",
       "Independent review",
-      "A second model reviews the diff against five rules, and deterministic rules block suspicious code.",
+      "A second model checks the diff against five rules; deterministic rules block suspicious code.",
     ],
     [
       "flask",
       "Proof, not claims",
-      "Bumpsmith re-runs your own checks itself after every round. A result is ready only if the sandbox proves it.",
+      "Bumpsmith re-runs your own checks after every round. A result is ready only if the sandbox proves it.",
     ],
   ];
   return `<div class="page">
-    <div class="hello in"><div><h1>Safety & evidence</h1><p>How every upgrade here was kept safe, and what was refused</p></div></div>
-    <div class="grid g-half">
-      <div class="card in"><div class="card-h"><div><div class="card-t">Guarantees</div><div class="card-s">On by default, for every run</div></div></div>
-        <div class="reasons">${items.map(([ic, t, s]) => `<div class="reason ok"><div class="ri">${icon(ic as string)}</div><div><b>${t}</b><div class="card-s" style="margin-top:3px">${s}</div></div></div>`).join("")}</div></div>
-      <div class="card in" style="--dl:80ms"><div class="card-h"><div><div class="card-t">Refused</div><div class="card-s">${blocked.length ? `${blocked.length} upgrade${blocked.length === 1 ? "" : "s"} stopped by a safety rule` : "Nothing has been blocked here"}</div></div></div>
-        <div class="feed">${blocked.map((r) => `<div class="feed-i" data-act="open-run" data-id="${esc(r.id)}"><div class="feed-ic bad">${icon("lock")}</div><div style="min-width:0"><div class="feed-t">${esc(r.package)} ${esc(r.to)}</div><div class="feed-s">${esc(r.reason ?? "blocked")}</div></div><div class="feed-w">${ago(r.created_at)}</div></div>`).join("") || `<div class="card-s">When a release is malicious, too new, or a change trips a rule, it shows up here with the reason.</div>`}</div></div>
+    <div class="ph"><div><h1>Safety</h1><p>What every upgrade here went through, and what was refused</p></div></div>
+    <div class="grid g-1-1">
+      <div class="panel"><div class="panel-h"><h2>Guarantees</h2><span class="sub">on for every run</span></div>
+        <div class="notes">${items.map(([ic, t, s]) => `<div class="note">${icon(ic)}<div><b style="color:var(--text);font-weight:550">${t}</b><div class="muted">${s}</div></div></div>`).join("")}</div></div>
+      <div class="panel"><div class="panel-h"><h2>Refused</h2><span class="cnt">${blocked.length}</span></div>
+        ${blocked.length ? `<div class="tw"><table class="t"><tbody>${blocked.map((r) => `<tr data-act="open-run" data-id="${esc(r.id)}"><td><span class="pkg"><b>${esc(r.package)}</b></span> <span class="ver">${esc(r.to)}</span><div class="why" style="max-width:none;white-space:normal;margin-top:2px">${md(r.reason ?? "blocked")}</div></td><td class="r muted" style="vertical-align:top">${ago(r.created_at)} ago</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-s"><b>Nothing refused</b>Malicious or too-new releases, and changes that trip a rule, show up here with the reason.</div>`}</div>
     </div>
   </div>`;
 }
 
 function sandboxPage(d: State) {
   return `<div class="page">
-    <div class="hello in"><div><h1>Sandbox & models</h1><p>What runs your upgrades on this machine</p></div></div>
-    <div class="grid g-half">
-      <div class="card in"><div class="card-h"><div><div class="card-t">Models</div><div class="card-s">Use your own subscription or key. Choose per upgrade.</div></div></div>
-        <div class="provs">${d.env.providers.map((p) => `<div class="prov ${p.ok ? "" : "off"}" style="cursor:default"><div class="who-av" style="width:34px;height:34px;font-size:11px">${esc(p.label.slice(0, 2).toUpperCase())}</div><div><div class="pn">${esc(p.label)}${p.id === d.env.defaultProvider ? ` <span class="pill ember no-dot" style="height:20px">default</span>` : ""}</div><div class="pd">${esc(p.detail)}</div></div><span class="st">${p.ok ? "available" : "not set up"}</span></div>`).join("")}</div></div>
+    <div class="ph"><div><h1>Sandbox & models</h1><p>What runs your upgrades on this machine</p></div></div>
+    <div class="grid g-1-1">
+      <div class="panel"><div class="panel-h"><h2>Models</h2><span class="sub">your own subscription or key</span></div>
+        <div class="tw"><table class="t"><tbody>${d.env.providers.map((p) => `<tr style="cursor:default"><td><b>${esc(p.label)}</b>${p.id === d.env.defaultProvider ? ` <span class="badge accent">default</span>` : ""}<div class="mono muted" style="font-size:12px">${esc(p.detail)}</div></td><td class="r">${p.ok ? `<span class="st ok">${icon("checkCircle")}available</span>` : `<span class="muted">not set up</span>`}</td></tr>`).join("")}</tbody></table></div></div>
       <div class="grid" style="align-content:start">
-        <div class="card in" style="--dl:80ms"><div class="card-h"><div><div class="card-t">Sandbox</div><div class="card-s">Docker containers with no route out</div></div><div class="right">${d.env.docker ? `<span class="pill ok">ready</span>` : `<span class="pill bad">Docker not running</span>`}</div></div>
-          <dl class="kv"><dt>Docker</dt><dd>${esc(d.env.docker ?? "start Docker Desktop or OrbStack")}</dd><dt>Network</dt><dd>registry mirror only, during installs</dd><dt>Runtimes</dt><dd>Node 22 · 24 · 26, Python 3.10–3.15</dd><dt>Runs</dt><dd>${esc(d.runsDir)}</dd></dl></div>
-        <div class="card in" style="--dl:120ms"><div class="card-h"><div><div class="card-t">Privacy</div><div class="card-s">This dashboard</div></div></div>
-          <div class="card-s" style="line-height:1.6">Runs only on 127.0.0.1 and reads files in this repository. It sends nothing anywhere. Fonts are bundled, there is no analytics, and every action needs a token that only this page has.</div></div>
+        <div class="panel"><div class="panel-h"><h2>Sandbox</h2><div class="r">${d.env.docker ? `<span class="badge ok"><span class="dot ok"></span>ready</span>` : `<span class="badge bad">Docker not running</span>`}</div></div>
+          <div class="panel-b"><dl class="kv"><dt>Docker</dt><dd class="mono">${esc(d.env.docker ?? "start Docker Desktop or OrbStack")}</dd><dt>Network</dt><dd>registry mirror only, while installing</dd><dt>Node</dt><dd class="mono">22 · 24 · 26</dd><dt>Python</dt><dd class="mono">3.10 – 3.15</dd><dt>Runs</dt><dd class="mono">${esc(d.runsDir)}</dd></dl></div></div>
+        <div class="panel"><div class="panel-h"><h2>Privacy</h2></div><div class="panel-b muted" style="font-size:13px">This dashboard listens on 127.0.0.1 only and reads files in this repository. It sends nothing anywhere: fonts are bundled, there is no analytics, and every action needs a token that only this page has.</div></div>
       </div>
     </div>
   </div>`;
 }
 
-// ───────────── new upgrade + live drawer ─────────────
+// ───────────── new upgrade + live run ─────────────
 
 const STAGES = [
-  { id: "prepare", label: "Copying your repository" },
-  { id: "analyse", label: "Reading the changelog" },
-  { id: "baseline", label: "Running your checks before" },
-  { id: "bump", label: "Applying the bump" },
-  { id: "verify", label: "Running your checks after" },
-  { id: "fix", label: "Fixing what broke" },
+  { id: "prepare", label: "Copy the repository" },
+  { id: "analyse", label: "Read the changelog" },
+  { id: "baseline", label: "Run your checks before" },
+  { id: "bump", label: "Apply the bump" },
+  { id: "verify", label: "Run your checks after" },
+  { id: "fix", label: "Fix what broke" },
   { id: "review", label: "Independent review" },
   { id: "done", label: "Result" },
 ];
@@ -1067,9 +887,7 @@ function drawer(d: State) {
   if (dr.mode === "live" && dr.liveId) {
     const l = ui.live.get(dr.liveId);
     const result = l?.done && l.jobId ? d.runs.find((r) => r.id === l.jobId) : undefined;
-    const good = result ? result.state === "ready" || result.state === "safe" : l?.exitCode === 0;
-    // While running: the current stage. Once done: everything up to the last stage reached,
-    // then the result, marked by how it ended.
+    const good = result ? isGood(result) : l?.exitCode === 0;
     const reachedIdx = STAGES.findIndex((s) => s.id === (l?.reached ?? "prepare"));
     const at = l?.done ? reachedIdx : STAGES.findIndex((s) => s.id === (l?.stage ?? "prepare"));
     const cls = (i: number) =>
@@ -1088,17 +906,21 @@ function drawer(d: State) {
             : i === at
               ? "fail"
               : "pending";
-    return `<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-label="Upgrade in progress">
-      <div class="drawer-h"><div style="flex:1"><div class="card-s" style="margin:0 0 4px;display:flex;gap:8px;align-items:center"><span class="dot ${l?.done ? "" : "live"}"></span>${l?.done ? "Finished" : "Running in the sandbox"}</div><h3>${esc(l?.package ?? dr.pkg)} → ${esc(l?.version ?? dr.version)}</h3></div><button class="icon-btn" data-act="close" title="Close (keeps running)">${icon("x")}</button></div>
+    return `<div class="scrim ${fresh(opened.drawer)}" data-act="close"></div><aside class="drawer ${fresh(opened.drawer)}" role="dialog" aria-label="Upgrade run">
+      <div class="drawer-h"><h3><span class="dot ${l?.done ? (good ? "ok" : "bad") : "live"}"></span><span class="mono">${esc(l?.package ?? dr.pkg)}</span><span class="ver"><span class="ar">→</span><b>${esc(l?.version ?? dr.version)}</b></span></h3><div class="grow"></div><button class="btn icon ghost" data-act="close" title="Close (the run continues)">${icon("x")}</button></div>
       <div class="drawer-b">
-        <div class="vsteps">${STAGES.map((s, i) => {
+        <div class="panel"><div class="steps">${STAGES.map((s, i) => {
           const c = cls(i);
-          return `<div class="vstep ${c}"><div class="vd">${icon(c === "done" ? "check" : c === "fail" ? "x" : c === "active" ? "bolt" : "clock")}</div><div class="vt">${i === STAGES.length - 1 && result ? esc(stateOf(result.state).label) : s.label}</div><div class="vs">${c === "active" ? "now" : c === "fail" && i < STAGES.length - 1 ? "stopped here" : ""}</div></div>`;
-        }).join("")}</div>
-        ${result && !good && result.reason ? `<div class="reason warn"><div class="ri">${icon("alert")}</div><div>${md(result.reason)}</div></div>` : ""}
-        <div><div class="card-s" style="margin:0 0 8px">Log</div><div class="term" id="term">${(l?.lines ?? []).map((x) => `<div class="${/^job /.test(x) ? "ln-j" : /^(READY|SAFE)/.test(x) ? "ln-ok" : /error|fail/i.test(x) ? "ln-bad" : ""}">${esc(x)}</div>`).join("")}${l?.done ? "" : `<span class="cursor"></span>`}</div></div>
+          return `<div class="step ${c}"><div class="step-i">${icon(c === "done" ? "check" : c === "fail" ? "x" : c === "active" ? "bolt" : "clock")}</div><div><div class="step-t">${i === STAGES.length - 1 && result ? esc(stateOf(result.state).label) : s.label}</div></div><div class="step-r">${c === "active" ? "running" : c === "fail" && i < STAGES.length - 1 ? "stopped here" : ""}</div></div>`;
+        }).join("")}</div></div>
+        ${result && !good && result.reason ? `<div class="callout">${icon("alertCircle")}<div>${md(result.reason)}</div></div>` : ""}
+        <div><div class="field"><label>Log</label></div><div class="term" id="term">${(l?.lines ?? []).map((x) => `<div class="${/^job /.test(x) ? "j" : /^(READY|SAFE)/.test(x) ? "ok" : /error|fail/i.test(x) ? "bad" : ""}">${esc(x)}</div>`).join("")}${l?.done ? "" : `<span class="cur"></span>`}</div></div>
       </div>
-      <div class="drawer-f">${l?.done ? `<span style="flex:1;align-self:center;display:flex;gap:8px;align-items:center">${result ? `${statePill(result.state)}${confPill(result.confidence)}` : `<b>${l.exitCode === 0 ? "Done" : "Finished with problems"}</b>`}</span>${l.jobId ? `<a class="btn ember" data-act="close" href="#/runs/${esc(l.jobId)}">Open result ${icon("arrowR")}</a>` : ""}` : `<span class="card-s" style="flex:1;align-self:center;margin:0">You can close this; the upgrade keeps running.</span><button class="btn" data-act="close">Hide</button>`}</div>
+      <div class="drawer-f">${
+        l?.done
+          ? `${result ? `${statePill(result.state)}${confPill(result.confidence)}` : `<span class="muted">${l.exitCode === 0 ? "Done" : "Finished with problems"}</span>`}<div class="grow"></div>${l.jobId ? `<a class="btn primary" data-act="close" href="#/runs/${esc(l.jobId)}">Open run ${icon("arrowR")}</a>` : ""}`
+          : `<span class="muted" style="font-size:13px">Closing this keeps the run going.</span><div class="grow"></div><button class="btn" data-act="close">Hide</button>`
+      }</div>
     </aside>`;
   }
   const deps = Object.keys(d.repo.dependencies);
@@ -1111,24 +933,19 @@ function drawer(d: State) {
     matches.length &&
     !deps.includes(dr.pkg);
   const latest = ui.latest[dr.pkg];
-  return `<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-label="New upgrade">
-    <div class="drawer-h"><div style="flex:1"><div class="card-s" style="margin:0 0 4px">${esc(d.repo.name)} · ${esc(d.repo.packageManager ?? "")}</div><h3>New upgrade</h3></div><button class="icon-btn" data-act="close">${icon("x")}</button></div>
+  return `<div class="scrim ${fresh(opened.drawer)}" data-act="close"></div><aside class="drawer ${fresh(opened.drawer)}" role="dialog" aria-label="New upgrade">
+    <div class="drawer-h"><h3>New upgrade</h3><span class="mono faint" style="font-size:12px">${esc(d.repo.name)} · ${esc(d.repo.packageManager ?? "")}</span><div class="grow"></div><button class="btn icon ghost" data-act="close">${icon("x")}</button></div>
     <div class="drawer-b">
-      <div class="field"><label for="f-pkg">Package</label><div class="combo"><input class="input mono" id="f-pkg" autocomplete="off" placeholder="zod" value="${esc(dr.pkg)}" />
+      <div class="field"><label for="f-pkg">Package</label><div class="combo"><input class="input mono" id="f-pkg" autocomplete="off" spellcheck="false" placeholder="zod" value="${esc(dr.pkg)}" />
         ${showList ? `<div class="combo-list">${matches.map((m) => `<div class="combo-i" data-act="pick-pkg" data-v="${esc(m)}">${esc(m)}<span>${esc(d.repo.dependencies[m] ?? "")}</span></div>`).join("")}</div>` : ""}</div>
-        <div class="hint">${d.repo.dependencies[dr.pkg] ? `You have <span class="mono">${esc(d.repo.dependencies[dr.pkg])}</span>` : dr.pkg ? "Not a direct dependency here; transitive packages work too." : `${deps.length} direct dependencies`}</div></div>
-      <div class="field"><label for="f-ver">Version</label><input class="input mono" id="f-ver" placeholder="${esc(latest ?? "4.1.0")}" value="${esc(dr.version)}" />
-        <div class="hint">${latest ? `Latest is <a href="#" data-act="use-latest" style="color:var(--ember-ink);font-weight:600" class="mono">${esc(latest)}</a>` : "An exact version"}</div></div>
-      <div class="field"><label>Model</label><div class="provs">${d.env.providers
-        .map(
-          (p) =>
-            `<div class="prov ${dr.provider === p.id ? "on" : ""} ${p.ok ? "" : "off"}" data-act="${p.ok ? "pick-prov" : ""}" data-v="${p.id}"><span class="r"></span><div><div class="pn">${esc(p.label)}</div><div class="pd">${esc(p.detail)}</div></div><span class="st">${p.ok ? "available" : "not set up"}</span></div>`,
-        )
-        .join("")}</div></div>
-      <div class="field"><label for="f-budget">Spend cap · <span class="mono">${money(dr.budget, 0)}</span></label><input type="range" class="range" id="f-budget" min="1" max="30" step="1" value="${dr.budget}" /><div class="hint">The run stops before going over it (API-equivalent cost).</div></div>
-      ${d.env.docker ? "" : `<div class="reason warn"><div class="ri">${icon("alert")}</div><div>Docker is not running. Start Docker Desktop or OrbStack first: every upgrade runs in a sandbox.</div></div>`}
+        <div class="hint">${d.repo.dependencies[dr.pkg] ? `Declared as <code class="ic">${esc(d.repo.dependencies[dr.pkg])}</code>` : dr.pkg ? "Not a direct dependency here; transitive packages work too." : `${deps.length} direct dependencies`}</div></div>
+      <div class="field"><label for="f-ver">Version</label><input class="input mono" id="f-ver" spellcheck="false" placeholder="${esc(latest ?? "4.1.0")}" value="${esc(dr.version)}" />
+        <div class="hint">${latest ? `Latest on the registry: <code class="ic">${esc(latest)}</code>` : "An exact version"}</div></div>
+      <div class="field"><label>Model</label><div class="provs">${d.env.providers.map((p) => `<div class="prov ${dr.provider === p.id ? "on" : ""} ${p.ok ? "" : "off"}" data-act="${p.ok ? "pick-prov" : ""}" data-v="${p.id}"><span class="rd"></span><div><div class="pn">${esc(p.label)}</div><div class="pd">${esc(p.detail)}</div></div><span class="ps">${p.ok ? "available" : "not set up"}</span></div>`).join("")}</div></div>
+      <div class="field"><label for="f-budget">Spend cap <span class="mono muted">${money(dr.budget, 0)}</span></label><input type="range" class="range" id="f-budget" min="1" max="30" step="1" value="${dr.budget}" /><div class="hint">The run stops before it goes over (API-equivalent cost).</div></div>
+      ${d.env.docker ? "" : `<div class="callout">${icon("alertCircle")}<div>Docker is not running. Start Docker Desktop or OrbStack: every upgrade runs in a sandbox.</div></div>`}
     </div>
-    <div class="drawer-f"><button class="btn" data-act="close">Cancel</button><div class="spacer"></div><button class="btn ember" data-act="start" ${dr.pkg && /^\d/.test(dr.version) && d.env.docker ? "" : "disabled"}>${icon("bolt")}Start upgrade</button></div>
+    <div class="drawer-f"><span class="mono faint" style="font-size:12px">$ bumpsmith fix ${esc(dr.pkg || "pkg")}@${esc(dr.version || "x.y.z")}</span><div class="grow"></div><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="start" ${dr.pkg && /^\d/.test(dr.version) && d.env.docker ? "" : "disabled"}>${icon("play")}Start</button></div>
   </aside>`;
 }
 
@@ -1160,9 +977,10 @@ async function followLive(id: string) {
         l.jobId = data.jobId ?? l.jobId;
         l.stage = "done";
         await refresh();
+        const res = ui.data?.runs.find((x) => x.id === l.jobId);
         toast(
-          `${l.package} ${l.version}: ${l.exitCode === 0 ? "verified" : "finished, see the result"}`,
-          l.exitCode !== 0,
+          `${l.package} ${l.version}: ${res ? stateOf(res.state).label.toLowerCase() : "finished"}`,
+          !(res && isGood(res)),
         );
       }
     }
@@ -1177,13 +995,19 @@ function paletteItems(d: State) {
   const items: { g: string; ic: string; t: string; k?: string; run: () => void }[] = [
     { g: "Actions", ic: "plus", t: "New upgrade", k: "N", run: () => openNew() },
     { g: "Actions", ic: "scan", t: "Scan dependencies", run: () => scan() },
+    {
+      g: "Actions",
+      ic: theme() === "dark" ? "sun" : "moon",
+      t: "Switch theme",
+      run: () => toggleTheme(),
+    },
     { g: "Go to", ic: "grid", t: "Overview", run: () => go("") },
     { g: "Go to", ic: "layers", t: "Upgrades", run: () => go("runs") },
     { g: "Go to", ic: "package", t: "Dependencies", run: () => go("deps") },
-    { g: "Go to", ic: "shield", t: "Safety & evidence", run: () => go("safety") },
+    { g: "Go to", ic: "shield", t: "Safety", run: () => go("safety") },
     { g: "Go to", ic: "cpu", t: "Sandbox & models", run: () => go("sandbox") },
     ...d.runs.slice(0, 40).map((r) => ({
-      g: "Upgrades",
+      g: "Runs",
       ic: "diff",
       t: `${r.package} ${r.from ?? "?"} → ${r.to}`,
       k: stateOf(r.state).short,
@@ -1193,7 +1017,7 @@ function paletteItems(d: State) {
       .slice(0, 200)
       .map((p) => ({
         g: "Upgrade a dependency",
-        ic: "bolt",
+        ic: "play",
         t: p,
         k: d.repo.dependencies[p],
         run: () => openNew(p),
@@ -1207,8 +1031,8 @@ function palette(d: State) {
   if (!ui.palette) return "";
   const items = paletteItems(d);
   let g = "";
-  return `<div class="scrim" data-act="close-pal" style="background:rgba(11,11,12,.18)"></div><div class="palette" role="dialog" aria-label="Command palette">
-    <input id="pal" placeholder="Search upgrades, dependencies, actions…" value="${esc(ui.palQuery)}" autocomplete="off" />
+  return `<div class="scrim ${fresh(opened.palette)}" data-act="close-pal" style="background:rgba(0,0,0,.18)"></div><div class="palette ${fresh(opened.palette)}" role="dialog" aria-label="Command palette">
+    <input id="pal" placeholder="Search runs, dependencies and actions" value="${esc(ui.palQuery)}" autocomplete="off" spellcheck="false" />
     <div class="list">${
       items
         .map((it, i) => {
@@ -1216,7 +1040,7 @@ function palette(d: State) {
           g = it.g;
           return `${head}<div class="pal-i ${i === ui.palIndex ? "on" : ""}" data-act="pal-run" data-v="${i}">${icon(it.ic)}<span>${esc(it.t)}</span>${it.k ? `<span class="k">${esc(it.k)}</span>` : ""}</div>`;
         })
-        .join("") || `<div class="card-s" style="padding:16px">No matches</div>`
+        .join("") || `<div class="empty-s">No matches</div>`
     }</div></div>`;
 }
 
@@ -1224,6 +1048,16 @@ function palette(d: State) {
 
 function go(path: string) {
   location.hash = `#/${path}`;
+}
+function toggleTheme() {
+  const next = theme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem("bumpsmith-theme", next);
+  } catch {
+    // not persisted
+  }
+  render();
 }
 function openNew(pkg = "", ver = "") {
   const d = ui.data;
@@ -1244,6 +1078,7 @@ async function fetchLatest(pkg: string) {
   if (pkg in ui.latest) {
     if (ui.drawer?.pkg === pkg && !ui.drawer.version && ui.latest[pkg]) {
       ui.drawer.version = ui.latest[pkg] ?? "";
+      ui.drawer.auto = true;
       render();
     }
     return;
@@ -1255,7 +1090,10 @@ async function fetchLatest(pkg: string) {
     );
     ui.latest[pkg] = r.version;
     if (ui.drawer?.pkg === pkg) {
-      if (!ui.drawer.version && r.version) ui.drawer.version = r.version;
+      if (!ui.drawer.version && r.version) {
+        ui.drawer.version = r.version;
+        ui.drawer.auto = true;
+      }
       render();
     }
   } catch {
@@ -1278,16 +1116,15 @@ async function scan() {
     render();
   }
 }
-
 async function refresh() {
   const d = await api<State>("/api/state");
   for (const l of d.live) if (!ui.live.has(l.id)) ui.live.set(l.id, l);
   ui.data = d;
 }
-
 async function loadDetail(id: string) {
   if (ui.detail?.id === id) return;
   ui.detail = null;
+  ui.tab = "summary";
   ui.diffFile = 0;
   ui.openCheck = null;
   try {
@@ -1295,21 +1132,38 @@ async function loadDetail(id: string) {
       `/api/runs/${encodeURIComponent(id)}`,
     );
     ui.detail = { id, ...r };
-    unsettle();
   } catch (e) {
     toast((e as Error).message, true);
     go("runs");
   }
   render();
 }
+async function apply(id: string) {
+  if (!confirm("Apply this patch to your working tree and stage it?")) return;
+  ui.busy.add(`apply:${id}`);
+  render();
+  try {
+    const r = await api<{ message: string }>(`/api/runs/${encodeURIComponent(id)}/apply`, {
+      method: "POST",
+    });
+    toast(r.message);
+  } catch (err) {
+    toast((err as Error).message, true);
+  } finally {
+    ui.busy.delete(`apply:${id}`);
+    await refresh();
+    render();
+  }
+}
 
 let tipEl: HTMLDivElement | null = null;
-let settled = false;
-let replayChart = false;
+/** When the drawer / palette opened: their entrance animation plays once, not on every render. */
+const opened = { drawer: 0, palette: 0 };
+const fresh = (t: number) => (Date.now() - t < 400 ? "anim" : "");
 function render() {
   const d = ui.data;
   if (!d) {
-    $app.innerHTML = `<aside class="sidebar"><div class="brand">${BRAND_MARK}<span class="brand-word">bumpsmith</span></div><div class="skel" style="height:62px"></div></aside><main class="main"><div class="page"><div class="skel" style="height:48px;width:40%;margin-bottom:24px"></div><div class="skel" style="height:150px;margin-bottom:18px"></div><div class="grid g-kpi">${'<div class="skel" style="height:140px"></div>'.repeat(6)}</div></div></main>`;
+    $app.innerHTML = `<aside class="sidebar"><div class="brand">${BRAND_MARK}<span class="brand-word">bumpsmith</span></div><div class="skel" style="height:48px"></div></aside><main class="main"><div class="page"><div class="skel" style="height:28px;width:240px;margin-bottom:24px"></div><div class="grid g4">${'<div class="skel" style="height:128px"></div>'.repeat(4)}</div><div class="skel mt" style="height:320px"></div></div></main>`;
     return;
   }
   const [route, arg] = ui.route.split("/");
@@ -1325,7 +1179,7 @@ function render() {
     crumbs.push("Dependencies");
     body = depsPage(d);
   } else if (route === "safety") {
-    crumbs.push("Safety & evidence");
+    crumbs.push("Safety");
     body = safetyPage(d);
   } else if (route === "sandbox") {
     crumbs.push("Sandbox & models");
@@ -1334,15 +1188,17 @@ function render() {
     crumbs.push("Overview");
     body = overview(d);
   }
-  // Keep focus and caret in text fields across re-renders.
   const active = document.activeElement as HTMLInputElement | null;
   const focusId = active?.id;
   const caret = active && "selectionStart" in active ? active.selectionStart : null;
-  const scrollTerm = document.getElementById("term");
-  const atBottom =
-    !scrollTerm || scrollTerm.scrollHeight - scrollTerm.scrollTop - scrollTerm.clientHeight < 40;
-  $app.className = `shell${settled ? " settled" : ""}`;
-  $app.innerHTML = `${GRADIENTS}${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
+  const term = document.getElementById("term");
+  const atBottom = !term || term.scrollHeight - term.scrollTop - term.clientHeight < 40;
+  $app.className = "shell";
+  if (ui.drawer && !opened.drawer) opened.drawer = Date.now();
+  if (!ui.drawer) opened.drawer = 0;
+  if (ui.palette && !opened.palette) opened.palette = Date.now();
+  if (!ui.palette) opened.palette = 0;
+  $app.innerHTML = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
   if (focusId) {
     const el = document.getElementById(focusId) as HTMLInputElement | null;
     if (el) {
@@ -1350,25 +1206,14 @@ function render() {
       if (caret !== null) el.setSelectionRange(caret, caret);
     }
   }
-  const term = document.getElementById("term");
-  if (term && atBottom) term.scrollTop = term.scrollHeight;
+  const t2 = document.getElementById("term");
+  if (t2 && atBottom) t2.scrollTop = t2.scrollHeight;
 }
 
-let settleTimer = 0;
-/** Let a page's entrance animations play once, then stop re-renders from replaying them. */
-function unsettle() {
-  settled = false;
-  clearTimeout(settleTimer);
-  settleTimer = window.setTimeout(() => {
-    settled = true;
-    $app.classList.add("settled");
-  }, 1600);
-}
 async function onRoute() {
   ui.route = location.hash.replace(/^#\/?/, "");
   const [route, arg] = ui.route.split("/");
   if (route === "runs" && arg) loadDetail(arg);
-  unsettle();
   render();
   window.scrollTo({ top: 0 });
 }
@@ -1388,11 +1233,19 @@ document.addEventListener("click", async (e) => {
       e.preventDefault();
       openNew(t.dataset.pkg ?? "", t.dataset.ver ?? "");
       break;
+    case "theme":
+      toggleTheme();
+      break;
     case "close":
       ui.drawer = null;
       render();
       break;
     case "open-run":
+      if (
+        (e.target as HTMLElement).closest("a,button") &&
+        (e.target as HTMLElement).closest("a,button") !== t
+      )
+        break;
       go(`runs/${t.dataset.id}`);
       break;
     case "open-live":
@@ -1406,20 +1259,15 @@ document.addEventListener("click", async (e) => {
       };
       render();
       break;
-    case "chart-mode":
-      ui.chartMode = v as typeof ui.chartMode;
-      replayChart = true;
-      render();
-      replayChart = false;
-      break;
-    case "chart-range":
-      ui.chartRange = Number(v);
-      replayChart = true;
-      render();
-      replayChart = false;
-      break;
     case "filter":
       ui.filter = v;
+      render();
+      break;
+    case "filter-ready":
+      ui.filter = "ready";
+      break;
+    case "tab":
+      ui.tab = v as Tab;
       render();
       break;
     case "scan":
@@ -1439,17 +1287,11 @@ document.addEventListener("click", async (e) => {
       break;
     case "pick-pkg":
       if (ui.drawer) {
+        if (ui.drawer.pkg !== v && ui.drawer.auto) ui.drawer.version = "";
         ui.drawer.pkg = v;
         render();
         fetchLatest(v);
         (document.getElementById("f-ver") as HTMLInputElement | null)?.focus();
-      }
-      break;
-    case "use-latest":
-      e.preventDefault();
-      if (ui.drawer) {
-        ui.drawer.version = ui.latest[ui.drawer.pkg] ?? "";
-        render();
       }
       break;
     case "pick-prov":
@@ -1491,25 +1333,10 @@ document.addEventListener("click", async (e) => {
       }
       break;
     }
-    case "apply": {
-      const id = t.dataset.id ?? "";
-      if (!confirm("Apply this patch to your working tree and stage it?")) break;
-      ui.busy.add(`apply:${id}`);
-      render();
-      try {
-        const r = await api<{ message: string }>(`/api/runs/${encodeURIComponent(id)}/apply`, {
-          method: "POST",
-        });
-        toast(r.message);
-      } catch (err) {
-        toast((err as Error).message, true);
-      } finally {
-        ui.busy.delete(`apply:${id}`);
-        await refresh();
-        render();
-      }
+    case "apply":
+      e.stopPropagation();
+      await apply(t.dataset.id ?? "");
       break;
-    }
     case "copy-patch":
       if (ui.detail) {
         await navigator.clipboard.writeText(ui.detail.patch);
@@ -1559,24 +1386,31 @@ document.addEventListener("input", (e) => {
     ui.palIndex = 0;
     render();
   } else if (ui.drawer && el.id === "f-pkg") {
+    if (ui.drawer.auto) {
+      ui.drawer.version = "";
+      ui.drawer.auto = false;
+    }
     ui.drawer.pkg = el.value.trim();
     render();
+    lookupLatestSoon();
   } else if (ui.drawer && el.id === "f-ver") {
     ui.drawer.version = el.value.trim();
+    ui.drawer.auto = false;
     render();
   } else if (ui.drawer && el.id === "f-budget") {
     ui.drawer.budget = Number(el.value);
     render();
   }
 });
-document.addEventListener("focusout", (e) => {
-  if ((e.target as HTMLElement).id === "f-pkg" && ui.drawer)
-    setTimeout(() => {
-      fetchLatest(ui.drawer?.pkg ?? "");
-      render();
-    }, 150);
-});
-
+// Look up the latest version once typing pauses (no lookups on every keystroke).
+let latestTimer = 0;
+function lookupLatestSoon() {
+  clearTimeout(latestTimer);
+  latestTimer = window.setTimeout(() => {
+    const pkg = ui.drawer?.pkg ?? "";
+    if (/^(@[\w.-]+\/)?[\w.-]{2,}$/.test(pkg)) fetchLatest(pkg);
+  }, 450);
+}
 document.addEventListener("keydown", (e) => {
   const d = ui.data;
   if (!d) return;
@@ -1614,45 +1448,35 @@ document.addEventListener("keydown", (e) => {
   if (ui.drawer?.mode === "new" && e.key === "Enter" && typing)
     document.querySelector<HTMLButtonElement>('[data-act="start"]:not([disabled])')?.click();
 });
-
-// Tooltips for chart columns and heatmap cells.
 document.addEventListener("mousemove", (e) => {
-  const t = e.target as HTMLElement;
-  const hint = t.closest<HTMLElement>("[data-hint]")?.dataset.hint;
-  const tipIdx = (t as unknown as SVGElement).dataset?.tip;
+  const hint = (e.target as HTMLElement).closest<HTMLElement>("[data-hint]")?.dataset.hint;
   if (!tipEl) {
     tipEl = document.createElement("div");
     tipEl.className = "tip";
     document.body.append(tipEl);
   }
-  if (hint) {
-    tipEl.innerHTML = esc(hint);
-  } else if (tipIdx !== undefined && ui.data) {
-    const b = buckets(ui.data.runs, ui.chartRange)[Number(tipIdx)] as Bucket | undefined;
-    if (!b) return;
-    tipEl.innerHTML = `<b>${esc(b.label)}</b>${OUTCOME_GROUPS.map((g) => `<div class="row"><span>${g.label}</span><span>${b.runs.filter((r) => g.states.includes(r.state)).length}</span></div>`).join("")}<div class="row"><span>Spend</span><span>${money(b.runs.reduce((n, r) => n + r.cost_usd, 0))}</span></div>`;
-  } else {
+  if (!hint) {
     tipEl.classList.remove("on");
     return;
   }
+  tipEl.textContent = hint;
   tipEl.style.left = `${e.clientX}px`;
   tipEl.style.top = `${e.clientY}px`;
   tipEl.classList.add("on");
 });
-
 window.addEventListener("hashchange", onRoute);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
 
 (async () => {
   render();
   try {
     await refresh();
   } catch (e) {
-    $app.innerHTML = `<div class="page"><div class="card"><div class="empty"><h3>Could not load</h3><p>${esc((e as Error).message)}</p></div></div></div>`;
+    $app.innerHTML = `<div class="page"><div class="panel"><div class="blank"><h3>Could not load</h3><p>${esc((e as Error).message)}</p></div></div></div>`;
     return;
   }
   for (const l of ui.data?.live ?? []) if (!l.done) followLive(l.id);
   await onRoute();
-  // Pick up runs started from the terminal while the dashboard is open.
   setInterval(async () => {
     if (document.hidden || ui.drawer || ui.palette) return;
     const before = ui.data?.runs.map((r) => r.id).join();
