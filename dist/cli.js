@@ -303087,7 +303087,7 @@ async function inventoryNode(root, pkg, pmOverride) {
   ];
   if (scripts.build) checks.push({ name: "build", argv: nodeRunScript(pm, "build") });
   if (scripts.typecheck) checks.push({ name: "typecheck", argv: nodeRunScript(pm, "typecheck") });
-  else if (hasTypeScript)
+  else if (hasTypeScript && "typescript" in { ...pkg.dependencies, ...pkg.devDependencies })
     checks.push({
       name: "typecheck",
       argv: pm === "npm" ? ["npx", "--no-install", "tsc", "--noEmit"] : [pm, "exec", "tsc", "--noEmit"]
@@ -303925,7 +303925,10 @@ var REGISTRY_HOSTS = [
   "registry.yarnpkg.com",
   "repo.yarnpkg.com",
   "pypi.org",
-  "files.pythonhosted.org"
+  "files.pythonhosted.org",
+  // Public npm mirrors recorded in some lockfiles; served from the npm registry.
+  "registry.npmmirror.com",
+  "registry.npm.taobao.org"
 ];
 var CERT_DIR = join11(DATA_DIR, "mirror-certs");
 var UID = "10001:10001";
@@ -303969,7 +303972,12 @@ async function ensureImage(kind, buildArgs = []) {
 async function ensureMirrorCerts(dir = CERT_DIR) {
   const { existsSync: existsSync8 } = await import("node:fs");
   const { writeFile: writeFile9, rm: rm8 } = await import("node:fs/promises");
-  if (existsSync8(join11(dir, "mirror.crt")) && existsSync8(join11(dir, "ca.crt"))) return dir;
+  const hostsFile = join11(dir, "hosts.txt");
+  const wanted = REGISTRY_HOSTS.join(",");
+  const current = existsSync8(hostsFile) ? (await readFile8(hostsFile, "utf8")).trim() : "";
+  if (existsSync8(join11(dir, "mirror.crt")) && existsSync8(join11(dir, "ca.crt")) && current === wanted)
+    return dir;
+  for (const f of ["mirror.crt", "mirror.key", "ca.crt"]) await rm8(join11(dir, f), { force: true });
   await mkdir7(dir, { recursive: true, mode: 493 });
   const { chmod: chmodDir } = await import("node:fs/promises");
   await chmodDir(dir, 493);
@@ -304045,6 +304053,8 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
   await chmod(join11(dir, "mirror.key"), 420);
   await chmod(join11(dir, "mirror.crt"), 420);
   await chmod(join11(dir, "ca.crt"), 420);
+  await writeFile9(hostsFile, `${wanted}
+`);
   return dir;
 }
 var infraReady = null;
@@ -304076,11 +304086,12 @@ async function ensureInfraOnce() {
   const ps = await run("docker", [
     "inspect",
     "-f",
-    "{{.State.Running}} {{.Config.Image}}",
+    "{{.State.Running}} {{.Config.Image}} {{range .Config.Env}}{{.}};{{end}}",
     MIRROR_NAME
   ]);
-  const [running, image] = ps.stdout.trim().split(" ");
-  const alreadyRunning = ps.exitCode === 0 && running === "true" && image === tag;
+  const [running, image, env = ""] = ps.stdout.trim().split(" ");
+  const hostsEnv = `MIRROR_HOSTS=${REGISTRY_HOSTS.join(",")}`;
+  const alreadyRunning = ps.exitCode === 0 && running === "true" && image === tag && env.split(";").includes(hostsEnv);
   if (!alreadyRunning) {
     if (ps.exitCode === 0) await run("docker", ["rm", "-f", MIRROR_NAME]);
     await runOk("docker", [
@@ -304107,6 +304118,8 @@ async function ensureInfraOnce() {
       `type=bind,src=${certs},dst=/etc/bumpsmith-mirror,readonly`,
       "-e",
       "MIRROR_PORT=443",
+      "-e",
+      hostsEnv,
       tag
     ]);
   }
@@ -304583,7 +304596,7 @@ ${r.stderr}`.trim());
     output_tail: out
   };
 }
-var NETWORK_FLAKE = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|socket hang up|fetch failed|HTTP (429|50[0-4])|status code (429|50[0-4])|Connection reset|Connection refused|Temporary failure in name resolution|Read timed out|error sending request|upstream error|network error/i;
+var NETWORK_FLAKE = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|DNSResolveFailed|ConnectionRefused|ECONNREFUSED|socket hang up|fetch failed|HTTP (429|50[0-4])|status code (429|50[0-4])|Connection reset|Connection refused|Temporary failure in name resolution|Read timed out|error sending request|upstream error|network error/i;
 async function runChecks(sb, checks, deadline) {
   const results = [];
   for (const c of checks) {
@@ -304870,6 +304883,10 @@ function checkFailureReason(baseline) {
     out
   ))
     return `Before the upgrade, ${names} already failed because the tests need a database or cache that the CI workflow does not declare as a service; declare it under services: in the workflow, or set checks in .bumpsmith.yml.`;
+  if (/Could not resolve host|getaddrinfo (ENOTFOUND|EAI_AGAIN)|Temporary failure in name resolution|network is unreachable/i.test(
+    out
+  ))
+    return `Before the upgrade, ${names} already failed because it downloads from the internet while running, which the sandbox does not allow; Bumpsmith verifies with the other checks.`;
   if (/ModuleNotFoundError|Cannot find module|ERR_MODULE_NOT_FOUND/.test(out))
     return `Before the upgrade, ${names} already failed: a module is missing (often a package installed only in CI, or a generated file).`;
   if (/command not found|not found: |ENOENT.*spawn/i.test(out))

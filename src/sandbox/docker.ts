@@ -42,6 +42,9 @@ export const REGISTRY_HOSTS = [
   "repo.yarnpkg.com",
   "pypi.org",
   "files.pythonhosted.org",
+  // Public npm mirrors recorded in some lockfiles; served from the npm registry.
+  "registry.npmmirror.com",
+  "registry.npm.taobao.org",
 ];
 const CERT_DIR = join(DATA_DIR, "mirror-certs");
 const UID = "10001:10001";
@@ -111,7 +114,13 @@ async function ensureImage(kind: ImageKind, buildArgs: string[] = []): Promise<s
 export async function ensureMirrorCerts(dir = CERT_DIR): Promise<string> {
   const { existsSync } = await import("node:fs");
   const { writeFile, rm } = await import("node:fs/promises");
-  if (existsSync(join(dir, "mirror.crt")) && existsSync(join(dir, "ca.crt"))) return dir;
+  // Regenerate when the served host list changes (the certificate names every host).
+  const hostsFile = join(dir, "hosts.txt");
+  const wanted = REGISTRY_HOSTS.join(",");
+  const current = existsSync(hostsFile) ? (await readFile(hostsFile, "utf8")).trim() : "";
+  if (existsSync(join(dir, "mirror.crt")) && existsSync(join(dir, "ca.crt")) && current === wanted)
+    return dir;
+  for (const f of ["mirror.crt", "mirror.key", "ca.crt"]) await rm(join(dir, f), { force: true });
   // Readable by the mirror container's own (different) user on Linux hosts. The leaf key
   // is only good for the registry hostnames, and its CA's private key is destroyed below.
   await mkdir(dir, { recursive: true, mode: 0o755 });
@@ -190,6 +199,7 @@ export async function ensureMirrorCerts(dir = CERT_DIR): Promise<string> {
   await chmod(join(dir, "mirror.key"), 0o644);
   await chmod(join(dir, "mirror.crt"), 0o644);
   await chmod(join(dir, "ca.crt"), 0o644);
+  await writeFile(hostsFile, `${wanted}\n`);
   return dir;
 }
 
@@ -234,11 +244,13 @@ async function ensureInfraOnce(): Promise<void> {
   const ps = await run("docker", [
     "inspect",
     "-f",
-    "{{.State.Running}} {{.Config.Image}}",
+    "{{.State.Running}} {{.Config.Image}} {{range .Config.Env}}{{.}};{{end}}",
     MIRROR_NAME,
   ]);
-  const [running, image] = ps.stdout.trim().split(" ");
-  const alreadyRunning = ps.exitCode === 0 && running === "true" && image === tag;
+  const [running, image, env = ""] = ps.stdout.trim().split(" ");
+  const hostsEnv = `MIRROR_HOSTS=${REGISTRY_HOSTS.join(",")}`;
+  const alreadyRunning =
+    ps.exitCode === 0 && running === "true" && image === tag && env.split(";").includes(hostsEnv);
   if (!alreadyRunning) {
     if (ps.exitCode === 0) await run("docker", ["rm", "-f", MIRROR_NAME]);
     await runOk("docker", [
@@ -265,6 +277,8 @@ async function ensureInfraOnce(): Promise<void> {
       `type=bind,src=${certs},dst=/etc/bumpsmith-mirror,readonly`,
       "-e",
       "MIRROR_PORT=443",
+      "-e",
+      hostsEnv,
       tag,
     ]);
   }

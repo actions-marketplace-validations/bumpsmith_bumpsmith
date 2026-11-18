@@ -392,6 +392,12 @@ export function checkFailureReason(baseline: CheckResult[]): string | null {
     )
   )
     return `Before the upgrade, ${names} already failed because the tests need a database or cache that the CI workflow does not declare as a service; declare it under services: in the workflow, or set checks in .bumpsmith.yml.`;
+  if (
+    /Could not resolve host|getaddrinfo (ENOTFOUND|EAI_AGAIN)|Temporary failure in name resolution|network is unreachable/i.test(
+      out,
+    )
+  )
+    return `Before the upgrade, ${names} already failed because it downloads from the internet while running, which the sandbox does not allow; Bumpsmith verifies with the other checks.`;
   if (/ModuleNotFoundError|Cannot find module|ERR_MODULE_NOT_FOUND/.test(out))
     return `Before the upgrade, ${names} already failed: a module is missing (often a package installed only in CI, or a generated file).`;
   if (/command not found|not found: |ENOENT.*spawn/i.test(out))

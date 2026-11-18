@@ -17,12 +17,21 @@ import { Readable } from "node:stream";
 const HOSTS = new Set(
   (
     process.env.MIRROR_HOSTS ??
-    "registry.npmjs.org,registry.yarnpkg.com,repo.yarnpkg.com,pypi.org,files.pythonhosted.org"
+    "registry.npmjs.org,registry.yarnpkg.com,repo.yarnpkg.com,pypi.org,files.pythonhosted.org,registry.npmmirror.com,registry.npm.taobao.org"
   )
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean),
 );
+/**
+ * Public npm mirrors that lockfiles often record (tarball URLs). They serve the same paths
+ * and byte-identical tarballs as the npm registry, so they are fetched from it; lockfile
+ * integrity hashes still check every byte.
+ */
+const UPSTREAM_ALIAS = {
+  "registry.npmmirror.com": "registry.npmjs.org",
+  "registry.npm.taobao.org": "registry.npmjs.org",
+};
 const CERT_DIR = process.env.MIRROR_CERT_DIR ?? "/etc/bumpsmith-mirror";
 const PORT = Number(process.env.MIRROR_PORT ?? 443);
 const MAX_BYTES = Number(process.env.MIRROR_MAX_BYTES ?? 512 * 1024 * 1024);
@@ -139,7 +148,7 @@ async function handle(req, res) {
   try {
     const headers = {};
     for (const h of PASS_HEADERS) if (req.headers[h]) headers[h] = String(req.headers[h]);
-    const upstream = await fetchUpstream(`https://${host}${req.url}`, {
+    const upstream = await fetchUpstream(`https://${UPSTREAM_ALIAS[host] ?? host}${req.url}`, {
       method: req.method,
       headers,
       redirect: "manual",

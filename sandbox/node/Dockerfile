@@ -45,7 +45,8 @@ ENV YARN_ENABLE_GLOBAL_CACHE=0 \
     YARN_GLOBAL_FOLDER=/workspace/.bumpsmith-cache/yarn-global \
     npm_config_cache=/workspace/.bumpsmith-cache/npm \
     npm_config_store_dir=/workspace/.bumpsmith-cache/pnpm-store \
-    BUN_INSTALL_CACHE_DIR=/workspace/.bumpsmith-cache/bun
+    BUN_INSTALL_CACHE_DIR=/workspace/.bumpsmith-cache/bun \
+    BUN_CONFIG_MAX_HTTP_REQUESTS=32
 USER 10001:10001
 WORKDIR /workspace
 CMD ["sleep", "infinity"]

@@ -234,7 +234,9 @@ async function inventoryNode(
   ];
   if (scripts.build) checks.push({ name: "build", argv: nodeRunScript(pm, "build") });
   if (scripts.typecheck) checks.push({ name: "typecheck", argv: nodeRunScript(pm, "typecheck") });
-  else if (hasTypeScript)
+  // tsc only when the repo installs TypeScript; a tsconfig.json alone (editor config,
+  // Deno, Bun) would make a check that fails for no reason.
+  else if (hasTypeScript && "typescript" in { ...pkg.dependencies, ...pkg.devDependencies })
     checks.push({
       name: "typecheck",
       argv:

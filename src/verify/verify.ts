@@ -74,7 +74,7 @@ export async function runCheck(
 
 /** Output of an install that failed for network reasons rather than the repository's. */
 export const NETWORK_FLAKE =
-  /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|socket hang up|fetch failed|HTTP (429|50[0-4])|status code (429|50[0-4])|Connection reset|Connection refused|Temporary failure in name resolution|Read timed out|error sending request|upstream error|network error/i;
+  /ECONNRESET|ETIMEDOUT|EAI_AGAIN|DNSResolveFailed|ConnectionRefused|ECONNREFUSED|socket hang up|fetch failed|HTTP (429|50[0-4])|status code (429|50[0-4])|Connection reset|Connection refused|Temporary failure in name resolution|Read timed out|error sending request|upstream error|network error/i;
 
 /** Run checks in order (VER-4). Stops after a failed install, since later checks are meaningless. */
 export async function runChecks(
