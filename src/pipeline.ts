@@ -274,6 +274,9 @@ export function lowestVersion(range: string): string | null {
  * stays in job.error for debugging.
  */
 export function explainError(message: string): string {
+  const missing = /(npm|pypi): (\S+?)@(\S+) not found/.exec(message);
+  if (missing)
+    return `${missing[2]} ${missing[3]} does not exist on the ${missing[1] === "npm" ? "npm" : "PyPI"} registry; check the version number.`;
   if (/is not a dependency of this repository/.test(message))
     return "The package is not declared in this directory's manifest; for a monorepo, pass the package's directory (--dir).";
   if (/No supported manifest found/.test(message))
@@ -767,6 +770,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     };
 
     // Bump the version inside the sandbox
+    log(`job ${id}: applying the version bump`);
     // When the dependencies cannot install even before the upgrade, a failing bump is the
     // same problem, not a crash: say so and stop.
     const baselineInstalled = !!job.baseline.find((c) => c.name === "install")?.passed;
@@ -948,6 +952,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
       );
       return job;
     }
+    log(`job ${id}: checks after the bump`);
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
     let verdict = await compareWithBaseline(sb, checks, job.baseline, job.after_bump, deadline);
@@ -1074,6 +1079,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
 
     // Diff rules + independent review
     job.state = "reviewing";
+    log(`job ${id}: reviewing the change`);
     const readSnap = async (side: string, path: string) => {
       const f = join(dir, side, path);
       return existsSync(f) ? await readFile(f, "utf8") : null;

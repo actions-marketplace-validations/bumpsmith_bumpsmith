@@ -434,3 +434,12 @@ describe("install failure reasons", async () => {
     ).toMatch(/CPU/);
   });
 });
+
+describe("explainError for missing versions", async () => {
+  const { explainError } = await import("../../src/pipeline.ts");
+  it("names the package and registry", () => {
+    expect(explainError("Error: npm: nanoid@99.0.0 not found")).toBe(
+      "nanoid 99.0.0 does not exist on the npm registry; check the version number.",
+    );
+  });
+});

@@ -304753,6 +304753,9 @@ function lowestVersion(range) {
   return first ? import_semver3.default.coerce(first)?.version ?? null : null;
 }
 function explainError(message) {
+  const missing = /(npm|pypi): (\S+?)@(\S+) not found/.exec(message);
+  if (missing)
+    return `${missing[2]} ${missing[3]} does not exist on the ${missing[1] === "npm" ? "npm" : "PyPI"} registry; check the version number.`;
   if (/is not a dependency of this repository/.test(message))
     return "The package is not declared in this directory's manifest; for a monorepo, pass the package's directory (--dir).";
   if (/No supported manifest found/.test(message))
@@ -305151,6 +305154,7 @@ async function runJob(input3, opts) {
         reached ? `Lockfile now resolves ${input3.packageName} to ${now.join(", ")}.` : `The lockfile could only move ${input3.packageName} to ${now.join(", ") || "an unknown version"}: a package that depends on it allows nothing newer. Upgrading that parent package is needed to reach ${input3.to}.`
       );
     };
+    log2(`job ${id}: applying the version bump`);
     const baselineInstalled = !!job.baseline.find((c) => c.name === "install")?.passed;
     try {
       const manifest = "package.json";
@@ -305309,6 +305313,7 @@ async function runJob(input3, opts) {
       );
       return job;
     }
+    log2(`job ${id}: checks after the bump`);
     job.after_bump = await runChecks(sb, checks, deadline);
     job.state = "verifying";
     let verdict = await compareWithBaseline(sb, checks, job.baseline, job.after_bump, deadline);
@@ -305425,6 +305430,7 @@ async function runJob(input3, opts) {
     const files = parsePatch(patch);
     job.patch_lines = files.reduce((n, f) => n + f.added.length + f.removed.length, 0);
     job.state = "reviewing";
+    log2(`job ${id}: reviewing the change`);
     const readSnap = async (side, path5) => {
       const f = join13(dir, side, path5);
       return existsSync6(f) ? await readFile10(f, "utf8") : null;

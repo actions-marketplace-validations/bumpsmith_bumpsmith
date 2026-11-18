@@ -16,5 +16,5 @@
     "types": ["node"]
   },
   "include": ["src", "test", "scripts"],
-  "exclude": ["test/fixtures"]
+  "exclude": ["test/fixtures", "src/dashboard/client"]
 }

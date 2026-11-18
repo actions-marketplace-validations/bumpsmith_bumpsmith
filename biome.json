@@ -13,7 +13,8 @@
       "!runs",
       "!.cache",
       "!.data",
-      "!deploy/oci/cloud-init.yaml"
+      "!deploy/oci/cloud-init.yaml",
+      "!dist"
     ]
   },
   "formatter": {
@@ -40,5 +41,20 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["dashboard/**/*.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
+          },
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ]
 }

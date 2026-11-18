@@ -90,6 +90,22 @@ Pull requests opened this way come from your account, so your CI runs on them. G
 commits "Verified" only when they are made by a GitHub App, so use the Action with an App
 token if you want signed commits.
 
+### Local dashboard
+
+```sh
+npx bumpsmith dashboard                # opens http://127.0.0.1:4477
+```
+
+A dashboard for everything Bumpsmith did in this repository:
+
+- **Overview:** what's ready to apply, verification rate, spend and time to green, a check-health map and where upgrades stop.
+- **Upgrade detail:** each pipeline stage, your checks before and after (with their output), the diff with the agent's edits marked, the breaking changes it read, the independent review and the cost. **Apply patch** stages a verified result in one click.
+- **New upgrade:** pick a dependency and a model, then watch it run live in the sandbox.
+- **Dependencies:** your upgrade debt, with one-click upgrades.
+- **Search:** ⌘K across upgrades, dependencies and actions.
+
+It runs on 127.0.0.1 only and sends nothing anywhere: fonts are bundled, there's no analytics, and every action needs a per-session token.
+
 ## How Bumpsmith stays safe
 
 Bumpsmith runs code it did not write (your dependencies' install and test steps) and lets

@@ -44,6 +44,7 @@ Usage (run inside your repository):
   bumpsmith init                                add the GitHub Action workflow and a starter .bumpsmith.yml
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
+  bumpsmith dashboard                           local dashboard of your upgrades: review diffs, apply patches, start upgrades live
 
 Options: --repo <dir> (default .), --dir <sub-directory> (monorepos), --provider <name>, --model <id>, --base-url <url>, --budget <usd>
 
@@ -233,6 +234,9 @@ async function main() {
       tasks: { type: "string", default: "bench/tasks.json" },
       limit: { type: "string" },
       only: { type: "string" },
+      port: { type: "string" },
+      runs: { type: "string" },
+      "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -557,6 +561,29 @@ async function main() {
         return;
       }
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
+    }
+    case "dashboard": {
+      const { startDashboard } = await import("./dashboard/server.ts");
+      const dir = resolve(values.repo ?? ".");
+      const { url } = await startDashboard({
+        repoDir: dir,
+        runsDir: values.runs ? resolve(values.runs) : undefined,
+        port: values.port ? Number(values.port) : undefined,
+        cliEntry: process.argv[1] ?? "",
+      });
+      log(`Bumpsmith dashboard for ${basename(dir)}: ${url}`);
+      log("Local only (127.0.0.1); nothing is sent anywhere. Ctrl+C to stop.");
+      if (!values["no-open"]) {
+        const opener =
+          process.platform === "darwin"
+            ? "open"
+            : process.platform === "win32"
+              ? "start"
+              : "xdg-open";
+        run(opener, [url]).catch(() => {});
+      }
+      await new Promise(() => {});
+      return;
     }
     case "cleanup":
       await cleanupStale();

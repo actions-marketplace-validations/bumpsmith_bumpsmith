@@ -26,5 +26,19 @@ await build({
   ...common,
   entryPoints: ["src/cli.ts"],
   outfile: "dist/cli.js",
+  // Only used from source to bundle the dashboard client on the fly; dist ships it prebuilt.
+  external: ["esbuild"],
   banner: common.banner,
+});
+
+// The dashboard's browser code (served by `bumpsmith dashboard`).
+await build({
+  entryPoints: ["src/dashboard/client/app.ts"],
+  outfile: "dist/dashboard-app.js",
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  target: "es2022",
+  minify: true,
+  logLevel: "info",
 });

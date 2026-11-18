@@ -13,7 +13,7 @@
   },
   "scripts": {
     "bumpsmith": "tsx src/cli.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/dashboard/client",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
@@ -54,6 +54,7 @@
   "files": [
     "dist",
     "sandbox",
+    "dashboard",
     "action.yml",
     "README.md",
     "LICENSE",
