@@ -63,9 +63,10 @@ export const DEFAULT_LIMITS: SandboxLimits = {
 };
 
 /** Node base images by major version, pinned by digest. */
-export const NODE_IMAGES: Record<22 | 24, string> = {
+export const NODE_IMAGES: Record<22 | 24 | 26, string> = {
   22: "node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee",
   24: "node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54",
+  26: "node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1",
 };
 
 type ImageKind = "node" | "python" | "mirror";

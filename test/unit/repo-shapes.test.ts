@@ -400,3 +400,14 @@ describe("which requirement files install", () => {
     expect(inv.checks[0]?.argv.join(" ")).toContain("test/requirements.txt");
   });
 });
+
+describe("Node version", async () => {
+  const { nodeMajorFor } = await import("../../src/inventory/inventory.ts");
+  it("picks 22, 24 or 26 from .nvmrc / engines", () => {
+    expect(nodeMajorFor(undefined)).toBe(22);
+    expect(nodeMajorFor("18")).toBe(22);
+    expect(nodeMajorFor(">=24")).toBe(24);
+    expect(nodeMajorFor("26.13.1")).toBe(26);
+    expect(nodeMajorFor("v25")).toBe(26);
+  });
+});

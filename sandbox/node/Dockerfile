@@ -1,9 +1,9 @@
 # Bumpsmith sandbox image for Node.js projects. Base images pinned by digest (reproducibility, PRD NFR).
-# NODE_IMAGE is chosen per job from the repo's .nvmrc / engines (Node 22 or 24).
+# NODE_IMAGE is chosen per job from the repo's .nvmrc / engines (Node 22, 24 or 26).
 #
 # Package managers are preinstalled because Corepack downloads ignore the egress proxy:
 #   pnpm 10 (fetches a repo's pinned pnpm version itself, through the proxy)
-#   Yarn 1 (ships with the base image) and Yarn 4 as `yarn-berry`
+#   Yarn 1 (ships with Node 22/24 images; installed for Node 26+) and Yarn 4 as `yarn-berry`
 #   Bun (platform binary from npm; install scripts stay disabled)
 ARG NODE_IMAGE=node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
 FROM ${NODE_IMAGE}
@@ -12,6 +12,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates coreutils tar git \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g --ignore-scripts pnpm@10.34.9 \
+ && { command -v yarn >/dev/null || npm install -g --ignore-scripts yarn@1.22.22; } \
  && npm install --prefix /opt/yarn-berry --ignore-scripts @yarnpkg/cli-dist@4.18.1 \
  && printf '#!/bin/sh\nexec node /opt/yarn-berry/node_modules/@yarnpkg/cli-dist/bin/yarn.js "$@"\n' > /usr/local/bin/yarn-berry \
  && chmod 755 /usr/local/bin/yarn-berry \

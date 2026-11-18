@@ -33,7 +33,7 @@ export interface Inventory {
   checks: CheckCommand[];
   runtime: { node?: string; python?: string };
   /** Sandbox Node major that satisfies the repo's .nvmrc / engines. */
-  nodeMajor: 22 | 24;
+  nodeMajor: 22 | 24 | 26;
   hasTypeScript: boolean;
   workspaces: string[];
   agentsMd: string | null;
@@ -77,12 +77,12 @@ function yarnFlavour(root: string, pkg: PackageJson): "yarn" | "yarn-berry" {
   return "yarn-berry";
 }
 
-/** Node 24 when the repo asks for anything above 22, otherwise Node 22. */
-export function nodeMajorFor(spec: string | undefined): 22 | 24 {
+/** The sandbox Node for a repo's .nvmrc / engines: 26 for anything above 24, 24 above 22, else 22. */
+export function nodeMajorFor(spec: string | undefined): 22 | 24 | 26 {
   if (!spec) return 22;
   // The lowest version the spec admits is the first number in it (">=24", "^24.1", "v24", "24.11.0").
   const first = Number(/(\d+)/.exec(spec)?.[1] ?? 0);
-  return first >= 23 ? 24 : 22;
+  return first >= 25 ? 26 : first >= 23 ? 24 : 22;
 }
 
 function detectNodePm(root: string, pkg: PackageJson): PackageManager {

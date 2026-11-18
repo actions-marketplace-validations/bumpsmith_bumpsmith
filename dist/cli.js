@@ -302978,7 +302978,7 @@ function yarnFlavour(root, pkg) {
 function nodeMajorFor(spec) {
   if (!spec) return 22;
   const first = Number(/(\d+)/.exec(spec)?.[1] ?? 0);
-  return first >= 23 ? 24 : 22;
+  return first >= 25 ? 26 : first >= 23 ? 24 : 22;
 }
 function detectNodePm(root, pkg) {
   const declared = pkg.packageManager?.split("@")[0];
@@ -303937,7 +303937,8 @@ var DEFAULT_LIMITS2 = {
 };
 var NODE_IMAGES = {
   22: "node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee",
-  24: "node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54"
+  24: "node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54",
+  26: "node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1"
 };
 async function imageTag(kind, buildArgs) {
   const files = kind === "mirror" ? ["Dockerfile", "mirror.mjs"] : kind === "python" ? ["Dockerfile", "git-wrapper.sh"] : ["Dockerfile"];
@@ -305030,10 +305031,10 @@ async function runJob(input3, opts) {
       }
     }
     const nodeWanted = Number(/(\d+)/.exec(inv.runtime.node ?? "")?.[1] ?? 0);
-    if (eco === "npm" && nodeWanted > 24) {
+    if (eco === "npm" && nodeWanted > 26) {
       job.state = "blocked_policy";
       job.notes.push(
-        `Unsupported: the repo requires Node ${inv.runtime.node}; sandboxes provide Node 22 and 24.`
+        `Unsupported: the repo requires Node ${inv.runtime.node}; sandboxes provide Node 22, 24 and 26.`
       );
       return job;
     }

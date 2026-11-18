@@ -487,7 +487,7 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         const rootInv = await inventory(repoRoot, "npm");
         inv = await inventory(repoDir, "npm", { packageManager: rootInv.packageManager });
         inv.lockfiles = [];
-        inv.nodeMajor = Math.max(inv.nodeMajor, rootInv.nodeMajor) as 22 | 24;
+        inv.nodeMajor = Math.max(inv.nodeMajor, rootInv.nodeMajor) as 22 | 24 | 26;
         inv.runtime.node ??= rootInv.runtime.node;
         for (const c of inv.checks)
           c.cwd = c.name === "install" ? "/workspace" : `/workspace/${sub}`;
@@ -597,10 +597,10 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
     }
     // Preflight before any model spend: the sandbox must be able to run this repo.
     const nodeWanted = Number(/(\d+)/.exec(inv.runtime.node ?? "")?.[1] ?? 0);
-    if (eco === "npm" && nodeWanted > 24) {
+    if (eco === "npm" && nodeWanted > 26) {
       job.state = "blocked_policy";
       job.notes.push(
-        `Unsupported: the repo requires Node ${inv.runtime.node}; sandboxes provide Node 22 and 24.`,
+        `Unsupported: the repo requires Node ${inv.runtime.node}; sandboxes provide Node 22, 24 and 26.`,
       );
       return job;
     }

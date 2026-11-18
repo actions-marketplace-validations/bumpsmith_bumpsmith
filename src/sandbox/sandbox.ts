@@ -41,7 +41,7 @@ export interface Sandbox {
 export interface CreateOptions {
   ecosystem: Ecosystem;
   /** Node major for npm projects (22 default). */
-  nodeMajor?: 22 | 24;
+  nodeMajor?: 22 | 24 | 26;
   /** Label used to find and clean up sandboxes of a job after a crash. */
   label?: string;
   /** Databases and caches the tests need, started as sidecars on the sandbox's localhost. */
