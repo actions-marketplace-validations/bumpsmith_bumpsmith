@@ -6,6 +6,7 @@ import http from "node:http";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import QRCode from "qrcode";
 import { inventory } from "../inventory/inventory.ts";
 import type { JobRecord } from "../pipeline.ts";
 import { latestRelease } from "../registry/registry.ts";
@@ -15,13 +16,14 @@ import {
   AuthError,
   clearCookie,
   cookieName,
+  DEFAULT_POLICY,
   type Principal,
   readCookie,
   sessionCookie,
 } from "../server/auth.ts";
-import { loadMasterKey, safeEqual } from "../server/crypto.ts";
+import { loadMasterKey, safeEqual, verifyPassword } from "../server/crypto.ts";
 import { openDb } from "../server/db.ts";
-import { can, type Permission } from "../server/rbac.ts";
+import { can, PERMISSIONS, type Permission } from "../server/rbac.ts";
 import { run } from "../util/proc.ts";
 
 /**
@@ -316,8 +318,8 @@ export async function startDashboard(opts: DashboardOptions) {
   const runsDir = resolve(opts.runsDir ?? join(repoDir, ".bumpsmith", "runs"));
   const dataDir = resolve(opts.dataDir ?? join(homedir(), ".bumpsmith"));
   const db = openDb(dataDir);
-  await loadMasterKey(join(dataDir, "master.key"));
-  const auth = new Auth(db);
+  const masterKey = await loadMasterKey(join(dataDir, "master.key"));
+  const auth = new Auth(db, DEFAULT_POLICY, masterKey);
   const secure = !!opts.secureCookies;
   const setupToken = auth.needsSetup() ? auth.issueSetupToken() : null;
   const live = new Map<string, LiveRun>();
@@ -448,7 +450,17 @@ export async function startDashboard(opts: DashboardOptions) {
     method: "GET" | "POST";
     path: RegExp;
     /** "public" needs no session; "session" any signed-in user; otherwise a permission. */
-    perm: "public" | "session" | Permission;
+    /**
+     * "public": no session. "pending": a session waiting for its MFA code. "session": any
+     * signed-in user. Otherwise the permission the route needs.
+     */
+    perm: "public" | "pending" | "session" | Permission;
+    /** Needs a recent password or MFA confirmation (step-up). */
+    stepUp?: boolean;
+    /** Allowed while the user still has to enrol in MFA. */
+    enroll?: boolean;
+    /** Account routes: never usable with a personal API token. */
+    noToken?: boolean;
     handler: (c: Ctx) => Promise<void> | void;
   }
 
@@ -458,15 +470,25 @@ export async function startDashboard(opts: DashboardOptions) {
     role: p.role,
     permissions: p.permissions,
     csrf: p.session.csrf,
+    mustEnrollMfa: p.mustEnrollMfa,
   });
+  const ua = (c: Ctx) => String(c.req.headers["user-agent"] ?? "");
+  const cookieFor = (token: string) => sessionCookie(token, secure, 72 * 3600);
   const signIn = (c: Ctx, user: Parameters<Auth["createSession"]>[0]) => {
     if (c.token) auth.endSession(c.token, null, c.ip); // rotate: never reuse a pre-login session
-    const s = auth.createSession(user, c.ip, String(c.req.headers["user-agent"] ?? ""));
+    if (user.mfa_enabled) {
+      // Password accepted; the session only becomes usable after the second factor.
+      const s = auth.createSession(user, c.ip, ua(c), true);
+      return send(c.res, 200, { mfaRequired: true }, undefined, {
+        "set-cookie": cookieFor(s.token),
+      });
+    }
+    const s = auth.createSession(user, c.ip, ua(c));
     const p = auth.principal(s.token) as Principal;
-    return send(c.res, 200, sessionPayload(p), undefined, {
-      "set-cookie": sessionCookie(s.token, secure, 12 * 3600),
-    });
+    return send(c.res, 200, sessionPayload(p), undefined, { "set-cookie": cookieFor(s.token) });
   };
+  const mfaFailures = new Map<string, number>();
+  const body = async (c: Ctx) => readBody(c.req);
   const authErr = (c: Ctx, e: unknown) => {
     if (e instanceof AuthError) return send(c.res, e.status, { error: e.message });
     throw e;
@@ -536,6 +558,290 @@ export async function startDashboard(opts: DashboardOptions) {
       handler: (c) => {
         if (c.token) auth.endSession(c.token, c.p, c.ip);
         return send(c.res, 200, { ok: true }, undefined, { "set-cookie": clearCookie(secure) });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/mfa$/,
+      perm: "pending",
+      handler: async (c) => {
+        const p = c.p as Principal;
+        const key = p.session.id_hash;
+        const used = auth.checkSecondFactor(p.user.id, String((await body(c)).code ?? ""));
+        if (!used) {
+          const n = (mfaFailures.get(key) ?? 0) + 1;
+          mfaFailures.set(key, n);
+          act(c, "auth.mfa_failed", undefined, { attempt: n });
+          if (n >= 5) {
+            if (c.token) auth.endSession(c.token, null, c.ip);
+            mfaFailures.delete(key);
+            return send(c.res, 401, { error: "Too many wrong codes. Sign in again." }, undefined, {
+              "set-cookie": clearCookie(secure),
+            });
+          }
+          return send(c.res, 400, {
+            error: "That code is not valid. Check your authenticator app.",
+          });
+        }
+        mfaFailures.delete(key);
+        const s = auth.completeMfa(c.token as string, p, c.ip, ua(c));
+        if (used === "recovery")
+          act(c, "auth.recovery_code_used", undefined, {
+            left: auth.remainingRecoveryCodes(p.user.id),
+          });
+        const next = auth.principal(s.token) as Principal;
+        return send(c.res, 200, sessionPayload(next), undefined, {
+          "set-cookie": cookieFor(s.token),
+        });
+      },
+    },
+    {
+      // Step-up: confirm it's you before a sensitive action (MFA code if enrolled, else password).
+      method: "POST",
+      path: /^\/api\/me\/reauth$/,
+      perm: "session",
+      noToken: true,
+      handler: async (c) => {
+        const p = c.p as Principal;
+        if (auth.rateLimited(`reauth:${p.user.id}`, 10))
+          return send(c.res, 429, { error: "Too many attempts. Wait a few minutes." });
+        const b = await body(c);
+        let ok = false;
+        if (p.user.mfa_enabled)
+          ok = auth.checkSecondFactor(p.user.id, String(b.code ?? "")) !== null;
+        else
+          ok = await verifyPassword(
+            String(b.password ?? ""),
+            auth.user(p.user.id)?.password_hash ?? null,
+          );
+        act(c, ok ? "auth.reauth" : "auth.reauth_failed");
+        if (!ok)
+          return send(c.res, 400, {
+            error: p.user.mfa_enabled ? "That code is not valid." : "That password is not correct.",
+          });
+        auth.markFresh(p);
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/me$/,
+      perm: "session",
+      enroll: true,
+      noToken: true,
+      handler: (c) => {
+        const p = c.p as Principal;
+        return send(c.res, 200, {
+          user: {
+            ...sessionPayload(p).user,
+            created_at: (auth.user(p.user.id) as { created_at?: string }).created_at,
+          },
+          mfa: {
+            enabled: !!p.user.mfa_enabled,
+            recoveryLeft: auth.remainingRecoveryCodes(p.user.id),
+            required: p.mustEnrollMfa || auth.settings(p.user.org_id).mfa !== "off",
+          },
+          sessions: auth.sessions(p.user.id, p.session.id_hash),
+          tokens: auth.apiTokens(p.user.id).map((t) => ({ ...t, scopes: JSON.parse(t.scopes) })),
+          permissions: PERMISSIONS.filter((x) => p.permissions.includes(x.id)),
+          fresh: auth.fresh(p),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/profile$/,
+      perm: "session",
+      noToken: true,
+      handler: async (c) => {
+        const name = String((await body(c)).name ?? "").trim();
+        if (!name || name.length > 80)
+          return send(c.res, 400, { error: "Enter a name (up to 80 characters)." });
+        db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, c.p?.user.id ?? "");
+        act(c, "user.profile_updated");
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/password$/,
+      perm: "session",
+      noToken: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          await auth.changePassword(
+            c.p as Principal,
+            String(b.current ?? ""),
+            String(b.next ?? ""),
+            c.ip,
+          );
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/mfa\/start$/,
+      perm: "session",
+      enroll: true,
+      noToken: true,
+      handler: async (c) => {
+        const p = c.p as Principal;
+        if (p.user.mfa_enabled)
+          return send(c.res, 409, { error: "Two-factor authentication is already on." });
+        const org = auth.org(p.user.org_id);
+        const m = auth.startMfa(p.user.id, p.user.email, `Bumpsmith (${org?.name ?? "Bumpsmith"})`);
+        const qr = await QRCode.toString(m.url, {
+          type: "svg",
+          margin: 0,
+          errorCorrectionLevel: "M",
+          color: { dark: "#121211", light: "#00000000" },
+        });
+        return send(c.res, 200, { secret: m.secret, qr });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/mfa\/confirm$/,
+      perm: "session",
+      enroll: true,
+      noToken: true,
+      handler: async (c) => {
+        const p = c.p as Principal;
+        const codes = auth.confirmMfa(p.user.id, String((await body(c)).code ?? ""));
+        if (!codes)
+          return send(c.res, 400, {
+            error: "That code is not valid. Enter the 6 digits your app shows now.",
+          });
+        auth.markFresh(p);
+        act(c, "auth.mfa_enabled");
+        return send(c.res, 200, { recoveryCodes: codes });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/mfa\/recovery$/,
+      perm: "session",
+      stepUp: true,
+      noToken: true,
+      handler: (c) => {
+        const p = c.p as Principal;
+        if (!p.user.mfa_enabled)
+          return send(c.res, 400, { error: "Turn on two-factor authentication first." });
+        act(c, "auth.recovery_codes_regenerated");
+        return send(c.res, 200, { recoveryCodes: auth.newRecoveryCodes(p.user.id) });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/mfa\/disable$/,
+      perm: "session",
+      stepUp: true,
+      noToken: true,
+      handler: (c) => {
+        const p = c.p as Principal;
+        const pol = auth.settings(p.user.org_id);
+        const admin = p.permissions.some((x) =>
+          [
+            "members.manage",
+            "roles.manage",
+            "access.manage",
+            "security.manage",
+            "integrations.manage",
+            "org.manage",
+          ].includes(x),
+        );
+        if (pol.mfa === "all" || (pol.mfa === "admins" && admin))
+          return send(c.res, 400, {
+            error: "Your organisation requires two-factor authentication for your role.",
+          });
+        auth.disableMfa(p.user.id);
+        act(c, "auth.mfa_disabled");
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/sessions\/revoke-others$/,
+      perm: "session",
+      noToken: true,
+      handler: (c) => {
+        const p = c.p as Principal;
+        const n = auth.revokeOtherSessions(p.user.id, p.session.id_hash);
+        act(c, "auth.sessions_revoked", undefined, { count: n });
+        return send(c.res, 200, { revoked: n });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/sessions\/([a-f0-9]{16})\/revoke$/,
+      perm: "session",
+      noToken: true,
+      handler: (c) => {
+        const p = c.p as Principal;
+        if (!auth.revokeSession(p.user.id, c.m[1] as string))
+          return send(c.res, 404, { error: "no such session" });
+        act(c, "auth.session_revoked");
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/tokens$/,
+      perm: "session",
+      stepUp: true,
+      noToken: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          const t = auth.createApiToken(
+            c.p as Principal,
+            String(b.name ?? ""),
+            Number(b.days ?? 30),
+            Array.isArray(b.scopes) ? b.scopes.map(String) : [],
+          );
+          act(c, "token.created", t.id, {
+            name: String(b.name ?? "").slice(0, 60),
+            scopes: b.scopes,
+          });
+          return send(c.res, 200, t);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/me\/tokens\/(tok_[\w-]+)\/revoke$/,
+      perm: "session",
+      noToken: true,
+      handler: (c) => {
+        if (!auth.revokeApiToken(c.p?.user.id ?? "", c.m[1] as string))
+          return send(c.res, 404, { error: "no such token" });
+        act(c, "token.revoked", c.m[1]);
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/org\/security$/,
+      perm: "security.manage",
+      handler: (c) => send(c.res, 200, auth.settings(c.p?.user.org_id ?? "")),
+    },
+    {
+      method: "POST",
+      path: /^\/api\/org\/security$/,
+      perm: "security.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const before = auth.settings(orgId);
+        const after = auth.saveSettings(orgId, (await body(c)) as Record<string, never>);
+        act(c, "security.policy_changed", undefined, { before, after });
+        return send(c.res, 200, after);
       },
     },
     {
@@ -614,6 +920,7 @@ export async function startDashboard(opts: DashboardOptions) {
       method: "POST",
       path: /^\/api\/runs\/([\w.-]+)\/apply$/,
       perm: "runs.apply",
+      stepUp: true,
       handler: async (c) => {
         const dir = runDir(c.m[1] as string);
         if (!dir) return send(c.res, 404, { error: "no such run" });
@@ -764,7 +1071,10 @@ export async function startDashboard(opts: DashboardOptions) {
 
       const ip = req.socket.remoteAddress ?? "";
       const token = readCookie(req.headers.cookie, cookieName(secure));
-      const p = auth.principal(token);
+      const bearer = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
+      const p = bearer
+        ? auth.principalFromToken(bearer)
+        : auth.principal(token, route.perm === "pending");
 
       // Anything that changes state must come from this origin (cross-site requests are
       // also blocked by SameSite=Strict cookies; this is defence in depth).
@@ -772,18 +1082,29 @@ export async function startDashboard(opts: DashboardOptions) {
         const origin = req.headers.origin;
         if (origin !== undefined && origin !== `http${secure ? "s" : ""}://${host}`)
           return send(res, 403, { error: "cross-origin request refused" });
-        if (route.perm === "public" && auth.rateLimited(ip))
+        if ((route.perm === "public" || route.perm === "pending") && auth.rateLimited(ip))
           return send(res, 429, { error: "Too many attempts. Wait a few minutes." });
       }
-      if (route.perm !== "public") {
+      if (route.perm === "pending") {
+        if (!p?.session.mfa_pending) return send(res, 401, { error: "Sign in again." });
+      } else if (route.perm !== "public") {
         if (!p) return send(res, 401, { error: "Your session has ended. Sign in again." });
-        if (req.method !== "GET") {
+        if (p.apiToken && (route.noToken || path.startsWith("/auth/")))
+          return send(res, 403, { error: "API tokens cannot manage accounts." });
+        if (req.method !== "GET" && !p.apiToken) {
           const csrf = String(req.headers["x-csrf-token"] ?? "");
           if (!safeEqual(csrf, p.session.csrf))
             return send(res, 403, { error: "missing or wrong CSRF token" });
         }
+        if (p.mustEnrollMfa && !route.enroll && route.path.source !== "^\\/auth\\/logout$")
+          return send(res, 403, {
+            error: "Your organisation requires two-factor authentication. Set it up to continue.",
+            mfaEnrollmentRequired: true,
+          });
         if (route.perm !== "session" && !can(p.permissions, route.perm))
           return send(res, 403, { error: "Your role does not allow this." });
+        if (route.stepUp && !auth.fresh(p))
+          return send(res, 403, { error: "Confirm it's you to continue.", reauth: true });
       }
       await route.handler({ req, res, url, m, p, ip, token });
     } catch (err) {
@@ -812,7 +1133,12 @@ export async function startDashboard(opts: DashboardOptions) {
     dataDir,
     /** Open once to create the owner account; null when the server is already set up. */
     setupUrl: setupToken ? `${url}#/setup/${setupToken}` : null,
-    routes: routes.map((r) => ({ method: r.method, path: String(r.path), perm: r.perm })),
+    routes: routes.map((r) => ({
+      method: r.method,
+      path: String(r.path),
+      perm: r.perm,
+      stepUp: !!r.stepUp,
+    })),
     close: () =>
       new Promise<void>((r) =>
         server.close(() => {

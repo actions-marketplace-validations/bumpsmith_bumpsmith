@@ -6,7 +6,20 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { audit } from "./audit.ts";
-import { hashPassword, newId, newToken, safeEqual, sha256, verifyPassword } from "./crypto.ts";
+import {
+  decrypt,
+  encrypt,
+  hashPassword,
+  newId,
+  newRecoveryCodes,
+  newToken,
+  newTotpSecret,
+  otpauthUrl,
+  safeEqual,
+  sha256,
+  verifyPassword,
+  verifyTotp,
+} from "./crypto.ts";
 import { type Db, now, tx } from "./db.ts";
 import { BUILTIN_ROLES } from "./rbac.ts";
 
@@ -44,7 +57,38 @@ export interface Principal {
   user: Omit<User, "password_hash">;
   role: { id: string; name: string };
   permissions: string[];
+  /** Organisation policy requires MFA and this user has not enrolled yet. */
+  mustEnrollMfa: boolean;
+  /** Set when the request authenticated with a personal API token instead of a session. */
+  apiToken?: string;
 }
+
+export interface OrgSettings {
+  mfa: "off" | "admins" | "all";
+  idleMinutes: number;
+  absoluteHours: number;
+}
+export const DEFAULT_SETTINGS: OrgSettings = { mfa: "admins", idleMinutes: 30, absoluteHours: 12 };
+/** Permissions that make someone an administrator for the "admins must use MFA" policy. */
+const ADMIN_PERMS = [
+  "members.manage",
+  "roles.manage",
+  "access.manage",
+  "security.manage",
+  "integrations.manage",
+  "org.manage",
+];
+/** What a personal API token may do: reading and automation, never account or access changes. */
+export const TOKEN_SCOPES = [
+  "runs.view",
+  "runs.start",
+  "runs.delete",
+  "workspaces.view",
+  "members.view",
+  "audit.view",
+];
+/** Re-authentication stays fresh this long for sensitive actions. */
+export const STEP_UP_MS = 10 * 60_000;
 
 // ── password policy ──
 
@@ -99,7 +143,38 @@ export class Auth {
   constructor(
     private db: Db,
     private policy: SessionPolicy = DEFAULT_POLICY,
+    private key: Buffer = Buffer.alloc(32),
   ) {}
+
+  settings(orgId: string): OrgSettings {
+    const row = this.db.prepare("SELECT settings FROM orgs WHERE id = ?").get(orgId) as
+      | { settings: string }
+      | undefined;
+    const raw = row ? (JSON.parse(row.settings) as Partial<OrgSettings>) : {};
+    return {
+      ...DEFAULT_SETTINGS,
+      idleMinutes: this.policy.idleMinutes,
+      absoluteHours: this.policy.absoluteHours,
+      ...raw,
+    };
+  }
+
+  saveSettings(orgId: string, next: Partial<OrgSettings>) {
+    const cur = this.settings(orgId);
+    const merged: OrgSettings = {
+      mfa: next.mfa && ["off", "admins", "all"].includes(next.mfa) ? next.mfa : cur.mfa,
+      idleMinutes: Math.min(
+        480,
+        Math.max(5, Math.round(Number(next.idleMinutes ?? cur.idleMinutes))),
+      ),
+      absoluteHours: Math.min(
+        72,
+        Math.max(1, Math.round(Number(next.absoluteHours ?? cur.absoluteHours))),
+      ),
+    };
+    this.db.prepare("UPDATE orgs SET settings = ? WHERE id = ?").run(JSON.stringify(merged), orgId);
+    return merged;
+  }
 
   needsSetup(): boolean {
     return !this.db.prepare("SELECT 1 FROM users LIMIT 1").get();
@@ -256,7 +331,9 @@ export class Auth {
     const token = newToken();
     const csrf = newToken();
     const t = now();
-    const expires = new Date(Date.now() + this.policy.absoluteHours * 3600_000).toISOString();
+    const expires = new Date(
+      Date.now() + this.settings(user.org_id).absoluteHours * 3600_000,
+    ).toISOString();
     this.db
       .prepare(
         "INSERT INTO sessions (id_hash, user_id, org_id, csrf, created_at, last_seen_at, expires_at, auth_at, mfa_pending, ip, user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -285,21 +362,28 @@ export class Auth {
     return { token, csrf };
   }
 
-  /** Resolve a session token; enforces idle and absolute expiry. */
-  principal(token: string | undefined): Principal | null {
+  /**
+   * Resolve a session token; enforces idle and absolute expiry from the organisation's policy.
+   * Sessions waiting for their MFA code resolve only when `pending` is allowed.
+   */
+  principal(token: string | undefined, pending = false): Principal | null {
     if (!token || token.length > 100) return null;
     const s = this.db
       .prepare("SELECT * FROM sessions WHERE id_hash = ?")
       .get(sha256(token)) as unknown as Session | undefined;
     if (!s) return null;
     const t = Date.now();
+    const pol = this.settings(s.org_id);
+    const idle = s.mfa_pending ? 5 : pol.idleMinutes;
     if (
       Date.parse(s.expires_at) < t ||
-      t - Date.parse(s.last_seen_at) > this.policy.idleMinutes * 60_000
+      t - Date.parse(s.created_at) > pol.absoluteHours * 3600_000 ||
+      t - Date.parse(s.last_seen_at) > idle * 60_000
     ) {
       this.db.prepare("DELETE FROM sessions WHERE id_hash = ?").run(s.id_hash);
       return null;
     }
+    if (s.mfa_pending && !pending) return null;
     const u = this.db.prepare("SELECT * FROM users WHERE id = ?").get(s.user_id) as unknown as
       | User
       | undefined;
@@ -308,16 +392,290 @@ export class Auth {
       this.db
         .prepare("UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?")
         .run(now(), s.id_hash);
+    return this.build(s, u);
+  }
+
+  private build(s: Session, u: User): Principal {
     const role = this.db
       .prepare("SELECT id, name, permissions FROM roles WHERE id = ?")
       .get(u.role_id) as { id: string; name: string; permissions: string };
-    const { password_hash: _p, ...user } = u;
+    const permissions = JSON.parse(role.permissions) as string[];
+    const pol = this.settings(u.org_id);
+    const needs =
+      pol.mfa === "all" ||
+      (pol.mfa === "admins" && permissions.some((p) => ADMIN_PERMS.includes(p)));
+    const {
+      password_hash: _p,
+      mfa_secret: _m,
+      recovery: _r,
+      ...user
+    } = u as User & { mfa_secret?: string; recovery?: string };
     return {
       session: s,
       user,
       role: { id: role.id, name: role.name },
-      permissions: JSON.parse(role.permissions) as string[],
+      permissions,
+      mustEnrollMfa: needs && !u.mfa_enabled,
     };
+  }
+
+  /** True when the session re-authenticated recently enough for a sensitive action. */
+  fresh(p: Principal): boolean {
+    return !p.apiToken && Date.now() - Date.parse(p.session.auth_at) < STEP_UP_MS;
+  }
+
+  // ── MFA ──
+
+  private mfaRow(userId: string) {
+    return this.db
+      .prepare(
+        "SELECT id, org_id, email, mfa_secret, mfa_enabled, mfa_last_step, recovery FROM users WHERE id = ?",
+      )
+      .get(userId) as
+      | {
+          id: string;
+          org_id: string;
+          email: string;
+          mfa_secret: string | null;
+          mfa_enabled: number;
+          mfa_last_step: number;
+          recovery: string;
+        }
+      | undefined;
+  }
+
+  /** Check a TOTP code (or a recovery code, used once) for a user. */
+  checkSecondFactor(userId: string, code: string): "totp" | "recovery" | null {
+    const r = this.mfaRow(userId);
+    if (!r?.mfa_enabled || !r.mfa_secret) return null;
+    const clean = code.trim().toLowerCase();
+    if (/^\d{6}$/.test(clean)) {
+      const step = verifyTotp(
+        decrypt(this.key, r.mfa_secret, `mfa:${r.id}`),
+        clean,
+        Date.now(),
+        r.mfa_last_step,
+      );
+      if (step === null) return null;
+      this.db.prepare("UPDATE users SET mfa_last_step = ? WHERE id = ?").run(step, r.id);
+      return "totp";
+    }
+    const hashes = JSON.parse(r.recovery) as string[];
+    const h = sha256(clean.replace(/[\s-]/g, ""));
+    const i = hashes.findIndex((x) => safeEqual(x, h));
+    if (i < 0) return null;
+    hashes.splice(i, 1);
+    this.db.prepare("UPDATE users SET recovery = ? WHERE id = ?").run(JSON.stringify(hashes), r.id);
+    return "recovery";
+  }
+
+  /** Start enrolment: a new secret, stored encrypted but not active until confirmed. */
+  startMfa(userId: string, email: string, issuer: string) {
+    const secret = newTotpSecret();
+    this.db
+      .prepare("UPDATE users SET mfa_secret = ?, mfa_enabled = 0 WHERE id = ? AND mfa_enabled = 0")
+      .run(encrypt(this.key, secret, `mfa:${userId}`), userId);
+    return { secret, url: otpauthUrl(secret, email, issuer) };
+  }
+
+  /** Confirm enrolment with a first code; returns ten one-time recovery codes. */
+  confirmMfa(userId: string, code: string): string[] | null {
+    const r = this.mfaRow(userId);
+    if (!r?.mfa_secret || r.mfa_enabled) return null;
+    const step = verifyTotp(decrypt(this.key, r.mfa_secret, `mfa:${r.id}`), code.trim());
+    if (step === null) return null;
+    const codes = newRecoveryCodes();
+    this.db
+      .prepare("UPDATE users SET mfa_enabled = 1, mfa_last_step = ?, recovery = ? WHERE id = ?")
+      .run(step, JSON.stringify(codes.map(recoveryHash)), r.id);
+    return codes;
+  }
+
+  newRecoveryCodes(userId: string): string[] {
+    const codes = newRecoveryCodes();
+    this.db
+      .prepare("UPDATE users SET recovery = ? WHERE id = ?")
+      .run(JSON.stringify(codes.map(recoveryHash)), userId);
+    return codes;
+  }
+
+  disableMfa(userId: string) {
+    this.db
+      .prepare(
+        "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL, recovery = '[]', mfa_last_step = -1 WHERE id = ?",
+      )
+      .run(userId);
+  }
+
+  remainingRecoveryCodes(userId: string): number {
+    return (JSON.parse(this.mfaRow(userId)?.recovery ?? "[]") as string[]).length;
+  }
+
+  /** After the second factor: rotate the session token and mark it fully signed in. */
+  completeMfa(token: string, p: Principal, ip: string, userAgent: string) {
+    this.db.prepare("DELETE FROM sessions WHERE id_hash = ?").run(sha256(token));
+    return this.createSession(this.user(p.user.id) as User, ip, userAgent, false);
+  }
+
+  markFresh(p: Principal) {
+    this.db
+      .prepare("UPDATE sessions SET auth_at = ? WHERE id_hash = ?")
+      .run(now(), p.session.id_hash);
+  }
+
+  // ── password and sessions ──
+
+  async changePassword(p: Principal, current: string, next: string, ip: string) {
+    const u = this.user(p.user.id) as User;
+    if (!(await verifyPassword(current, u.password_hash)))
+      throw new AuthError(400, "Your current password is not correct.");
+    const org = this.org(u.org_id);
+    const problem = passwordProblem(next, [u.name, u.email.split("@")[0] ?? "", org?.name ?? ""]);
+    if (problem) throw new AuthError(400, problem);
+    if (await verifyPassword(next, u.password_hash))
+      throw new AuthError(400, "Choose a password you have not used here before.");
+    this.db
+      .prepare("UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?")
+      .run(await hashPassword(next), now(), u.id);
+    // Every other session ends: a changed password must lock out whoever had the old one.
+    this.db
+      .prepare("DELETE FROM sessions WHERE user_id = ? AND id_hash != ?")
+      .run(u.id, p.session.id_hash);
+    audit(this.db, {
+      orgId: u.org_id,
+      actorId: u.id,
+      actor: u.email,
+      action: "auth.password_changed",
+      ip,
+    });
+  }
+
+  sessions(userId: string, currentHash: string) {
+    return (
+      this.db
+        .prepare(
+          "SELECT id_hash, created_at, last_seen_at, ip, user_agent, mfa_pending FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC",
+        )
+        .all(userId) as unknown as (Session & { ip: string; user_agent: string })[]
+    )
+      .filter((s) => !s.mfa_pending)
+      .map((s) => ({
+        id: s.id_hash.slice(0, 16),
+        created_at: s.created_at,
+        last_seen_at: s.last_seen_at,
+        ip: s.ip,
+        user_agent: s.user_agent,
+        current: s.id_hash === currentHash,
+      }));
+  }
+
+  revokeSession(userId: string, handle: string): boolean {
+    if (!/^[a-f0-9]{16}$/.test(handle)) return false;
+    return (
+      Number(
+        this.db
+          .prepare("DELETE FROM sessions WHERE user_id = ? AND substr(id_hash, 1, 16) = ?")
+          .run(userId, handle).changes,
+      ) > 0
+    );
+  }
+
+  revokeOtherSessions(userId: string, keepHash: string) {
+    return Number(
+      this.db
+        .prepare("DELETE FROM sessions WHERE user_id = ? AND id_hash != ?")
+        .run(userId, keepHash).changes,
+    );
+  }
+
+  // ── personal API tokens ──
+
+  createApiToken(p: Principal, name: string, days: number, scopes: string[]) {
+    const clean = name.trim().slice(0, 60);
+    if (!clean) throw new AuthError(400, "Give the token a name.");
+    const allowed = scopes.filter((s) => p.permissions.includes(s) && TOKEN_SCOPES.includes(s));
+    if (!allowed.length || allowed.length !== scopes.length)
+      throw new AuthError(400, "Pick permissions your role has and tokens can use.");
+    const d = [7, 30, 90, 365].includes(days) ? days : 30;
+    const raw = `bs_pat_${newToken(24)}`;
+    const id = newId("tok");
+    this.db
+      .prepare(
+        "INSERT INTO api_tokens (id, org_id, user_id, name, hash, prefix, scopes, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        id,
+        p.user.org_id,
+        p.user.id,
+        clean,
+        sha256(raw),
+        raw.slice(0, 12),
+        JSON.stringify(allowed),
+        now(),
+        new Date(Date.now() + d * 86_400_000).toISOString(),
+      );
+    return { id, token: raw };
+  }
+
+  apiTokens(userId: string) {
+    return this.db
+      .prepare(
+        "SELECT id, name, prefix, scopes, created_at, expires_at, last_used_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC",
+      )
+      .all(userId) as unknown as {
+      id: string;
+      name: string;
+      prefix: string;
+      scopes: string;
+      created_at: string;
+      expires_at: string;
+      last_used_at: string | null;
+    }[];
+  }
+
+  revokeApiToken(userId: string, id: string): boolean {
+    return (
+      Number(
+        this.db.prepare("DELETE FROM api_tokens WHERE user_id = ? AND id = ?").run(userId, id)
+          .changes,
+      ) > 0
+    );
+  }
+
+  /** Resolve `Authorization: Bearer bs_pat_…`: the user's role, narrowed to the token's scopes. */
+  principalFromToken(raw: string): Principal | null {
+    if (!/^bs_pat_[\w-]{20,60}$/.test(raw)) return null;
+    const t = this.db.prepare("SELECT * FROM api_tokens WHERE hash = ?").get(sha256(raw)) as
+      | {
+          id: string;
+          user_id: string;
+          scopes: string;
+          expires_at: string;
+          last_used_at: string | null;
+        }
+      | undefined;
+    if (!t || Date.parse(t.expires_at) < Date.now()) return null;
+    const u = this.user(t.user_id);
+    if (!u || u.status !== "active") return null;
+    const fake: Session = {
+      id_hash: `token:${t.id}`,
+      user_id: u.id,
+      org_id: u.org_id,
+      csrf: "",
+      created_at: now(),
+      last_seen_at: now(),
+      expires_at: t.expires_at,
+      auth_at: "1970-01-01T00:00:00.000Z",
+      mfa_pending: 0,
+    };
+    const p = this.build(fake, u);
+    const scopes = JSON.parse(t.scopes) as string[];
+    p.permissions = p.permissions.filter((x) => scopes.includes(x));
+    p.apiToken = t.id;
+    p.mustEnrollMfa = false;
+    if (!t.last_used_at || Date.now() - Date.parse(t.last_used_at) > 60_000)
+      this.db.prepare("UPDATE api_tokens SET last_used_at = ? WHERE id = ?").run(now(), t.id);
+    return p;
   }
 
   endSession(token: string, p: Principal | null, ip: string) {
@@ -347,6 +705,9 @@ export class AuthError extends Error {
     super(message);
   }
 }
+
+/** Recovery codes are compared without their dashes or spaces, so either form works. */
+const recoveryHash = (code: string) => sha256(code.toLowerCase().replace(/[\s-]/g, ""));
 
 // ── cookies ──
 

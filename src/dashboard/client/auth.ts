@@ -1,6 +1,7 @@
 // Sign-in, first-run owner setup and session handling for the dashboard. The server holds
 // the session (an HttpOnly cookie the page cannot read); the page only keeps the CSRF token
 // it must send with every change.
+import { openDialog } from "./dialog.ts";
 import { BRAND_WORDMARK, esc, icon } from "./ui.ts";
 
 export interface SessionInfo {
@@ -9,6 +10,20 @@ export interface SessionInfo {
   role: { id: string; name: string };
   permissions: string[];
   csrf: string;
+  /** The organisation requires MFA and this user has not set it up yet. */
+  mustEnrollMfa?: boolean;
+}
+
+/** POST with the CSRF token (used here so this module does not depend on net.ts). */
+async function call<T>(path: string, data: unknown = {}): Promise<T> {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-csrf-token": session.info?.csrf ?? "" },
+    body: JSON.stringify(data),
+  });
+  const body = (await r.json().catch(() => ({}))) as T & { error?: string };
+  if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+  return body;
 }
 
 export const session = { info: null as SessionInfo | null };
@@ -36,7 +51,7 @@ export async function signOut() {
   session.info = null;
 }
 
-type Mode = "signin" | "expired" | "setup" | "need-setup-link";
+type Mode = "signin" | "expired" | "setup" | "need-setup-link" | "mfa";
 
 const pwField = (id: string, autocomplete: string) => `
   <div class="pw">
@@ -76,6 +91,15 @@ function page(mode: Mode): string {
         </div>
         <div class="auth-err" role="alert" hidden></div>
         <button class="btn primary block" type="submit">Create account</button>
+      </form>`);
+  if (mode === "mfa")
+    return card(`<h1>Two-factor authentication</h1>
+      <p class="auth-sub" id="mfa-sub">Enter the 6-digit code from your authenticator app.</p>
+      <form class="auth-form" data-form="mfa" novalidate>
+        <div class="field"><label for="a-code" id="code-label">Authentication code</label><input class="input mono otp" id="a-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required spellcheck="false" placeholder="000000" /></div>
+        <div class="auth-err" role="alert" hidden></div>
+        <button class="btn primary block" type="submit">Verify</button>
+        <button class="linkish" type="button" data-recovery>Use a recovery code instead</button>
       </form>`);
   return card(`<h1>${mode === "expired" ? "Your session ended" : "Sign in"}</h1>
     <p class="auth-sub">${mode === "expired" ? "For your security, sessions end after a period without activity. Sign in again to continue." : "Sign in to your Bumpsmith workspace."}</p>
@@ -124,6 +148,25 @@ export function showAuth(root: HTMLElement, mode: Mode, setupToken = ""): Promis
       b.setAttribute("aria-label", show ? "Hide password" : "Show password");
     });
   if (form?.dataset.form === "setup") form.addEventListener("input", () => rules(form));
+  root.querySelector("[data-recovery]")?.addEventListener("click", (e) => {
+    const input = root.querySelector<HTMLInputElement>("#a-code");
+    if (!input) return;
+    const recovery = input.inputMode === "numeric";
+    input.inputMode = recovery ? "text" : "numeric";
+    input.maxLength = recovery ? 20 : 6;
+    input.placeholder = recovery ? "xxxx-xxxx-xxxx" : "000000";
+    input.value = "";
+    input.focus();
+    (root.querySelector("#code-label") as HTMLElement).textContent = recovery
+      ? "Recovery code"
+      : "Authentication code";
+    (root.querySelector("#mfa-sub") as HTMLElement).textContent = recovery
+      ? "Enter one of the recovery codes you saved when you set up two-factor authentication. Each works once."
+      : "Enter the 6-digit code from your authenticator app.";
+    (e.currentTarget as HTMLElement).textContent = recovery
+      ? "Use your authenticator app instead"
+      : "Use a recovery code instead";
+  });
   return new Promise((done) => {
     form?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -137,13 +180,29 @@ export function showAuth(root: HTMLElement, mode: Mode, setupToken = ""): Promis
         btn.textContent = form.dataset.form === "setup" ? "Creating account…" : "Signing in…";
       }
       try {
-        const r = await fetch(form.dataset.form === "setup" ? "/auth/setup" : "/auth/login", {
+        const endpoint =
+          { setup: "/auth/setup", login: "/auth/login", mfa: "/auth/mfa" }[
+            form.dataset.form ?? "login"
+          ] ?? "/auth/login";
+        const r = await fetch(endpoint, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(data),
         });
-        const body = (await r.json().catch(() => ({}))) as SessionInfo & { error?: string };
+        const body = (await r.json().catch(() => ({}))) as SessionInfo & {
+          error?: string;
+          mfaRequired?: boolean;
+        };
+        if (r.status === 401 && form.dataset.form === "mfa") {
+          // Too many wrong codes: the half-signed-in session is gone; start again.
+          done(await showAuth(root, "signin"));
+          return;
+        }
         if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+        if (body.mfaRequired) {
+          done(await showAuth(root, "mfa"));
+          return;
+        }
         session.info = body;
         done(body);
       } catch (x) {
@@ -157,5 +216,134 @@ export function showAuth(root: HTMLElement, mode: Mode, setupToken = ""): Promis
         }
       }
     });
+  });
+}
+
+// ── MFA enrolment (forced by policy, or from the account page) ──
+
+const groupKey = (k: string) => k.replace(/(.{4})/g, "$1 ").trim();
+
+export function download(name: string, text: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** Recovery codes, shown once, with copy, download and an "I saved them" gate. */
+export function recoveryCodesHtml(codes: string[]) {
+  return `<p class="dialog-p">Save these one-time recovery codes somewhere safe, like a password manager. Each code signs you in once if you lose your phone. They will not be shown again.</p>
+    <div class="codes">${codes.map((c) => `<code>${esc(c)}</code>`).join("")}</div>
+    <div class="codes-a"><button type="button" class="btn" data-copy-codes>${icon("copy")}Copy</button><button type="button" class="btn" data-dl-codes>${icon("download")}Download</button></div>
+    <label class="check"><input type="checkbox" data-saved /> I saved these codes somewhere safe</label>`;
+}
+
+export function wireRecoveryCodes(
+  el: HTMLElement,
+  codes: string[],
+  onSaved: (ok: boolean) => void,
+) {
+  const text = `Bumpsmith recovery codes for ${session.info?.user.email ?? ""}\n\n${codes.join("\n")}\n`;
+  el.querySelector("[data-copy-codes]")?.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    const b = el.querySelector("[data-copy-codes]");
+    if (b) b.innerHTML = `${icon("check")}Copied`;
+  });
+  el.querySelector("[data-dl-codes]")?.addEventListener("click", () =>
+    download("bumpsmith-recovery-codes.txt", text),
+  );
+  el.querySelector<HTMLInputElement>("[data-saved]")?.addEventListener("change", (e) =>
+    onSaved((e.target as HTMLInputElement).checked),
+  );
+}
+
+/**
+ * The two enrolment steps inside `el`: scan and verify, then save recovery codes.
+ * Resolves true once MFA is on and the codes are saved.
+ */
+export async function mountMfaEnrollment(el: HTMLElement): Promise<boolean> {
+  let start: { secret: string; qr: string };
+  try {
+    start = await call<{ secret: string; qr: string }>("/api/me/mfa/start");
+  } catch (e) {
+    el.innerHTML = `<div class="auth-err" role="alert">${icon("alertCircle")}<span>${esc((e as Error).message)}</span></div>`;
+    return false;
+  }
+  return new Promise((resolve) => {
+    el.innerHTML = `<div class="mfa">
+      <div class="mfa-qr" aria-label="QR code for your authenticator app">${start.qr}</div>
+      <div class="mfa-side">
+        <p class="dialog-p">Scan the code with an authenticator app such as 1Password, Google Authenticator, Microsoft Authenticator or Authy.</p>
+        <p class="dialog-p small">Can't scan it? Enter this key instead:</p>
+        <div class="mfa-key"><code>${esc(groupKey(start.secret))}</code><button type="button" class="btn icon ghost" data-copy-key aria-label="Copy key" title="Copy key">${icon("copy")}</button></div>
+      </div>
+    </div>
+    <div class="field"><label for="mfa-code">Enter the 6-digit code it shows</label><input class="input mono otp" id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></div>
+    <div class="auth-err" role="alert" hidden></div>
+    <button type="button" class="btn primary block" data-mfa-verify>Turn on two-factor authentication</button>`;
+    el.querySelector("[data-copy-key]")?.addEventListener("click", () =>
+      navigator.clipboard.writeText(start.secret).catch(() => {}),
+    );
+    const input = el.querySelector<HTMLInputElement>("#mfa-code");
+    input?.focus();
+    const verify = async () => {
+      const err = el.querySelector<HTMLElement>(".auth-err") as HTMLElement;
+      try {
+        const r = await call<{ recoveryCodes: string[] }>("/api/me/mfa/confirm", {
+          code: input?.value ?? "",
+        });
+        if (session.info) {
+          session.info.user.mfa = true;
+          session.info.mustEnrollMfa = false;
+        }
+        el.innerHTML = `${recoveryCodesHtml(r.recoveryCodes)}<button type="button" class="btn primary block" data-done disabled>Continue</button>`;
+        const doneBtn = el.querySelector<HTMLButtonElement>("[data-done]") as HTMLButtonElement;
+        wireRecoveryCodes(el, r.recoveryCodes, (ok) => {
+          doneBtn.disabled = !ok;
+        });
+        doneBtn.addEventListener("click", () => resolve(true));
+      } catch (e) {
+        err.hidden = false;
+        err.innerHTML = `${icon("alertCircle")}<span>${esc((e as Error).message)}</span>`;
+      }
+    };
+    el.querySelector("[data-mfa-verify]")?.addEventListener("click", verify);
+    input?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void verify();
+      }
+    });
+  });
+}
+
+/** Full-page enrolment when the organisation requires MFA before anything else. */
+export async function showEnroll(root: HTMLElement): Promise<void> {
+  root.className = "shell auth-shell";
+  root.innerHTML = card(`<h1>Set up two-factor authentication</h1>
+    <p class="auth-sub">${esc(session.info?.org?.name ?? "Your organisation")} requires a second step at sign-in for your role. It takes a minute.</p>
+    <div id="enroll"></div>
+    <button class="linkish" type="button" data-signout>Sign out</button>`);
+  document.title = "Two-factor authentication · Bumpsmith";
+  root.querySelector("[data-signout]")?.addEventListener("click", async () => {
+    await signOut();
+    location.reload();
+  });
+  await mountMfaEnrollment(root.querySelector("#enroll") as HTMLElement);
+}
+
+/** "Confirm it's you" before a sensitive action: MFA code if enrolled, else password. */
+export function reauthDialog(): Promise<boolean> {
+  const mfa = !!session.info?.user.mfa;
+  return openDialog({
+    title: "Confirm it's you",
+    body: `<p class="dialog-p">This action changes something sensitive, so we check it's still you. You won't be asked again for 10 minutes.</p>
+      ${mfa ? `<div class="field"><label for="re-code">Authentication code</label><input class="input mono otp" id="re-code" inputmode="numeric" autocomplete="one-time-code" maxlength="20" placeholder="000000" /></div>` : `<div class="field"><label for="re-pw">Password</label><input class="input" id="re-pw" type="password" autocomplete="current-password" maxlength="128" /></div>`}`,
+    primary: "Confirm",
+    onSubmit: async (el) => {
+      const v = (sel: string) => el.querySelector<HTMLInputElement>(sel)?.value ?? "";
+      await call("/api/me/reauth", mfa ? { code: v("#re-code") } : { password: v("#re-pw") });
+    },
   });
 }

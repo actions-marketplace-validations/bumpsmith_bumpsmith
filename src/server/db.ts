@@ -79,6 +79,21 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (org_id, name)
   );
   `,
+  `
+  CREATE TABLE api_tokens (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL UNIQUE,
+    prefix TEXT NOT NULL,
+    scopes TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_used_at TEXT
+  );
+  CREATE INDEX api_tokens_user ON api_tokens(user_id);
+  `,
 ];
 
 export type Db = DatabaseSync;

@@ -1,6 +1,15 @@
 // Bumpsmith Local dashboard. Design notes: dashboard/DESIGN.md.
 
-import { fetchSession, session, showAuth, signOut } from "./auth.ts";
+import {
+  accountAction,
+  accountPage,
+  loadMe,
+  loadSecurity,
+  securityPage,
+  setup as setupAccount,
+} from "./account.ts";
+import { can, fetchSession, reauthDialog, session, showAuth, showEnroll, signOut } from "./auth.ts";
+import { confirmDialog } from "./dialog.ts";
 import {
   type FileDiff,
   type FileView,
@@ -12,6 +21,7 @@ import {
 } from "./diff.ts";
 import { buildSteps, jobLog, type LogStep, lineOf, logLines, logText, outputLines } from "./log.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { api, hooks } from "./net.ts";
 import {
   ago,
   agoLong,
@@ -86,24 +96,6 @@ interface State {
 }
 // biome-ignore lint/suspicious/noExplicitAny: job.json is rendered defensively
 type Job = any;
-
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const r = await fetch(path, {
-    ...init,
-    headers: {
-      "x-csrf-token": session.info?.csrf ?? "",
-      "content-type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
-  const body = (await r.json().catch(() => ({}))) as T & { error?: string };
-  if (r.status === 401) {
-    sessionEnded();
-    throw new Error("Your session has ended.");
-  }
-  if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
-  return body;
-}
 
 type Tab = "summary" | "changes" | "checks" | "breaking" | "log" | "report";
 const ui = {
@@ -204,6 +196,8 @@ function sidebar(d: State) {
   const link = (id: string, label: string, ic: string, n = "", hot = false) =>
     `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "on" : ""}">${icon(ic)}<span>${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
   const prov = d.env.providers.find((p) => p.id === d.env.defaultProvider);
+  const orgLink = (id: string, label: string, ic: string) =>
+    `<a href="#/org/${id}" class="${ui.route === `org/${id}` ? "on" : ""}">${icon(ic)}<span>${label}</span></a>`;
   return `<aside class="sidebar">
     <div class="brand">${BRAND_WORDMARK}<span class="brand-tag">local</span></div>
     <div class="ctx" title="${esc(r.path)}">
@@ -224,6 +218,11 @@ function sidebar(d: State) {
       ${link("safety", "Safety", "shield")}
       ${link("sandbox", "Sandbox & models", "cpu")}
     </nav>
+    ${
+      can("security.manage")
+        ? `<nav class="nav"><div class="nav-h">Organisation</div>${orgLink("security", "Security", "lock")}</nav>`
+        : ""
+    }
     <div class="side-foot">
       <div class="sep"></div>
       ${userRow()}
@@ -246,7 +245,7 @@ function userRow() {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  return `<div class="me"><span class="me-av">${esc(initials)}</span><span class="me-t"><b>${esc(u.name)}</b><span>${esc(session.info?.role.name ?? "")} · ${esc(session.info?.org?.name ?? "")}</span></span>
+  return `<div class="me"><a class="me-l ${ui.route === "account" ? "on" : ""}" href="#/account" title="Your account"><span class="me-av">${esc(initials)}</span><span class="me-t"><b>${esc(u.name)}</b><span>${esc(session.info?.role.name ?? "")} · ${esc(session.info?.org?.name ?? "")}</span></span></a>
     <button class="btn icon ghost" data-act="logout" title="Sign out" aria-label="Sign out">${icon("logout")}</button></div>`;
 }
 
@@ -982,7 +981,7 @@ function sandboxPage(d: State) {
       <div class="grid" style="align-content:start">
         <div class="panel"><div class="panel-h"><h2>Sandbox</h2><div class="r">${d.env.docker ? `<span class="badge ok"><span class="dot ok"></span>ready</span>` : `<span class="badge bad">Docker not running</span>`}</div></div>
           <div class="panel-b"><dl class="kv"><dt>Docker</dt><dd class="mono">${esc(d.env.docker ?? "start Docker Desktop or OrbStack")}</dd><dt>Network</dt><dd>registry mirror only, while installing</dd><dt>Node</dt><dd class="mono">22 · 24 · 26</dd><dt>Python</dt><dd class="mono">3.10 – 3.15</dd><dt>Runs</dt><dd class="mono">${esc(d.runsDir)}</dd></dl></div></div>
-        <div class="panel"><div class="panel-h"><h2>Privacy</h2></div><div class="panel-b muted" style="font-size:13px">This dashboard listens on 127.0.0.1 only and reads files in this repository. It sends nothing anywhere: fonts are bundled, there is no analytics, and every action needs a token that only this page has.</div></div>
+        <div class="panel"><div class="panel-h"><h2>Privacy</h2></div><div class="panel-b muted" style="font-size:13px">This dashboard listens on 127.0.0.1 only and reads files in this repository. It sends nothing anywhere: fonts are bundled and there is no analytics. Every action is checked against your role and recorded in the audit log.</div></div>
       </div>
     </div>
   </div>`;
@@ -1290,7 +1289,14 @@ async function expandGap(fi: number, g: number, rerender = true) {
 }
 
 async function apply(id: string) {
-  if (!confirm("Apply this patch to your working tree and stage it?")) return;
+  if (
+    !(await confirmDialog(
+      "Apply this patch?",
+      "It is applied to your working tree and staged, after git apply --check confirms it fits. Review it with git diff --cached.",
+      "Apply patch",
+    ))
+  )
+    return;
   ui.busy.add(`apply:${id}`);
   render();
   try {
@@ -1335,6 +1341,12 @@ function render() {
   } else if (route === "sandbox") {
     crumbs.push("Sandbox & models");
     body = sandboxPage(d);
+  } else if (route === "account") {
+    crumbs.push("Your account");
+    body = accountPage();
+  } else if (route === "org" && arg === "security") {
+    crumbs.push("Security");
+    body = securityPage();
   } else {
     crumbs.push("Overview");
     body = overview(d);
@@ -1371,6 +1383,10 @@ function render() {
 
 async function onRoute() {
   if (!started) return;
+  const [r0, r1] = location.hash.replace(/^#\/?/, "").split("/");
+  if (r0 === "account") void loadMe().then(render, (e) => toast((e as Error).message, true));
+  if (r0 === "org" && r1 === "security")
+    void loadSecurity().then(render, (e) => toast((e as Error).message, true));
   ui.route = location.hash.replace(/^#\/?/, "");
   const [route, arg] = ui.route.split("/");
   if (route === "runs" && arg) loadDetail(arg);
@@ -1385,6 +1401,7 @@ document.addEventListener("click", async (e) => {
   const v = t.dataset.v ?? "";
   const d = ui.data;
   if (!d) return;
+  if (act && (await accountAction(act, t))) return;
   switch (act) {
     case "go":
       go(t.dataset.to ?? "");
@@ -1589,7 +1606,15 @@ document.addEventListener("click", async (e) => {
       break;
     case "delete": {
       const id = t.dataset.id ?? "";
-      if (!confirm("Delete this run and its evidence? This cannot be undone.")) break;
+      if (
+        !(await confirmDialog(
+          "Delete this run?",
+          "Its patch, logs and evidence are removed. This cannot be undone.",
+          "Delete run",
+          true,
+        ))
+      )
+        break;
       try {
         await api(`/api/runs/${encodeURIComponent(id)}/delete`, { method: "POST" });
         await refresh();
@@ -1776,9 +1801,28 @@ async function gate(reason: "signin" | "expired" = "signin") {
       await showAuth($app, reason);
     }
   } else if (setup) history.replaceState(null, "", "#/");
+  if (session.info?.mustEnrollMfa) await showEnroll($app);
   document.title = "Bumpsmith";
   $app.className = "shell";
   await startApp();
 }
+
+hooks.unauthorized = sessionEnded;
+hooks.reauth = reauthDialog;
+hooks.enroll = () => {
+  if (poller) clearInterval(poller);
+  started = false;
+  void showEnroll($app).then(startApp);
+};
+setupAccount({ render: () => render(), toast });
+
+hooks.unauthorized = sessionEnded;
+hooks.reauth = reauthDialog;
+hooks.enroll = () => {
+  if (poller) clearInterval(poller);
+  started = false;
+  void showEnroll($app).then(startApp);
+};
+setupAccount({ render: () => render(), toast });
 
 void gate();

@@ -2,9 +2,11 @@ import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { stageOf, startDashboard, summarise } from "../../src/dashboard/server.ts";
 import type { JobRecord } from "../../src/pipeline.ts";
+import { base32Decode, hotp } from "../../src/server/crypto.ts";
 import { runOk } from "../../src/util/proc.ts";
 
 const job = (over: Partial<JobRecord> = {}): JobRecord =>
@@ -138,10 +140,21 @@ describe("dashboard server", () => {
   let close: () => Promise<void> = async () => {};
   let repo = "";
   let setupUrl = "";
-  let routes: { method: string; path: string; perm: string }[] = [];
+  let routes: { method: string; path: string; perm: string; stepUp: boolean }[] = [];
   /** Headers of the signed-in owner: session cookie and CSRF token. */
   let h: Record<string, string> = {};
   const PASSWORD = "Tidal-Lantern-Quartz-42";
+  let mfaSecret = "";
+  let recovery: string[] = [];
+  let dataDir = "";
+  /** A TOTP code for `offset` 30-second steps from now. */
+  const code = (offset = 0) =>
+    hotp(base32Decode(mfaSecret), Math.floor(Date.now() / 30_000) + offset);
+  const staleSession = () => {
+    const db = new DatabaseSync(join(dataDir, "bumpsmith.db"));
+    db.prepare("UPDATE sessions SET auth_at = '2020-01-01T00:00:00.000Z'").run();
+    db.close();
+  };
 
   beforeAll(async () => {
     repo = await mkdtemp(join(tmpdir(), "bumpsmith-dash-"));
@@ -168,6 +181,7 @@ describe("dashboard server", () => {
     close = d.close;
     setupUrl = d.setupUrl ?? "";
     routes = d.routes;
+    dataDir = d.dataDir;
   });
   afterAll(() => close());
 
@@ -214,6 +228,98 @@ describe("dashboard server", () => {
     expect((await post("/auth/setup", { ...owner, token })).status).toBe(409);
   });
 
+  it("makes an admin set up two-factor authentication before anything else", async () => {
+    const blocked = await fetch(`${base}/api/state`, { headers: h });
+    expect(blocked.status).toBe(403);
+    expect(await blocked.json()).toMatchObject({ mfaEnrollmentRequired: true });
+    const start = (await (await post("/api/me/mfa/start", {}, h)).json()) as {
+      secret: string;
+      qr: string;
+    };
+    expect(start.qr).toMatch(/^<svg/);
+    mfaSecret = start.secret;
+    expect((await post("/api/me/mfa/confirm", { code: "000000" }, h)).status).toBe(400);
+    const done = await post("/api/me/mfa/confirm", { code: code() }, h);
+    expect(done.status).toBe(200);
+    recovery = ((await done.json()) as { recoveryCodes: string[] }).recoveryCodes;
+    expect(recovery).toHaveLength(10);
+    expect((await fetch(`${base}/api/state`, { headers: h })).status).toBe(200);
+  });
+
+  it("asks for the code at sign-in and refuses a replayed code", async () => {
+    const pw = await post("/auth/login", { email: "dana@acme.dev", password: PASSWORD });
+    expect(await pw.clone().json()).toEqual({ mfaRequired: true });
+    const pending = (pw.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    // Half signed in: nothing works yet.
+    expect((await fetch(`${base}/api/state`, { headers: { cookie: pending } })).status).toBe(401);
+    expect((await post("/auth/mfa", { code: "123456" }, { cookie: pending })).status).toBe(400);
+    const c = code(1);
+    const ok = await post("/auth/mfa", { code: c }, { cookie: pending });
+    expect(ok.status).toBe(200);
+    const fresh = await signedIn(ok);
+    expect(fresh.cookie).not.toBe(pending); // rotated after the second factor
+    // The same code cannot be used again.
+    const again = await post("/auth/login", { email: "dana@acme.dev", password: PASSWORD });
+    const pending2 = (again.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    expect((await post("/auth/mfa", { code: c }, { cookie: pending2 })).status).toBe(400);
+    // A recovery code works once.
+    expect((await post("/auth/mfa", { code: recovery[0] }, { cookie: pending2 })).status).toBe(200);
+    const again2 = await post("/auth/login", { email: "dana@acme.dev", password: PASSWORD });
+    const pending3 = (again2.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    expect((await post("/auth/mfa", { code: recovery[0] }, { cookie: pending3 })).status).toBe(400);
+    h = fresh;
+  });
+
+  it("asks you to confirm it's you before sensitive actions", async () => {
+    staleSession();
+    const r = await post(`/api/runs/20261118000000-abc123/apply`, {}, h);
+    expect(r.status).toBe(403);
+    expect(await r.json()).toMatchObject({ reauth: true });
+    expect((await post("/api/me/reauth", { code: "000000" }, h)).status).toBe(400);
+    expect((await post("/api/me/reauth", { code: recovery[1] }, h)).status).toBe(200);
+    expect((await post(`/api/runs/20261118000000-abc123/apply`, {}, h)).status).toBe(409); // got through to git
+  });
+
+  it("issues scoped API tokens that cannot change accounts or apply patches", async () => {
+    expect(
+      (await post("/api/me/tokens", { name: "CI", days: 30, scopes: ["runs.apply"] }, h)).status,
+    ).toBe(400);
+    const r = await post("/api/me/tokens", { name: "CI", days: 30, scopes: ["runs.view"] }, h);
+    expect(r.status).toBe(200);
+    const { token, id } = (await r.json()) as { token: string; id: string };
+    expect(token).toMatch(/^bs_pat_/);
+    const bearer = { authorization: `Bearer ${token}` };
+    expect((await fetch(`${base}/api/state`, { headers: bearer })).status).toBe(200);
+    expect((await post(`/api/runs/20261118000000-abc123/apply`, {}, bearer)).status).toBe(403);
+    expect((await post("/api/runs", { package: "zod", version: "4.1.0" }, bearer)).status).toBe(
+      403,
+    );
+    expect((await fetch(`${base}/api/me`, { headers: bearer })).status).toBe(403);
+    expect(
+      (
+        await fetch(`${base}/api/state`, {
+          headers: { authorization: "Bearer bs_pat_nope-nope-nope-nope-nope" },
+        })
+      ).status,
+    ).toBe(401);
+    expect((await post(`/api/me/tokens/${id}/revoke`, {}, h)).status).toBe(200);
+    expect((await fetch(`${base}/api/state`, { headers: bearer })).status).toBe(401);
+  });
+
+  it("lets a security admin tighten the session policy", async () => {
+    const r = await post("/api/org/security", { mfa: "all", idleMinutes: 15, absoluteHours: 8 }, h);
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ mfa: "all", idleMinutes: 15, absoluteHours: 8 });
+    expect((await post("/api/org/security", { idleMinutes: 99999 }, h)).status).toBe(200);
+    expect(
+      (
+        (await (await fetch(`${base}/api/org/security`, { headers: h })).json()) as {
+          idleMinutes: number;
+        }
+      ).idleMinutes,
+    ).toBe(480);
+  });
+
   it("serves the page and bundled assets without a session, with security headers", async () => {
     const page = await fetch(`${base}/`);
     expect(page.headers.get("content-security-policy")).toMatch(/frame-ancestors 'none'/);
@@ -236,6 +342,17 @@ describe("dashboard server", () => {
     const api = routes.filter((r) => r.path.includes("api"));
     expect(api.length).toBeGreaterThan(5);
     for (const r of api) expect(r.perm, `${r.method} ${r.path}`).not.toBe("public");
+    // Sensitive changes need a fresh password or MFA code (step-up).
+    const sensitive = routes.filter(
+      (r) =>
+        r.method === "POST" &&
+        ["apply$/", "security$/", "tokens$/", "recovery$/", "disable$/"].some((x) =>
+          r.path.endsWith(x),
+        ),
+    );
+    expect(sensitive).toHaveLength(5);
+    for (const r of sensitive)
+      expect((r as { stepUp?: boolean }).stepUp, `${r.path} needs step-up`).toBe(true);
     expect(
       routes
         .filter((r) => r.perm === "public")
