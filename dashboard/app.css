@@ -56,6 +56,8 @@
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --side-w: 240px;
+  /* interface zoom for very large screens; viewport-height rules divide by it */
+  --z: 1;
   /* Separators: an etched groove (a shadow line with a highlight under it), like a seam cut into the
      panel, lit from above like the 3D buttons. The same build as poth's dashboard. */
   --groove-a: rgba(18, 18, 17, 0.1);
@@ -66,6 +68,14 @@
   --groove-bottom: inset 0 -1px 0 var(--groove-b), inset 0 -2px 0 var(--groove-a);
   --groove-left: inset 1px 0 0 var(--groove-a), inset 2px 0 0 var(--groove-b);
   --groove-right: inset -1px 0 0 var(--groove-b), inset -2px 0 0 var(--groove-a);
+  /* Tabs and selected states: poth's track (--cell) and raised plate (--sel-*), the light 3D button
+     build. One plate for every tab, segment, selected step and command-menu item. */
+  --cell: #ecece9;
+  --sel-bg: linear-gradient(#ffffff, #ffffff);
+  --sel-shadow:
+    0 0 0 1px rgba(18, 18, 17, 0.12), inset 0 1px 0 #fff, inset 0 -2px 3px -2px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(18, 18, 17, 0.08), 0 3px 8px -2px rgba(18, 18, 17, 0.1);
+  --sel-ink: #121211;
   color-scheme: light;
 }
 
@@ -109,6 +119,18 @@
       0 2px 4px -2px rgba(0, 0, 0, 0.6);
     --groove-a: rgba(0, 0, 0, 0.8);
     --groove-b: rgba(255, 255, 255, 0.075);
+    --cell: #1a1b1e;
+    --sel-bg:
+      linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 55%),
+      linear-gradient(#1d1e21, #18191b);
+    --sel-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(
+        255,
+        255,
+        255,
+        0.05
+      ), inset 0 -2px 4px -2px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+    --sel-ink: #e4e4e0;
     color-scheme: dark;
   }
 }
@@ -150,6 +172,18 @@
     0 2px 4px -2px rgba(0, 0, 0, 0.6);
   --groove-a: rgba(0, 0, 0, 0.8);
   --groove-b: rgba(255, 255, 255, 0.075);
+  --cell: #1a1b1e;
+  --sel-bg:
+    linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(#1d1e21, #18191b);
+  --sel-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(
+      255,
+      255,
+      255,
+      0.05
+    ), inset 0 -2px 4px -2px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --sel-ink: #e4e4e0;
   color-scheme: dark;
 }
 
@@ -202,12 +236,12 @@ a {
 .shell {
   display: grid;
   grid-template-columns: var(--side-w) minmax(0, 1fr);
-  min-height: 100vh;
+  min-height: calc(100vh / var(--z));
 }
 .sidebar {
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: calc(100vh / var(--z));
   overflow-y: auto;
   background: var(--side);
   box-shadow: var(--groove-right);
@@ -805,7 +839,9 @@ table.t {
   vertical-align: middle;
   white-space: nowrap;
 }
-.t tr:last-child td {
+/* the last row ends the panel: no separator under any of its cells (row headers included) */
+.t tbody tr:last-child > td,
+.t tbody tr:last-child > th {
   box-shadow: none;
 }
 .t tbody tr {
@@ -1082,42 +1118,9 @@ table.t {
 .rmeta .mono {
   font-size: 12px;
 }
+/* Run tabs sit on their own row (the control itself is the shared .seg build below). */
 .tabs {
-  display: flex;
-  gap: 4px;
-  box-shadow: var(--groove-bottom);
   margin: 24px 0 16px;
-  overflow-x: auto;
-}
-.tab {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  height: 40px;
-  padding: 0 12px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  color: var(--muted);
-  font-weight: 500;
-  position: relative;
-  white-space: nowrap;
-}
-.tab:hover {
-  color: var(--text);
-}
-.tab.on {
-  color: var(--text);
-}
-.tab.on::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--accent);
 }
 .steps {
   display: flex;
@@ -1346,40 +1349,70 @@ code.ic {
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
-.seg {
+/* Segmented control and tabs: poth's .seg, exactly (track, 30px buttons, raised selected plate). */
+.seg,
+.tabs {
   display: inline-flex;
-  padding: 2px;
   gap: 2px;
-  border-radius: 10px;
-  background: var(--inset);
-  border: 1px solid var(--line);
-  flex-wrap: wrap;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--cell);
 }
-.seg button {
-  border: 0;
-  background: transparent;
-  height: 32px;
-  padding: 0 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 13px;
+.seg button,
+.tab {
+  flex: 1;
   display: inline-flex;
-  gap: 8px;
   align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
 }
-.seg button:hover {
-  color: var(--text);
-}
-.seg button.on {
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: var(--btn-shadow);
-}
-.seg button span {
-  font: 500 11px var(--mono);
+.seg button span,
+.tab .n {
+  font-style: normal;
+  font-size: 11px;
   color: var(--faint);
+}
+@media (hover: hover) and (pointer: fine) {
+  .seg button:not(.on):hover,
+  .tab:not(.on):hover {
+    color: var(--text);
+  }
+}
+.seg button.on,
+.seg .on,
+.tab.on {
+  background: var(--sel-bg);
+  box-shadow: var(--sel-shadow);
+  color: var(--sel-ink);
+}
+/* phones: one row that scrolls inside itself (never the page), with taller targets */
+@media (max-width: 900px) {
+  .seg,
+  .tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .seg::-webkit-scrollbar,
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .seg button,
+  .tab {
+    flex: 1 0 auto;
+    height: 38px;
+  }
 }
 .input {
   height: 32px;
@@ -1591,70 +1624,6 @@ code.ic {
   color: var(--warn);
   margin-top: 2px;
 }
-.palette {
-  position: fixed;
-  z-index: 70;
-  top: 15vh;
-  left: 50%;
-  width: min(600px, calc(100vw - 32px));
-  transform: translateX(-50%);
-  background: var(--panel);
-  border-radius: 12px;
-  border: 1px solid var(--line-2);
-  box-shadow: 0 32px 64px -24px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
-}
-.palette.anim {
-  animation: pop 200ms var(--ease) both;
-}
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-8px);
-  }
-}
-.palette input {
-  width: 100%;
-  height: 48px;
-  border: 0;
-  outline: 0;
-  padding: 0 16px;
-  font-size: 15px;
-  background: transparent;
-  box-shadow: var(--groove-bottom);
-}
-.palette .list {
-  max-height: 50vh;
-  overflow: auto;
-  padding: 4px;
-}
-.pal-g {
-  font-size: 12px;
-  color: var(--faint);
-  padding: 8px 12px 4px;
-}
-.pal-i {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.pal-i.on {
-  background: var(--neutral-soft);
-}
-.pal-i svg {
-  width: 15px;
-  height: 16px;
-  color: var(--muted);
-}
-.pal-i .k {
-  margin-left: auto;
-  font: 400 12px var(--mono);
-  color: var(--faint);
-}
 .toasts {
   position: fixed;
   z-index: 95;
@@ -1775,7 +1744,6 @@ code.ic {
   .shell {
     grid-template-columns: 1fr;
   }
-  .sidebar,
   .search,
   .hide-sm,
   .crumbs > span {
@@ -2017,7 +1985,7 @@ code.ic {
 .ftree {
   position: sticky;
   top: 72px;
-  max-height: calc(100vh - 88px);
+  max-height: calc(calc(100vh / var(--z)) - 88px);
   overflow: auto;
 }
 .ftree-q {
@@ -2835,7 +2803,7 @@ table.dt {
   display: block;
 }
 .auth {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--z));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3078,7 +3046,7 @@ table.dt {
   position: relative;
   z-index: 1;
   width: min(440px, 100%);
-  max-height: calc(100vh - 32px);
+  max-height: calc(calc(100vh / var(--z)) - 32px);
   overflow: auto;
   background: var(--panel);
   border: 1px solid var(--line-2);
@@ -3899,9 +3867,11 @@ tr.dim td {
 .ob-s:hover {
   background: var(--neutral-soft);
 }
+/* the selected step is poth's raised plate; a finished step keeps its green check */
 .ob-s.on {
-  background: var(--inset);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--sel-bg);
+  box-shadow: var(--sel-shadow);
+  color: var(--sel-ink);
 }
 .ob-n {
   width: 24px;
@@ -3924,9 +3894,9 @@ tr.dim td {
   width: 12px;
   height: 12px;
 }
-.ob-s.on .ob-n {
-  border-color: var(--accent);
-  color: var(--accent);
+.ob-s.on:not(.done) .ob-n {
+  border-color: var(--text);
+  color: var(--text);
 }
 .ob-t {
   display: flex;
@@ -4188,4 +4158,497 @@ tr.dim td {
 }
 .auth-card > .auth-err {
   margin-bottom: 16px;
+}
+
+/* ─────────── search field and ⌘K (poth's trigger and key caps) ─────────── */
+button.search {
+  font: inherit;
+  text-align: left;
+}
+.search kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font: 500 10.5px / 1 var(--sans);
+  color: var(--text-2);
+  background: var(--panel);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 1px 0 var(--line);
+}
+/* the ⌘ glyph is drawn at the cap height of the K beside it (fonts draw it smaller) */
+.search kbd svg {
+  width: 0.72em;
+  height: 0.72em;
+  stroke-width: 2.6;
+  color: currentColor;
+}
+.search-sm,
+.burger,
+.side-x,
+.brand-icon,
+.nav-scrim {
+  display: none;
+}
+.brand-l {
+  display: flex;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+.brand .side-t {
+  width: 28px;
+  height: 28px;
+  margin-right: -4px;
+  color: var(--muted);
+}
+.brand .side-t svg,
+.brand .side-x svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─────────── command menu (cmdk), poth's layout ─────────── */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(18, 18, 17, 0.22);
+  backdrop-filter: blur(2px);
+  animation: cmdk-fade 0.18s ease-out;
+}
+@keyframes cmdk-fade {
+  from {
+    opacity: 0;
+  }
+}
+.cmdk-dialog {
+  position: fixed;
+  z-index: 91;
+  top: calc(14vh / var(--z));
+  left: 50%;
+  width: min(640px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(#ffffff, #fafaf8);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 1px 2px rgba(18, 18, 17, 0.06),
+    0 32px 80px -16px rgba(18, 18, 17, 0.45);
+  animation: cmdk-rise 0.22s var(--ease);
+  transform-origin: top center;
+}
+@keyframes cmdk-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px) scale(0.98);
+  }
+}
+.cmdk {
+  display: flex;
+  flex-direction: column;
+}
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 14px 0 18px;
+  box-shadow: var(--groove-bottom);
+}
+.cmdk-search {
+  display: grid;
+  color: var(--faint);
+}
+.cmdk-search svg {
+  width: 18px;
+  height: 18px;
+}
+.cmdk-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+}
+.cmdk-input::placeholder {
+  color: var(--faint);
+}
+.cmdk-esc,
+.cmdk-foot kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font: 500 10.5px / 1 var(--sans);
+  color: var(--text-2);
+  background: var(--panel);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 1px 0 var(--line);
+}
+.cmdk-list {
+  height: var(--cmdk-list-height);
+  max-height: min(420px, calc(56vh / var(--z)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 8px;
+  transition: height 0.18s ease;
+}
+/* cmdk measures the sizer for --cmdk-list-height, so the padding lives inside it */
+.cmdk-list [cmdk-list-sizer] {
+  padding: 6px 8px 8px;
+}
+.cmdk-empty {
+  padding: 28px 16px;
+  font-size: 13px;
+  color: var(--faint);
+  text-align: center;
+}
+.cmdk-group [cmdk-group-heading] {
+  padding: 10px 10px 6px;
+  font: 400 10px / 14px var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.cmdk-item[data-selected="true"] {
+  background: var(--sel-bg);
+  box-shadow: var(--sel-shadow);
+  color: var(--sel-ink);
+}
+.cmdk-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.cmdk-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.cmdk-item[data-selected="true"] .cmdk-icon {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.cmdk-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmdk-meta {
+  flex: none;
+  font: 400 11px var(--mono);
+  font-style: normal;
+  color: var(--faint);
+}
+.cmdk-enter {
+  display: grid;
+  color: var(--faint);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cmdk-enter svg {
+  width: 14px;
+  height: 14px;
+}
+.cmdk-item[data-selected="true"] .cmdk-enter {
+  opacity: 1;
+}
+.cmdk-foot {
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  box-shadow: var(--groove-top);
+  font-size: 11px;
+  color: var(--faint);
+}
+.cmdk-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cmdk-foot kbd {
+  margin-right: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cmdk-overlay {
+    background: rgba(0, 0, 0, 0.55);
+  }
+  :root:not([data-theme="light"]) .cmdk-dialog {
+    background: linear-gradient(#17181b, #121315);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 32px 80px rgba(0, 0, 0, 0.7);
+  }
+}
+:root[data-theme="dark"] .cmdk-overlay {
+  background: rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="dark"] .cmdk-dialog {
+  background: linear-gradient(#17181b, #121315);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 32px 80px rgba(0, 0, 0, 0.7);
+}
+@media (max-width: 860px) {
+  .cmdk-dialog {
+    top: 12px;
+  }
+  .cmdk-foot,
+  .cmdk-esc {
+    display: none;
+  }
+  .cmdk-list {
+    max-height: calc(100dvh - 120px);
+  }
+}
+
+/* ─────────── collapsible sidebar: the icon rail (desktop and tablet) ─────────── */
+.rail-tip {
+  position: fixed;
+  z-index: 95;
+  pointer-events: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  transform: translateY(-50%) translateX(-4px);
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+.rail-tip.on {
+  opacity: 1;
+  transform: translateY(-50%);
+}
+@media (min-width: 861px) {
+  .shell {
+    transition: grid-template-columns 0.3s var(--ease);
+  }
+  .shell.rail {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+  .shell.rail .sidebar {
+    padding: 16px 10px;
+    overflow-x: hidden;
+  }
+  .shell.rail .brand {
+    flex-direction: column;
+    height: auto;
+    gap: 12px;
+    padding: 0;
+    margin-bottom: 12px;
+  }
+  .shell.rail .brand-wordmark,
+  .shell.rail .brand-tag {
+    display: none;
+  }
+  .shell.rail .brand-icon {
+    display: block;
+    width: 28px;
+    height: 28px;
+  }
+  .shell.rail .brand .side-t {
+    margin: 0;
+    width: 32px;
+    height: 32px;
+  }
+  .shell.rail .ctx {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 4px;
+  }
+  .shell.rail .ctx > div:not(.ctx-av),
+  .shell.rail .ctx > svg {
+    display: none;
+  }
+  .shell.rail .ws-pop {
+    right: auto;
+    width: 300px;
+  }
+  .shell.rail .sep {
+    margin: 12px 6px;
+  }
+  .shell.rail .nav-h {
+    display: none;
+  }
+  .shell.rail .nav a {
+    position: relative;
+    justify-content: center;
+    padding: 0;
+    height: 36px;
+  }
+  .shell.rail .nav a > span {
+    display: none;
+  }
+  .shell.rail .nav a svg {
+    width: 18px;
+    height: 18px;
+  }
+  /* a count becomes a dot on the icon */
+  .shell.rail .nav a:has(.n)::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 0 2px var(--side);
+  }
+  .shell.rail .nav a:has(.n.hot)::after {
+    background: var(--accent);
+  }
+  .shell.rail .me {
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+  }
+  .shell.rail .me-l {
+    justify-content: center;
+    margin: 0;
+    flex: none;
+  }
+  .shell.rail .me-t {
+    display: none;
+  }
+}
+
+/* ─────────── phones and small tablets: the sidebar slides in ─────────── */
+@media (max-width: 860px) {
+  .burger,
+  .search-sm {
+    display: inline-flex;
+  }
+  .burger {
+    margin-left: -8px;
+  }
+  .burger svg {
+    width: 20px;
+    height: 20px;
+  }
+  .top-brand {
+    margin-left: 0;
+  }
+  .sidebar {
+    position: fixed;
+    z-index: 61;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(300px, 86vw);
+    height: 100dvh;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+    box-shadow: none;
+    transform: translateX(-104%);
+    visibility: hidden;
+    transition:
+      transform 0.32s var(--ease),
+      visibility 0s linear 0.32s;
+  }
+  .shell.nav-open .sidebar {
+    transform: none;
+    visibility: visible;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+    transition: transform 0.32s var(--ease);
+  }
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(18, 18, 17, 0.32);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.24s ease;
+  }
+  .shell.nav-open .nav-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body:has(.shell.nav-open) {
+    overflow: hidden;
+  }
+  .brand .side-t {
+    display: none;
+  }
+  .brand .side-x {
+    display: inline-flex;
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+  }
+  .brand-tag {
+    margin-left: 8px;
+  }
+  /* touch targets */
+  .nav a {
+    height: 40px;
+  }
+  .topbar {
+    gap: 4px;
+  }
+  .topbar .btn.icon {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ─────────── large and 4K screens: use the room, keep line lengths sane ─────────── */
+@media (min-width: 1920px) {
+  .page {
+    max-width: 1440px;
+  }
+  .page.wide {
+    max-width: 1880px;
+  }
+}
+/* 4K at 1x: scale the whole interface so text stays readable (media queries see real pixels) */
+@media (min-width: 2560px) {
+  :root {
+    --z: 1.25;
+    zoom: var(--z);
+  }
+}
+@media (min-width: 3400px) {
+  :root {
+    --z: 1.5;
+  }
 }

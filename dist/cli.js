@@ -294084,6 +294084,8 @@ async function clientBundle(root) {
       bundle: true,
       format: "esm",
       target: "es2022",
+      jsx: "automatic",
+      define: { "process.env.NODE_ENV": '"development"' },
       write: false,
       minify: false,
       logLevel: "silent"

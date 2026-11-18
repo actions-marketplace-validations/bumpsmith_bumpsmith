@@ -45,6 +45,14 @@ import {
   setupOrg,
 } from "./org.ts";
 import {
+  closePalette,
+  isMac,
+  openPalette,
+  type PaletteItem,
+  paletteOpen,
+  togglePalette,
+} from "./palette.tsx";
+import {
   ago,
   agoLong,
   BRAND_WORDMARK,
@@ -133,6 +141,17 @@ interface WsItem {
 type Job = any;
 
 type Tab = "summary" | "changes" | "checks" | "breaking" | "log" | "report";
+/** The sidebar as an icon rail: what this browser chose last, else on for mid-size screens. */
+function readRail(): boolean {
+  try {
+    const v = localStorage.getItem("bumpsmith-rail");
+    if (v !== null) return v === "1";
+  } catch {
+    // storage blocked: fall back to the screen size
+  }
+  return window.innerWidth < 1200;
+}
+
 const ui = {
   /** The current repository (workspace) slug. */
   ws: "",
@@ -170,9 +189,10 @@ const ui = {
     auto?: boolean;
   },
   live: new Map<string, LiveRun>(),
-  palette: false,
-  palQuery: "",
-  palIndex: 0,
+  /** Phones and tablets: the sidebar slides in over the page. */
+  navOpen: false,
+  /** Desktop: the sidebar is an icon rail (remembered per browser). */
+  rail: readRail(),
   busy: new Set<string>(),
   latest: {} as Record<string, string | null>,
 };
@@ -241,14 +261,18 @@ function sidebar(d: State) {
   const route = ui.route.split("/")[0] || "overview";
   const live = [...ui.live.values()].filter((l) => !l.done).length;
   const behind = d.debt?.behind.filter((b) => b.majorsBehind > 0).length;
+  // In the rail the label becomes the tooltip (data-tip) and a count becomes a dot.
   const link = (id: string, label: string, ic: string, n = "", hot = false) =>
-    `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "on" : ""}">${icon(ic)}<span>${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
+    `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "on" : ""}" data-tip="${esc(label)}${n ? ` · ${esc(n)}` : ""}" aria-label="${esc(label)}">${icon(ic)}<span>${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
   const orgLink = (id: string, label: string, ic: string) =>
-    `<a href="#/org/${id}" class="${ui.route === `org/${id}` ? "on" : ""}">${icon(ic)}<span>${label}</span></a>`;
-  return `<aside class="sidebar">
-    <div class="brand">${BRAND_WORDMARK}<span class="brand-tag">local</span></div>
+    `<a href="#/org/${id}" class="${ui.route === `org/${id}` ? "on" : ""}" data-tip="${esc(label)}" aria-label="${esc(label)}">${icon(ic)}<span>${label}</span></a>`;
+  return `<div class="nav-scrim" data-act="nav-close" aria-hidden="true"></div>
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+    <div class="brand"><a class="brand-l" href="#/" aria-label="Bumpsmith overview">${BRAND_WORDMARK}<img class="brand-icon" src="/brand/icon.svg" alt="" width="28" height="28" /></a><span class="brand-tag">local</span>
+      <button class="btn icon ghost side-t" data-act="rail" title="${ui.rail ? "Expand sidebar" : "Collapse sidebar"}" aria-label="${ui.rail ? "Expand sidebar" : "Collapse sidebar"}" aria-controls="sidebar" aria-expanded="${!ui.rail}">${icon("sidebar")}</button>
+      <button class="btn icon ghost side-x" data-act="nav-close" aria-label="Close menu">${icon("x")}</button></div>
     <div class="ws-wrap">
-      <button class="ctx ${ui.switcher ? "open" : ""}" data-act="ws-switch" aria-haspopup="listbox" aria-expanded="${ui.switcher}" title="Switch repository">
+      <button class="ctx ${ui.switcher ? "open" : ""}" data-act="ws-switch" aria-haspopup="listbox" aria-expanded="${ui.switcher}" title="Switch repository" data-tip="${esc(d.workspace?.name ?? r.name)}">
         <div class="ctx-av">${esc(r.name.slice(0, 2).toUpperCase())}</div>
         <div style="min-width:0;text-align:left"><div class="ctx-name">${esc(d.workspace?.name ?? r.name)}</div>
           <div class="ctx-sub">${icon("branch")}${esc(r.branch ?? "no git")}${r.commit ? ` · ${esc(r.commit)}` : ""}</div></div>
@@ -327,10 +351,12 @@ function userRow() {
 
 function topbar(crumbs: string[]) {
   return `<header class="topbar">
+    <button class="btn icon ghost burger" data-act="nav-open" aria-label="Open menu" aria-controls="sidebar" aria-expanded="${ui.navOpen}">${icon("menu")}</button>
     <a class="top-brand" href="#/" aria-label="Overview">${BRAND_WORDMARK}</a>
     <div class="crumbs">${crumbs.map((c, i) => (i === crumbs.length - 1 ? `<b>${esc(c)}</b>` : `<span>${esc(c)}</span><span class="s">/</span>`)).join("")}</div>
     <div class="grow"></div>
-    <div class="search" data-act="palette">${icon("search")}<span>Search upgrades and packages</span><kbd>⌘K</kbd></div>
+    <button class="search" data-act="palette" aria-label="Search" aria-keyshortcuts="${isMac() ? "Meta+K" : "Control+K"}">${icon("search")}<span>Search upgrades and packages</span><kbd>${isMac() ? `${icon("command")}<span>K</span>` : "Ctrl K"}</kbd></button>
+    <button class="btn icon search-sm" data-act="palette" aria-label="Search">${icon("search")}</button>
     <button class="btn icon" data-act="theme" title="Switch theme">${icon(theme() === "dark" ? "sun" : "moon")}</button>
     <button class="btn primary" data-act="new" data-need="runs.start">${icon("plus")}<span class="hide-sm">New upgrade</span></button>
   </header>`;
@@ -1185,8 +1211,7 @@ async function followLive(id: string) {
 
 // ───────────── command palette ─────────────
 
-function paletteItems(d: State) {
-  const q = ui.palQuery.toLowerCase();
+function paletteItems(d: State): PaletteItem[] {
   const items: { g: string; ic: string; t: string; k?: string; run: () => void }[] = [
     { g: "Actions", ic: "plus", t: "New upgrade", k: "N", run: () => openNew() },
     { g: "Actions", ic: "scan", t: "Scan dependencies", run: () => scan() },
@@ -1201,15 +1226,28 @@ function paletteItems(d: State) {
     { g: "Go to", ic: "package", t: "Dependencies", run: () => go("deps") },
     { g: "Go to", ic: "shield", t: "Safety", run: () => go("safety") },
     { g: "Go to", ic: "cpu", t: "Sandbox & models", run: () => go("sandbox") },
-    ...d.runs.slice(0, 40).map((r) => ({
-      g: "Runs",
+    ...(
+      [
+        ["members", "Members", "users", "members.view"],
+        ["roles", "Roles", "key", "roles.manage"],
+        ["access", "Access", "shield", "access.manage"],
+        ["integrations", "Integrations", "cpu", "integrations.manage"],
+        ["security", "Security", "lock", "security.manage"],
+        ["audit", "Audit log", "list", "audit.view"],
+      ] as const
+    )
+      .filter((x) => can(x[3]))
+      .map(([id, t, ic]) => ({ g: "Organisation", ic, t, run: () => go(`org/${id}`) })),
+    { g: "Organisation", ic: "users", t: "Your account", run: () => go("account") },
+    ...d.runs.slice(0, 60).map((r) => ({
+      g: "Upgrades",
       ic: "diff",
       t: `${r.package} ${r.from ?? "?"} → ${r.to}`,
       k: stateOf(r.state).short,
       run: () => go(`runs/${r.id}`),
     })),
     ...Object.keys(d.repo.dependencies)
-      .slice(0, 200)
+      .slice(0, 300)
       .map((p) => ({
         g: "Upgrade a dependency",
         ic: "play",
@@ -1218,25 +1256,7 @@ function paletteItems(d: State) {
         run: () => openNew(p),
       })),
   ];
-  return items
-    .filter((i) => !q || i.t.toLowerCase().includes(q) || i.g.toLowerCase().includes(q))
-    .slice(0, 40);
-}
-function palette(d: State) {
-  if (!ui.palette) return "";
-  const items = paletteItems(d);
-  let g = "";
-  return `<div class="scrim ${fresh(opened.palette)}" data-act="close-pal" style="background:rgba(0,0,0,.18)"></div><div class="palette ${fresh(opened.palette)}" role="dialog" aria-label="Command palette">
-    <input id="pal" placeholder="Search runs, dependencies and actions" value="${esc(ui.palQuery)}" autocomplete="off" spellcheck="false" />
-    <div class="list">${
-      items
-        .map((it, i) => {
-          const head = it.g !== g ? `<div class="pal-g">${esc(it.g)}</div>` : "";
-          g = it.g;
-          return `${head}<div class="pal-i ${i === ui.palIndex ? "on" : ""}" data-act="pal-run" data-v="${i}">${icon(it.ic)}<span>${esc(it.t)}</span>${it.k ? `<span class="k">${esc(it.k)}</span>` : ""}</div>`;
-        })
-        .join("") || `<div class="empty-s">No matches</div>`
-    }</div></div>`;
+  return items.map((i) => ({ group: i.g, icon: icon(i.ic), title: i.t, meta: i.k, run: i.run }));
 }
 
 // ───────────── routing, rendering, events ─────────────
@@ -1260,7 +1280,7 @@ function openNew(pkg = "", ver = "") {
     d?.env.providers.find((p) => p.id === d.env.defaultProvider && p.ok) ??
     d?.env.providers.find((p) => p.ok);
   ui.drawer = { mode: "new", pkg, version: ver, provider: prov?.id ?? "claude-code", budget: 8 };
-  ui.palette = false;
+  closePalette();
   render();
   if (pkg && !ver) fetchLatest(pkg);
   setTimeout(
@@ -1392,8 +1412,8 @@ async function apply(id: string) {
 }
 
 let tipEl: HTMLDivElement | null = null;
-/** When the drawer / palette opened: their entrance animation plays once, not on every render. */
-const opened = { drawer: 0, palette: 0 };
+/** When the drawer opened: their entrance animation plays once, not on every render. */
+const opened = { drawer: 0 };
 const fresh = (t: number) => (Date.now() - t < 400 ? "anim" : "");
 function render() {
   const d = ui.data;
@@ -1452,17 +1472,15 @@ function render() {
   const caret = active && "selectionStart" in active ? active.selectionStart : null;
   const term = document.getElementById("term");
   const atBottom = !term || term.scrollHeight - term.scrollTop - term.clientHeight < 40;
-  $app.className = "shell";
+  $app.className = `shell${ui.rail ? " rail" : ""}${ui.navOpen ? " nav-open" : ""}`;
   if (ui.drawer && !opened.drawer) opened.drawer = Date.now();
   if (!ui.drawer) opened.drawer = 0;
-  if (ui.palette && !opened.palette) opened.palette = Date.now();
-  if (!ui.palette) opened.palette = 0;
   // Organisation pages belong to the organisation, not the current repository.
   if (route === "org" || route === "account" || route === "onboarding")
     crumbs[0] = session.info?.org?.name ?? crumbs[0] ?? "";
   if (route === "org" && arg && ORG_PAGE_PERM[arg] && !can(ORG_PAGE_PERM[arg] as string))
     body = noAccessPage(crumbs[crumbs.length - 1] ?? "this page");
-  const html = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
+  const html = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}`;
   // Repository links in templates are written as "#/runs/…"; point them at this repository.
   $app.innerHTML = html.replace(
     /href="#\/(?!w\/|account|onboarding|org\/|invite\/|setup\/|reset\/)/g,
@@ -1821,19 +1839,24 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "palette":
-      ui.palette = true;
-      ui.palQuery = "";
-      ui.palIndex = 0;
-      render();
-      (document.getElementById("pal") as HTMLInputElement | null)?.focus();
+      openPalette(paletteItems(d));
       break;
-    case "close-pal":
-      ui.palette = false;
+    case "rail":
+      ui.rail = !ui.rail;
+      try {
+        localStorage.setItem("bumpsmith-rail", ui.rail ? "1" : "0");
+      } catch {
+        // not remembered
+      }
       render();
       break;
-    case "pal-run":
-      paletteItems(d)[Number(v)]?.run();
-      ui.palette = false;
+    case "nav-open":
+      ui.navOpen = true;
+      render();
+      (document.querySelector("#sidebar .side-x") as HTMLElement | null)?.focus();
+      break;
+    case "nav-close":
+      ui.navOpen = false;
       render();
       break;
   }
@@ -1855,10 +1878,6 @@ document.addEventListener("input", (e) => {
     render();
   } else if (el.id === "log-q") {
     ui.logQuery = el.value;
-    render();
-  } else if (el.id === "pal") {
-    ui.palQuery = el.value;
-    ui.palIndex = 0;
     render();
   } else if (ui.drawer && el.id === "f-pkg") {
     if (ui.drawer.auto) {
@@ -1927,31 +1946,15 @@ document.addEventListener("keydown", (e) => {
   if (!d) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
-    ui.palette = !ui.palette;
-    ui.palQuery = "";
-    ui.palIndex = 0;
-    render();
-    (document.getElementById("pal") as HTMLInputElement | null)?.focus();
+    togglePalette(() => paletteItems(d));
     return;
   }
+  // The command menu handles its own keys (cmdk), including Escape.
+  if (paletteOpen()) return;
   if (e.key === "Escape") {
-    if (ui.palette) ui.palette = false;
+    if (ui.navOpen) ui.navOpen = false;
     else if (ui.drawer) ui.drawer = null;
     render();
-    return;
-  }
-  if (ui.palette) {
-    const n = paletteItems(d).length;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      ui.palIndex = (ui.palIndex + (e.key === "ArrowDown" ? 1 : -1) + n) % Math.max(n, 1);
-      render();
-      document.querySelector(".pal-i.on")?.scrollIntoView({ block: "nearest" });
-    } else if (e.key === "Enter") {
-      paletteItems(d)[ui.palIndex]?.run();
-      ui.palette = false;
-      render();
-    }
     return;
   }
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName);
@@ -1971,11 +1974,53 @@ document.addEventListener("mousemove", (e) => {
     return;
   }
   tipEl.textContent = hint;
-  tipEl.style.left = `${e.clientX}px`;
-  tipEl.style.top = `${e.clientY}px`;
+  tipEl.style.left = `${e.clientX / pageZoom()}px`;
+  tipEl.style.top = `${e.clientY / pageZoom()}px`;
   tipEl.classList.add("on");
 });
+/** Large screens zoom the interface (CSS --z); fixed tooltips are placed in zoomed pixels. */
+const pageZoom = () => Number.parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+
+/** The rail's labels: a tooltip beside the hovered or focused icon (outside the scrolling sidebar). */
+let railTip: HTMLDivElement | null = null;
+function showRailTip(el: HTMLElement | null) {
+  if (!railTip) {
+    railTip = document.createElement("div");
+    railTip.className = "rail-tip";
+    railTip.setAttribute("role", "tooltip");
+    document.body.append(railTip);
+  }
+  const label = el?.closest(".shell.rail .sidebar") ? el.dataset.tip : undefined;
+  if (!el || !label || window.innerWidth <= 860) {
+    railTip.classList.remove("on");
+    return;
+  }
+  const r = el.getBoundingClientRect();
+  const z = pageZoom();
+  railTip.textContent = label;
+  railTip.style.left = `${(r.right + 12) / z}px`;
+  railTip.style.top = `${(r.top + r.height / 2) / z}px`;
+  railTip.classList.add("on");
+}
+document.addEventListener("mouseover", (e) =>
+  showRailTip((e.target as HTMLElement).closest<HTMLElement>("[data-tip]")),
+);
+document.addEventListener("focusin", (e) =>
+  showRailTip((e.target as HTMLElement).closest<HTMLElement>("[data-tip]")),
+);
+document.addEventListener("scroll", () => showRailTip(null), true);
+// Leaving phone width with the menu open: put the page back.
+matchMedia("(max-width: 860px)").addEventListener("change", () => {
+  if (ui.navOpen) {
+    ui.navOpen = false;
+    render();
+  }
+});
+
 window.addEventListener("hashchange", () => {
+  // The slide-in menu closes once you pick a page.
+  ui.navOpen = false;
+  showRailTip(null);
   // A setup link pasted into a tab already showing the sign-in screen.
   if (!started && /^#\/(setup|invite|reset)\//.test(location.hash)) void gate();
   else void onRoute();
@@ -1991,7 +2036,7 @@ function sessionEnded() {
   session.info = null;
   ui.data = null;
   ui.drawer = null;
-  ui.palette = false;
+  closePalette();
   if (poller) clearInterval(poller);
   started = false;
   void gate("expired");
@@ -2041,7 +2086,7 @@ async function startApp() {
   }
   await onRoute();
   poller = setInterval(async () => {
-    if (document.hidden || ui.drawer || ui.palette || !session.info) return;
+    if (document.hidden || ui.drawer || paletteOpen() || !session.info) return;
     const before = ui.data?.runs.map((r) => r.id).join();
     await refresh().catch(() => {});
     if (ui.data?.runs.map((r) => r.id).join() !== before) render();

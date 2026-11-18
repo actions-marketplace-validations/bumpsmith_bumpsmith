@@ -39,6 +39,9 @@ await build({
   platform: "browser",
   format: "esm",
   target: "es2022",
+  // The command menu is cmdk (React); everything else is plain DOM.
+  jsx: "automatic",
+  define: { "process.env.NODE_ENV": '"production"' },
   minify: true,
   logLevel: "info",
 });
