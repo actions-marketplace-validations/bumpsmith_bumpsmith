@@ -70,6 +70,12 @@ These fixes were made after seeing results on this set, so v1 is no longer fully
 A fresh held-out set (v2), mined after these changes, will give the clean number. This
 page will report both.
 
+## Repository coverage (no AI)
+
+Separately from fixing breaking changes, the [repository zoo](ZOO.md) measures whether
+Bumpsmith can set up, bump and check a repository at all: 38 of 42 real repositories
+of 13 shapes install in the sandbox, 32 are verifiable, and none crashes.
+
 ## Other providers
 
 The same benchmark runs with any provider (`--provider`). Community runs are welcome:

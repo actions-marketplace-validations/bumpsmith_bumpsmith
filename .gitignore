@@ -13,3 +13,5 @@ coverage/
 bench/results-20*.json
 bench/zoo-runs/
 bench/*.log
+bench/zoo-results-*.json
+bench/zoo-final-*.json
