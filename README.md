@@ -1,171 +1,222 @@
-# Bumpsmith
+<div align="center">
 
-**Fixes your code when a dependency ships a breaking change.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="dashboard/brand/wordmark-dark.svg">
+  <img alt="Bumpsmith" src="dashboard/brand/wordmark-light.svg" height="56">
+</picture>
 
-Dependabot and Renovate tell you a new major version is out. Then the pull request goes
-red, because the new version renamed a function, removed an option or changed a default,
-and someone has to dig through the changelog and fix the call sites. Bumpsmith does that
-part:
+### Fixes your code when a dependency ships a breaking change.
 
-1. reads the release notes, changelog, migration guide and type definitions to list
-   exactly what changed (every claim backed by a verbatim quote);
-2. finds every place in your code that is affected;
-3. upgrades and edits the code inside an isolated container, runs your install, build,
-   type check, lint and tests, and compares them with the run before the upgrade;
-4. has an independent reviewer check the diff, applies plain-code safety rules, and
-5. hands you a pull request (or a patch) with the evidence: what changed upstream, what
-   changed here, which checks pass before and after, and what could not be verified.
+Dependabot and Renovate open the pull request. Bumpsmith makes it green:<br>
+it reads the changelog, fixes your code in a sandbox, proves it with your own tests, and shows its work.
 
-A human always merges. Bumpsmith never pushes to your default branch.
+[![CI](https://github.com/bumpsmith/bumpsmith/actions/workflows/ci.yml/badge.svg)](https://github.com/bumpsmith/bumpsmith/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-f25a1d)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522.13-3c3c3a)](package.json)
+[![npm and PyPI](https://img.shields.io/badge/ecosystems-npm%20%C2%B7%20PyPI-3c3c3a)](#supported)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-1a7f4b)](CONTRIBUTING.md)
 
-> Status: **v0.1, early.** npm (npm, pnpm, Yarn 1–4, Bun) and PyPI (pip, uv, Poetry).
-> On 27 real merged Dependabot upgrades where a human had to fix code, Bumpsmith produced
-> a verified fix for 21 of the 22 it could run (5 used private registries or git
-> dependencies), at about $1 of model cost per fix. Those tasks were also used to improve
-> Bumpsmith. On a **held-out** set of 24 upgrades (15 npm, 9 PyPI) from other repositories,
-> it produced a verified fix for 12 of the 22 it could run, refused one malicious release,
-> and sent the rest to a human with the reason. Details and caveats:
-> [bench/RESULTS.md](bench/RESULTS.md). On 42 real repositories of 13 shapes (npm, pnpm,
-> Yarn, Bun, workspaces, pip, Poetry, uv, Pipenv, setup.py), it sets up 38 and can verify 32
-> with no crashes; the rest say why: [bench/ZOO.md](bench/ZOO.md).
+[**Quick start**](#quick-start) · [**How it works**](#how-it-works) · [**Benchmarks**](#benchmarks) · [**Self-hosting**](docs/self-hosting.md) · [**Security**](#how-it-stays-safe)
 
-## Quick start: GitHub Action
+<a href="docs/media/hero.mp4">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/hero-dark.webp">
+    <img alt="Bumpsmith fixing a node-fetch 2 to 3 upgrade: the changelog it read, the code it changed, the checks before and after, and the independent review" src="docs/media/hero.webp" width="100%">
+  </picture>
+</a>
 
-Rescue red Dependabot/Renovate pull requests automatically:
+<sub>A real upgrade from the benchmark, no cuts: <code>node-fetch</code> 2 → 3 went ESM-only and dropped <code>timeout</code>. Bumpsmith wrote the wrapper, mapped the option, ran the tests, and its reviewer flagged the one thing tests couldn't prove. <a href="docs/media/hero.mp4">Watch the MP4</a>.</sub>
+
+</div>
+
+---
+
+## Why
+
+Keeping dependencies current is easy until a **major** version lands. The bot opens a pull
+request, CI goes red, and someone has to read three changelogs, find every call site, and
+fix them. That PR sits for weeks; meanwhile you fall further behind on security fixes.
+
+Bumpsmith does that someone's job, and it is built to be trusted with it:
+
+- **It proves the fix.** Your install, build, typecheck, lint and tests run in an isolated
+  container before and after the upgrade. No passing check, no "ready".
+- **It shows its sources.** Every breaking change it acts on is quoted word for word from the
+  release notes, the migration guide or the type definitions, with a link.
+- **It gets a second opinion.** A separate reviewer and plain-code safety rules check the diff
+  before anything is written, and say what they could not verify.
+- **A human always merges.** Bumpsmith opens a pull request or stages a patch. It never pushes
+  to your default branch.
+
+## Quick start
+
+### GitHub Action: rescue red bot PRs automatically
 
 ```sh
 npx bumpsmith init     # writes .github/workflows/bumpsmith.yml (wired to your CI) and .bumpsmith.yml
 ```
 
-Then add your model key as a repository secret. Any of these providers works in the Action:
-`anthropic` (default), `openai`, `gemini`, `openrouter`, `groq`, `together`, `deepseek`, or
-`custom` with a `base-url` for any OpenAI-compatible endpoint. Set `provider`, `api-key` and
-`model` in the workflow ([example](examples/bumpsmith.yml)).
+Add your model key as a repository secret. When CI fails on a Dependabot or Renovate pull
+request, Bumpsmith opens a companion PR with the same upgrade plus the code changes, links the
+two, and comments on the bot PR. If it can't produce a verified fix, it says why and lists the
+affected code instead. Full example: [`examples/bumpsmith.yml`](examples/bumpsmith.yml).
 
-When CI fails on a bot PR, Bumpsmith opens a companion PR with the same upgrade plus the
-code changes, links the two, and comments on the bot PR. If it cannot produce a verified
-fix, it says why and lists the affected code instead.
+### CLI: on your machine
 
-### Tokens
-
-Pull requests opened with the default `GITHUB_TOKEN` [do not trigger your CI](https://docs.github.com/en/actions/concepts/security/github_token),
-so you would not see your own checks on Bumpsmith's PR. Recommended: create a small
-GitHub App for your organisation (permissions: Contents and Pull requests write, Checks
-read), install it on the repository, and set the `BUMPSMITH_APP_ID` variable and
-`BUMPSMITH_APP_PRIVATE_KEY` secret. The example workflow then uses
-[`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
-
-## Quick start: CLI
-
-Needs Node 22+ and Docker.
+Needs Node 22.13+ and Docker.
 
 ```sh
 npx bumpsmith scan                     # which dependencies are a major (or more) behind; no AI
 npx bumpsmith explain zod@4.1.0        # what breaks and where your code is affected
 npx bumpsmith fix zod@4.1.0            # upgrade + fix + verify; writes a patch and evidence
 npx bumpsmith fix zod@4.1.0 --apply    # ...and stage the patch if it was verified
+npx bumpsmith rescue --github owner/repo --provider claude-code   # fix red bot PRs as PRs
 ```
 
-Model access, pick one:
-
-| Provider                                                  | What you need                                                            | Billing            |
-| --------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
-| `anthropic-api` (default when `ANTHROPIC_API_KEY` is set) | an Anthropic API key                                                     | pay per use        |
-| `--provider claude-code`                                  | the official Claude Code CLI, signed in with your Pro/Max plan           | your plan's limits |
-| `--provider codex`                                        | the official Codex CLI, signed in with your ChatGPT plan (`codex login`) | your plan's limits |
-
-Subscription providers run the official CLI you signed in to; Bumpsmith never sees or
-stores your login, and switches off the CLI's own shell, browser and web tools so the model
-can only use Bumpsmith's confined tools. They are for your own use on your own machine.
-Results go to `.bumpsmith/` (add it to `.gitignore`).
-
-Open pull requests straight from your machine (uses `GITHUB_TOKEN` or your `gh` login):
+### Dashboard: review, apply, and run upgrades live
 
 ```sh
-npx bumpsmith rescue --github owner/repo --provider claude-code     # fix red Dependabot/Renovate PRs
-npx bumpsmith fix zod@4.1.0 --github owner/repo --provider codex     # one upgrade, as a PR
+npx bumpsmith dashboard                # http://127.0.0.1:4477
 ```
 
-Pull requests opened this way come from your account, so your CI runs on them. GitHub marks
-commits "Verified" only when they are made by a GitHub App, so use the Action with an App
-token if you want signed commits.
+The first start prints a one-time link that creates the owner account. Everything Bumpsmith did
+is there:
 
-### Dashboard
+- each upgrade's pipeline and the breaking changes it read;
+- the diff, with the agent's edits marked;
+- your checks before and after, and the independent review.
 
-```sh
-npx bumpsmith dashboard                # opens http://127.0.0.1:4477
-```
+**Apply patch** stages a verified result in one click.
 
-The first start prints a one-time link that creates the owner account. After that, everyone
-signs in.
+<div align="center">
+<img alt="The command menu: search upgrades and dependencies, then start an upgrade with a model and a budget" src="docs/media/command-menu.webp" width="80%">
+<br><sub><kbd>⌘</kbd> <kbd>K</kbd> to jump anywhere or start an upgrade, with the model and spend cap you choose.</sub>
+</div>
 
-A dashboard for everything Bumpsmith did in this repository:
-
-- **Overview:** what's ready to apply, verification rate, spend and time to green, a check-health map and where upgrades stop.
-- **Upgrade detail:** each pipeline stage, your checks before and after (with their output), the diff with the agent's edits marked, the breaking changes it read, the independent review and the cost. **Apply patch** stages a verified result in one click.
-- **New upgrade:** pick a dependency and a model, then watch it run live in the sandbox.
-- **Dependencies:** your upgrade debt, with one-click upgrades.
-- **Search:** ⌘K across upgrades, dependencies and actions.
-
-It runs on 127.0.0.1 and sends nothing anywhere: fonts are bundled and there's no analytics.
-
-**Access and audit:**
-
-- **Sign-in:** accounts with passwords checked against a breached-password list and lockout after repeated failures.
-- **Sessions:** server-side, ending after 30 minutes idle or 12 hours. Every change carries a CSRF token.
-- **Permissions:** every action is checked on the server against the user's role.
-- **Audit log:** sign-ins and actions go into a tamper-evident (hash-chained) log.
-
-Accounts, the audit log and the encryption key live in `~/.bumpsmith` (or `--data`), readable only by your user.
-
-### Self-hosted server for your team
+### Self-hosted, for your team
 
 ```sh
 cd deploy && echo "BUMPSMITH_DOMAIN=bumpsmith.acme.dev" > .env
 openssl rand -base64 32 > master.key && docker compose up -d
 ```
 
-The same app runs as a multi-user server behind HTTPS. Members are added by invitation, or created on their first SSO
-sign-in.
+The same app runs as a multi-user server behind HTTPS. It's built for security reviews from
+day one:
 
-- **Sign-in:** two-factor authentication, single sign-on (OIDC and SAML) with group-to-role mapping.
-- **Roles:** built-in and custom roles.
-- **Access control:** an access control center for each repository.
-- **Integrations:** encrypted GitHub and model credentials.
-- **Onboarding:** guided in the browser.
+| Area    | What you get                                                               |
+| ------- | -------------------------------------------------------------------------- |
+| Sign-in | SSO (OIDC and SAML) with group-to-role mapping; two-factor authentication. |
+| Access  | Custom roles and an access matrix for each repository.                     |
+| Data    | Encrypted secrets and a tamper-evident audit log.                          |
+| Setup   | Onboarding in the browser.                                                 |
 
-Read [Self-hosting](docs/self-hosting.md) to deploy it. Read [Security controls](docs/security/controls.md) for the
-SOC 2, ISO 27001, NIST 800-63B and OWASP ASVS mapping, and for what you are responsible for as the operator.
+Read the [self-hosting guide](docs/self-hosting.md). The [security controls](docs/security/controls.md)
+page maps every control to SOC 2, ISO 27001, NIST 800-63B and OWASP ASVS.
 
-## How Bumpsmith stays safe
+<div align="center">
+<img alt="Inviting a teammate, granting access per repository, single sign-on settings and the hash-chained audit log" src="docs/media/team.webp" width="80%">
+</div>
 
-Bumpsmith runs code it did not write (your dependencies' install and test steps) and lets
-an AI model edit your repository, so it assumes both can be hostile.
+## How it works
 
-- **Isolated execution.** Installs, builds and tests run in a container with no
-  credentials, no environment from the host, CPU/memory/process/time limits, and no
-  network, except during installs, when the only reachable server is a **read-only
-  registry mirror**. The mirror allows only `GET`/`HEAD` to npm and PyPI hosts and strips
-  credentials, so code cannot publish your source to a registry or call home.
-- **Supply-chain caution.** New versions are used only after a 3-day release-age wait,
-  install scripts are off, and versions on the OSV malicious-package list are refused.
-- **Limited AI.** The agent has no shell: only file tools confined to the repository and
-  named check commands. It cannot edit CI workflows, secrets, infrastructure or other
-  protected files. Secrets found in files are masked before anything reaches the model.
-- **Independent checks before anything is written.** Plain-code rules (no new network or
-  process calls, no new dependencies, no weakened tests, no protected paths) and a separate
-  AI reviewer. The publishing step re-checks the patch's hash and the rules itself and
-  rebuilds every file from your default branch with a strict, no-fuzz patch.
-- **Respect for your repository.** Config is read only from the default branch, and can
-  tighten but never loosen these rules. Bumpsmith never overwrites a commit a human
-  pushed, never reopens a PR you closed, never force-pushes your branches, and labels its
-  PRs `ai-generated` with the model named.
-- **In the GitHub Action,** it never checks out or runs the bot PR's code; it rebuilds the
-  upgrade from your default branch. Tokens stay in the Action process, masked in logs.
+```mermaid
+flowchart LR
+    A["Bot PR goes red<br/>or you pick an upgrade"] --> B["Read what changed<br/>release notes · changelog<br/>migration guide · .d.ts diff"]
+    B --> C["Map the impact<br/>every affected call site"]
+    C --> D["Sandbox: checks before"]
+    D --> E["Bump, then fix<br/>confined file tools only"]
+    E --> F["Sandbox: checks after<br/>compared with before"]
+    F -->|regressions| E
+    F --> G["Independent review<br/>+ plain-code rules"]
+    G --> H["Pull request or patch<br/>with the evidence"]
+```
 
-Found a hole? See [SECURITY.md](SECURITY.md).
+1. **Read.** Release notes, changelogs, migration guides and the type definitions of both
+   versions become a list of breaking changes. Each one is backed by a verbatim quote.
+2. **Map.** Every place your code touches a changed API, found with AST search.
+3. **Fix.** The upgrade is installed and the code edited in an isolated container. The model
+   gets only file tools confined to the repository, and the named check commands.
+4. **Verify.** Your own checks run before and after. Failures that existed before the upgrade
+   are not counted against it; new ones send the agent back for another round.
+5. **Review.** A separate model reviews the diff against the evidence. Rules written in plain
+   code block new network or process calls, new dependencies, weakened tests and protected
+   paths.
+6. **Hand over.** A pull request (or patch) states:
+   - what changed upstream;
+   - what changed in your code, and why;
+   - which checks pass before and after;
+   - what could not be verified.
 
-## Configuration: `.bumpsmith.yml` (optional)
+## Benchmarks
+
+Measured on real upgrades that broke something and that a human later fixed in a merged
+pull request. Bumpsmith replays each one from the commit before the human's fix.
+
+On a **held-out set** of 24 upgrades from repositories never used in development:
+
+| Metric                      | Result                                                |
+| --------------------------- | ----------------------------------------------------- |
+| Verified fixes              | **12 of 22** it could run (55%), 4 at high confidence |
+| Correctly refused           | 1 (the target release is a known malicious package)   |
+| Safety-rule false positives | 0                                                     |
+| Model cost                  | **$0.73** per verified fix (API list price)           |
+| Median time                 | 3.3 minutes                                           |
+
+On 42 real repositories of 13 shapes (npm, pnpm, Yarn, Bun, workspaces, pip, Poetry, uv,
+Pipenv and others), Bumpsmith sets up 38 and verifies 32 with no crashes; the rest say why.
+Methods, caveats and raw data: [bench/RESULTS.md](bench/RESULTS.md) and [bench/ZOO.md](bench/ZOO.md).
+
+## How it compares
+
+|                                       | Dependabot / Renovate | AI coding agents |              **Bumpsmith**               |
+| ------------------------------------- | :-------------------: | :--------------: | :--------------------------------------: |
+| Opens upgrade PRs                     |           ✓           |        —         |            ✓ (rescues theirs)            |
+| Fixes code a breaking change broke    |           —           |        ✓         |                    ✓                     |
+| Reads the changelog and quotes it     |           —           |    sometimes     |       ✓ every change, with sources       |
+| Runs your tests before **and** after  |           —           |    sometimes     |         ✓ in an isolated sandbox         |
+| Independent review of the diff        |           —           |        —         |         ✓ plus plain-code rules          |
+| Refuses malicious or too-new releases |        partly         |        —         | ✓ OSV check and a 3-day release-age gate |
+| No network for the code it runs       |           —           |        —         |    ✓ only a read-only registry mirror    |
+| Runs in your CI, with your model key  |           ✓           |      varies      |                    ✓                     |
+
+## How it stays safe
+
+Bumpsmith runs code it didn't write (your dependencies' install and test steps) and lets a model
+edit your repository, so it treats both as hostile.
+
+- **Isolated execution.** Each run is a container with:
+  - no credentials, and no environment passed in from the host;
+  - limits on CPU, memory, processes and time;
+  - no network, except during installs, when the only reachable server is a read-only registry
+    mirror. It allows only `GET`/`HEAD` to npm and PyPI.
+- **Supply-chain caution.**
+  - New versions are used only after a 3-day release-age wait.
+  - Install scripts are off.
+  - Versions on the OSV malicious-package list are refused.
+- **Limited AI.** The agent has no shell, so it can't edit CI workflows, secrets or
+  infrastructure. Secrets found in files are masked before anything reaches the model.
+- **Strict publishing.** The publishing step re-checks the reviewed patch's hash and the rules,
+  and rebuilds every file from your default branch with a no-fuzz patch.
+- **Respect for your repository.** Bumpsmith never:
+  - overwrites a commit a human pushed;
+  - reopens a PR you closed;
+  - force-pushes your branches.
+
+  It labels its PRs `ai-generated`, with the model named.
+
+Found a hole? Please report it privately: [SECURITY.md](SECURITY.md).
+
+## Supported
+
+|                   |                                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ecosystems**    | npm (npm, pnpm, Yarn 1–4, Bun, workspaces) · PyPI (pip, uv, Poetry, PEP 621)                                                                                                     |
+| **Models**        | Anthropic, OpenAI, Gemini, OpenRouter, Groq, Together, DeepSeek, or any OpenAI-compatible endpoint. On your own machine you can also use your Claude Code or Codex subscription. |
+| **CI**            | GitHub Actions (Linux runners with Docker)                                                                                                                                       |
+| **Test services** | Postgres, MySQL, MariaDB, Redis, Valkey and Mongo, started from your workflow's `services:`                                                                                      |
+
+<details>
+<summary><b>Configuration</b> (<code>.bumpsmith.yml</code>, optional)</summary>
 
 ```yaml
 version: 1
@@ -185,24 +236,86 @@ rules:
   protected_paths: ["infra/**"]
 ```
 
-Commands are plain argv (no shell operators). Invalid files fall back to safe defaults.
+Config is read only from your default branch. It can tighten Bumpsmith's rules but never loosen
+them. Commands are plain argv (no shell operators).
+</details>
+
+<details>
+<summary><b>Tokens for the GitHub Action</b></summary>
+
+Pull requests opened with the default `GITHUB_TOKEN` [don't trigger your CI](https://docs.github.com/en/actions/concepts/security/github_token).
+Create a small GitHub App for your organisation:
+
+- **Permissions:** Contents and Pull requests (write), and Checks (read).
+- **Install** it on the repository.
+- **Secrets:** set the `BUMPSMITH_APP_ID` variable and the `BUMPSMITH_APP_PRIVATE_KEY` secret.
+
+The example workflow then uses [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
+</details>
+
+## FAQ
+
+<details>
+<summary><b>Does my code leave my machine or CI?</b></summary>
+
+Only to the model provider you configure, and only what the agent reads. Secrets found in files
+are masked first. The dashboard has no analytics or other telemetry, and its fonts are bundled.
+</details>
+
+<details>
+<summary><b>What does it cost?</b></summary>
+
+On the held-out benchmark, $0.73 of model usage per verified fix at API list prices.
+
+You set a spend cap per run. On your own machine you can use your Claude Code or Codex
+subscription instead of an API key.
+</details>
+
+<details>
+<summary><b>How is this different from asking a coding agent to do the upgrade?</b></summary>
+
+An agent edits code. Bumpsmith adds three things around it:
+
+- **Evidence:** it reads the release notes and quotes them.
+- **Proof:** your checks run before and after, in a sandbox with no network.
+- **A gate:** an independent review plus rules that decide whether the result reaches you.
+
+When it can't prove a fix, it says so instead of guessing.
+</details>
+
+<details>
+<summary><b>What happens when it can't fix something?</b></summary>
+
+You get a "needs a human" result, with:
+
+- the breaking changes;
+- every affected call site;
+- what it tried;
+- why it stopped (for example, the tests already failed before the upgrade, or a package
+  needs a system library).
+</details>
 
 ## Limitations
 
-- Grouped bot PRs are handled as one job: the biggest major jump is analysed in depth and the
-  other packages are upgraded with it (each still release-gated). Packages in a monorepo
-  sub-directory are supported when they have their own lockfile; workspace members that
-  share the root lockfile are reported as not supported yet.
-- Private registries and git dependencies are not supported in the sandbox.
-- Tests that need databases or other services cannot run yet.
-- Linux runners (Docker) for the Action.
+- **Grouped bot PRs:** they are handled as one job. The biggest major jump is analysed in depth
+  and the other packages are upgraded with it.
+- **Private registries and git dependencies:** not supported in the sandbox yet.
+- **The GitHub Action:** needs Linux runners with Docker.
 
-## Development
+## Contributing
+
+Bug reports, repositories that trip it up, and pull requests are all welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```sh
 pnpm install && pnpm check     # typecheck, lint, unit and Action tests
 pnpm test:docker               # sandbox isolation and exfiltration tests
-pnpm bumpsmith bench run --tasks bench/tasks-npm.json --provider claude-code
+pnpm bumpsmith dashboard       # the dashboard, from source
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [Apache-2.0](LICENSE).
+The videos in this README are recorded from the real dashboard by
+[`scripts/demo`](scripts/demo). Re-record them after a UI change.
+
+## License
+
+[Apache-2.0](LICENSE). Bumpsmith is free to self-host. A hosted version for teams is on the way.

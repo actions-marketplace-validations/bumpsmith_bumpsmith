@@ -11,7 +11,7 @@ body:
     attributes: { label: Public repository (if any) }
   - type: dropdown
     id: where
-    attributes: { label: Where, options: [CLI, GitHub Action] }
+    attributes: { label: Where, options: [CLI, GitHub Action, Dashboard, Self-hosted server] }
   - type: textarea
     id: what
     attributes:

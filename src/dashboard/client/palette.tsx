@@ -61,7 +61,7 @@ function Menu({ items, onClose }: { items: PaletteItem[]; onClose: () => void })
           className="cmdk"
           label="Command menu"
           loop
-          // Match on what people read (title, version, group), never on the internal value.
+          // Match on what people read (title and version), never on the internal value.
           filter={(_value, search, keywords) => defaultFilter(keywords?.join(" ") ?? "", search)}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -96,7 +96,7 @@ function Menu({ items, onClose }: { items: PaletteItem[]; onClose: () => void })
                     <Command.Item
                       key={i}
                       value={`${i}`}
-                      keywords={[it.title, it.meta ?? "", it.group]}
+                      keywords={[it.title, it.meta ?? ""]}
                       className="cmdk-item"
                       onSelect={() => {
                         onClose();
