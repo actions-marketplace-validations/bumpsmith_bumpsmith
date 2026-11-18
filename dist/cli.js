@@ -254464,9 +254464,10 @@ data: ${JSON.stringify(data)}
       if (req.method === "GET" && (path5 === "/" || path5 === "/index.html"))
         return send(res, 200, html, MIME[".html"]);
       if (req.method === "GET" && path5 === "/app.js") return send(res, 200, appJs, MIME[".js"]);
-      if (req.method === "GET" && /^\/(app\.css|fonts\/[\w.-]+\.woff2)$/.test(path5)) {
+      if (req.method === "GET" && /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg)$/.test(path5)) {
         const file2 = join20(root, "dashboard", path5);
-        return send(res, 200, await readFile15(file2), MIME[extname2(file2)]);
+        const body = await readFile15(file2).catch(() => null);
+        return body ? send(res, 200, body, MIME[extname2(file2)]) : send(res, 404, { error: "not found" });
       }
       if (!path5.startsWith("/api/")) return send(res, 404, { error: "not found" });
       if (req.headers["x-bumpsmith-token"] !== token) return send(res, 403, { error: "token" });

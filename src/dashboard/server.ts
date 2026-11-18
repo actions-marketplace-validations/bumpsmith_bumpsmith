@@ -414,9 +414,15 @@ export async function startDashboard(opts: DashboardOptions) {
       if (req.method === "GET" && (path === "/" || path === "/index.html"))
         return send(res, 200, html, MIME[".html"]);
       if (req.method === "GET" && path === "/app.js") return send(res, 200, appJs, MIME[".js"]);
-      if (req.method === "GET" && /^\/(app\.css|fonts\/[\w.-]+\.woff2)$/.test(path)) {
+      if (
+        req.method === "GET" &&
+        /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg)$/.test(path)
+      ) {
         const file = join(root, "dashboard", path);
-        return send(res, 200, await readFile(file), MIME[extname(file)]);
+        const body = await readFile(file).catch(() => null);
+        return body
+          ? send(res, 200, body, MIME[extname(file)])
+          : send(res, 404, { error: "not found" });
       }
 
       if (!path.startsWith("/api/")) return send(res, 404, { error: "not found" });

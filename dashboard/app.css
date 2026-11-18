@@ -209,15 +209,16 @@ a {
   padding: 0 8px;
   margin-bottom: 16px;
 }
-.brand-mark {
-  width: 24px;
-  height: 24px;
-  flex: none;
+.top-brand {
+  display: none;
 }
-.brand-word {
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.01em;
+/* The wordmark is drawn, not typed (dashboard/brand/). 18px tall puts its x-height near 10px. */
+.brand-wordmark {
+  display: block;
+  height: 18px;
+  width: auto;
+  flex: none;
+  color: var(--text);
 }
 .brand-tag {
   margin-left: auto;
@@ -1774,8 +1775,18 @@ code.ic {
   }
   .sidebar,
   .search,
-  .hide-sm {
+  .hide-sm,
+  .crumbs > span {
     display: none;
+  }
+  /* No sidebar on phones: the wordmark moves into the top bar, next to the current page. */
+  .top-brand {
+    display: flex;
+    align-items: center;
+    padding-right: 12px;
+    margin-right: 12px;
+    border-right: 1px solid var(--line);
+    height: 24px;
   }
   .page {
     padding: 24px 16px 48px;

@@ -14,7 +14,7 @@ import { renderMarkdown } from "./markdown.ts";
 import {
   ago,
   agoLong,
-  BRAND_MARK,
+  BRAND_WORDMARK,
   checkStrip,
   confPill,
   dur,
@@ -202,7 +202,7 @@ function sidebar(d: State) {
     `<a href="#/${id === "overview" ? "" : id}" class="${route === id ? "on" : ""}">${icon(ic)}<span>${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
   const prov = d.env.providers.find((p) => p.id === d.env.defaultProvider);
   return `<aside class="sidebar">
-    <div class="brand">${BRAND_MARK}<span class="brand-word">bumpsmith</span><span class="brand-tag">local</span></div>
+    <div class="brand">${BRAND_WORDMARK}<span class="brand-tag">local</span></div>
     <div class="ctx" title="${esc(r.path)}">
       <div class="ctx-av">${esc(r.name.slice(0, 2).toUpperCase())}</div>
       <div style="min-width:0"><div class="ctx-name">${esc(r.name)}</div>
@@ -234,6 +234,7 @@ function sidebar(d: State) {
 
 function topbar(crumbs: string[]) {
   return `<header class="topbar">
+    <a class="top-brand" href="#/" aria-label="Overview">${BRAND_WORDMARK}</a>
     <div class="crumbs">${crumbs.map((c, i) => (i === crumbs.length - 1 ? `<b>${esc(c)}</b>` : `<span>${esc(c)}</span><span class="s">/</span>`)).join("")}</div>
     <div class="grow"></div>
     <div class="search" data-act="palette">${icon("search")}<span>Search upgrades and packages</span><kbd>⌘K</kbd></div>
@@ -1295,7 +1296,7 @@ const fresh = (t: number) => (Date.now() - t < 400 ? "anim" : "");
 function render() {
   const d = ui.data;
   if (!d) {
-    $app.innerHTML = `<aside class="sidebar"><div class="brand">${BRAND_MARK}<span class="brand-word">bumpsmith</span></div><div class="skel" style="height:48px"></div></aside><main class="main"><div class="page"><div class="skel" style="height:28px;width:240px;margin-bottom:24px"></div><div class="grid g4">${'<div class="skel" style="height:128px"></div>'.repeat(4)}</div><div class="skel mt" style="height:320px"></div></div></main>`;
+    $app.innerHTML = `<aside class="sidebar"><div class="brand">${BRAND_WORDMARK}</div><div class="skel" style="height:48px"></div></aside><main class="main"><div class="page"><div class="skel" style="height:28px;width:240px;margin-bottom:24px"></div><div class="grid g4">${'<div class="skel" style="height:128px"></div>'.repeat(4)}</div><div class="skel mt" style="height:320px"></div></div></main>`;
     return;
   }
   const [route, arg] = ui.route.split("/");

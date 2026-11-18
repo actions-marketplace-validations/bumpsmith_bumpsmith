@@ -183,6 +183,11 @@ describe("dashboard server", () => {
     expect(new Uint8Array(await font.arrayBuffer()).slice(0, 4)).toEqual(
       new Uint8Array([0x77, 0x4f, 0x46, 0x32]),
     );
+    const logo = await fetch(`${base}/brand/icon.svg`);
+    expect(logo.headers.get("content-type")).toBe("image/svg+xml");
+    expect(await logo.text()).toMatch(/^<svg /);
+    expect((await fetch(`${base}/brand/missing.svg`)).status).toBe(404);
+    expect(await raw("/brand/../package.json", { host: `127.0.0.1:${port}` })).toBe(404);
   });
 
   it("refuses API calls without the token, and foreign Host headers (DNS rebinding)", async () => {

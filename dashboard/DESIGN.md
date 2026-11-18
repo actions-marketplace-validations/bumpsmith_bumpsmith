@@ -39,6 +39,20 @@ act on, not with charts.
   "payout" card;
 - the time-of-day greeting.
 
+## Logo
+
+The wordmark is drawn, not typed (`dashboard/brand/`, chosen from four directions):
+
+- one stroke weight, square terminals, and rounded corners only where a stroke turns, the
+  same radius logic as the dashboard's cards and buttons;
+- the only colour is the dot of the i: an ember square raised to the ascender line, so it is
+  literally "bumped" up. It is the same square as the diffstat squares and tick meters;
+- the icon (`brand/icon.svg`, used as the favicon) is the custom b with the ember square as a
+  badge, on a tile finished like the 3D buttons;
+- in the app it is inline SVG using `currentColor`, so it follows light and dark mode; the
+  sidebar shows it at 18px, and on phones it moves into the top bar.
+- references: Resend, Unkey and Knock wordmarks (inspiration board picks 11, 13 and 15).
+
 ## Decisions
 
 - **Type**: Geist 13–14px for UI, 20px semibold page titles, 24px for stat values. Geist
