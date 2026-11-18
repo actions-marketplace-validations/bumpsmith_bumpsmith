@@ -609,6 +609,37 @@ export class Auth {
     });
   }
 
+  /** Finish a password reset: new password, lockout cleared, every session ended, link used up. */
+  async completeReset(userId: string, next: string, ip: string) {
+    const u = this.user(userId);
+    if (!u || u.status !== "active") throw new AuthError(404, "This link is no longer valid.");
+    const problem = passwordProblem(next, [
+      u.name,
+      u.email.split("@")[0] ?? "",
+      this.org(u.org_id)?.name ?? "",
+    ]);
+    if (problem) throw new AuthError(400, problem);
+    if (await verifyPassword(next, u.password_hash))
+      throw new AuthError(400, "Choose a password you have not used here before.");
+    const hash = await hashPassword(next);
+    tx(this.db, () => {
+      this.db
+        .prepare(
+          "UPDATE users SET password_hash = ?, password_changed_at = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
+        )
+        .run(hash, now(), u.id);
+      this.db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(u.id);
+      this.db.prepare("DELETE FROM sessions WHERE user_id = ?").run(u.id);
+    });
+    audit(this.db, {
+      orgId: u.org_id,
+      actorId: u.id,
+      actor: u.email,
+      action: "auth.password_reset",
+      ip,
+    });
+  }
+
   sessions(userId: string, currentHash: string) {
     return (
       this.db

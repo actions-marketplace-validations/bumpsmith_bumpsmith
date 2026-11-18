@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import semver from "semver";
@@ -32,6 +32,7 @@ import type { Effort, ModelProvider } from "./model/provider.ts";
 import { runJob } from "./pipeline.ts";
 import { getRelease } from "./registry/registry.ts";
 import { cleanupStale } from "./sandbox/docker.ts";
+import { serverConfig } from "./server/config.ts";
 import { run, runOk } from "./util/proc.ts";
 
 const HELP = `bumpsmith — fix your code when a dependency ships a breaking change
@@ -45,6 +46,9 @@ Usage (run inside your repository):
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
   bumpsmith dashboard [--data dir]              the dashboard (sign-in required): review diffs, apply patches, start upgrades live
+  bumpsmith server --public-url https://host    self-hosted, multi-user dashboard (see docs/self-hosting.md)
+             [--host 0.0.0.0] [--port 4477] [--data dir]
+             [--tls-cert file --tls-key file | --behind-proxy [--trusted-proxy ip,ip]]
 
 Options: --repo <dir> (default .), --dir <sub-directory> (monorepos), --provider <name>, --model <id>, --base-url <url>, --budget <usd>
 
@@ -238,6 +242,12 @@ async function main() {
       runs: { type: "string" },
       data: { type: "string" },
       "no-open": { type: "boolean", default: false },
+      host: { type: "string" },
+      "public-url": { type: "string" },
+      "tls-cert": { type: "string" },
+      "tls-key": { type: "string" },
+      "behind-proxy": { type: "boolean", default: false },
+      "trusted-proxy": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -563,14 +573,50 @@ async function main() {
       }
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
-    case "dashboard": {
-      // node:sqlite is stable in practice but still flagged experimental on Node 22/24;
-      // keep the console clean of that one warning, and print every other warning.
-      process.removeAllListeners("warning");
-      process.on("warning", (w) => {
-        if (w.name === "ExperimentalWarning" && /SQLite/.test(w.message)) return;
-        console.warn(`${w.name}: ${w.message}`);
+    case "server": {
+      quietSqliteWarning();
+      const env = process.env;
+      const cfg = serverConfig({
+        publicUrl: values["public-url"] ?? env.BUMPSMITH_PUBLIC_URL,
+        host: values.host ?? env.BUMPSMITH_HOST,
+        port: values.port ?? env.BUMPSMITH_PORT,
+        tlsCert: values["tls-cert"] ?? env.BUMPSMITH_TLS_CERT,
+        tlsKey: values["tls-key"] ?? env.BUMPSMITH_TLS_KEY,
+        behindProxy: values["behind-proxy"] || env.BUMPSMITH_BEHIND_PROXY === "1",
+        trustedProxies: values["trusted-proxy"] ?? env.BUMPSMITH_TRUSTED_PROXIES,
       });
+      const { readFileSync } = await import("node:fs");
+      const { startDashboard } = await import("./dashboard/server.ts");
+      const s = await startDashboard({
+        mode: "server",
+        publicUrl: cfg.publicUrl,
+        host: cfg.host,
+        port: cfg.port,
+        tls: cfg.tls
+          ? { cert: readFileSync(cfg.tls.cert), key: readFileSync(cfg.tls.key) }
+          : undefined,
+        trustedProxies: cfg.trustedProxies,
+        dataDir: resolve(values.data ?? env.BUMPSMITH_DATA ?? join(homedir(), ".bumpsmith")),
+        cliEntry: process.argv[1] ?? "",
+      });
+      log(`Bumpsmith server: ${s.url} (listening on ${s.host}:${s.port}${cfg.tls ? ", TLS" : ""})`);
+      log(`Data: ${s.dataDir}. Keep it on an encrypted volume and back it up with its master key.`);
+      if (cfg.trustedProxies.length)
+        log(`Trusting X-Forwarded-For from: ${cfg.trustedProxies.join(", ")}`);
+      if (s.setupUrl) {
+        log("");
+        log("First run: open this one-time link to create the owner account (valid for 1 hour):");
+        log(`  ${s.setupUrl}`);
+        log("");
+      }
+      const stop = () => void s.close().then(() => process.exit(0));
+      process.once("SIGTERM", stop);
+      process.once("SIGINT", stop);
+      await new Promise(() => {});
+      return;
+    }
+    case "dashboard": {
+      quietSqliteWarning();
       const { startDashboard } = await import("./dashboard/server.ts");
       const dir = resolve(values.repo ?? ".");
       const { url, setupUrl, dataDir } = await startDashboard({
@@ -612,3 +658,13 @@ main().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : err);
   process.exitCode = 1;
 });
+
+/** node:sqlite is stable in practice but still flagged experimental on Node 22/24; keep the
+ * console clean of that one warning, and print every other warning. */
+function quietSqliteWarning() {
+  process.removeAllListeners("warning");
+  process.on("warning", (w) => {
+    if (w.name === "ExperimentalWarning" && /SQLite/.test(w.message)) return;
+    console.warn(`${w.name}: ${w.message}`);
+  });
+}

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import http from "node:http";
+import https from "node:https";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -332,13 +333,33 @@ const MIME: Record<string, string> = {
 };
 
 export interface DashboardOptions {
-  repoDir: string;
+  /** Local mode: the repository the dashboard was started in. Omit in server mode. */
+  repoDir?: string;
   runsDir?: string;
   port?: number;
   /** Where accounts, sessions, the audit log and keys are stored (default ~/.bumpsmith). */
   dataDir?: string;
   /** Mark cookies Secure (set when served over HTTPS). */
   secureCookies?: boolean;
+  /**
+   * "local" (default) binds loopback and may open folders on this machine. "server" is the
+   * self-hosted, multi-user mode: repositories come from GitHub only.
+   */
+  mode?: "local" | "server";
+  /** Address to bind (default 127.0.0.1). */
+  host?: string;
+  /**
+   * The address people use, e.g. https://bumpsmith.acme.dev. Required in server mode: it is the
+   * only Host and Origin accepted, and the base of every link Bumpsmith hands out.
+   */
+  publicUrl?: string;
+  /** Serve HTTPS directly with this PEM certificate and key. */
+  tls?: { cert: string | Buffer; key: string | Buffer };
+  /**
+   * Proxies (exact IP addresses) whose X-Forwarded-For is believed. Requests from anywhere
+   * else use the socket address, so a client cannot forge its IP for rate limits or the audit log.
+   */
+  trustedProxies?: string[];
   /** The CLI entry (process.argv[1]) used to start upgrades and scans. */
   cliEntry: string;
   log?: (m: string) => void;
@@ -363,10 +384,39 @@ async function clientBundle(root: string): Promise<string> {
   return readFile(built, "utf8");
 }
 
+/** "::ffff:10.0.0.1" and "10.0.0.1" are the same client. */
+function normaliseIp(ip: string): string {
+  return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+}
+
+/**
+ * The client's address. X-Forwarded-For is read right to left, skipping trusted proxies, and
+ * only when the request itself came from a trusted proxy: anything further left is client-supplied.
+ */
+export function clientIp(req: http.IncomingMessage, trusted: Set<string>): string {
+  const peer = normaliseIp(req.socket.remoteAddress ?? "");
+  if (!trusted.has(peer)) return peer;
+  const hops = String(req.headers["x-forwarded-for"] ?? "")
+    .split(",")
+    .map((h) => normaliseIp(h.trim()))
+    .filter(Boolean);
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const h = hops[i] as string;
+    if (!trusted.has(h)) return h;
+  }
+  return peer;
+}
+
 export async function startDashboard(opts: DashboardOptions) {
   const root = packageRoot();
-  const repoDir = resolve(opts.repoDir);
-  const runsDir = resolve(opts.runsDir ?? join(repoDir, ".bumpsmith", "runs"));
+  const mode = opts.mode ?? "local";
+  const repoDir = opts.repoDir ? resolve(opts.repoDir) : null;
+  const runsDir = repoDir ? resolve(opts.runsDir ?? join(repoDir, ".bumpsmith", "runs")) : null;
+  const publicUrl = opts.publicUrl ? new URL(opts.publicUrl) : null;
+  if (mode === "server" && !publicUrl) throw new Error("server mode needs a public URL");
+  if (publicUrl && (publicUrl.pathname !== "/" || publicUrl.search || publicUrl.hash))
+    throw new Error("the public URL must be an origin, like https://bumpsmith.acme.dev");
+  const trusted = new Set((opts.trustedProxies ?? []).map(normaliseIp));
   const dataDir = resolve(opts.dataDir ?? join(homedir(), ".bumpsmith"));
   const db = openDb(dataDir);
   const masterKey = await loadMasterKey(join(dataDir, "master.key"));
@@ -391,11 +441,11 @@ export async function startDashboard(opts: DashboardOptions) {
     const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get() as
       | { id: string }
       | undefined;
-    if (o) org.ensureLocal(o.id, repoDir, runsDir, null);
+    if (o && repoDir && runsDir && mode === "local") org.ensureLocal(o.id, repoDir, runsDir, null);
   };
   ensureLocalWorkspace();
   void environment().catch(() => {}); // warm: Docker takes seconds to answer
-  const secure = !!opts.secureCookies;
+  const secure = !!opts.secureCookies || !!opts.tls || publicUrl?.protocol === "https:";
   const setupToken = auth.needsSetup() ? auth.issueSetupToken() : null;
   const live = new Map<string, LiveRun>();
   const appJs = await clientBundle(root);
@@ -623,8 +673,8 @@ export async function startDashboard(opts: DashboardOptions) {
     });
   const redirect = (res: http.ServerResponse, location: string) =>
     send(res, 302, "", "text/plain", { location });
-  const origin = (c: Ctx) =>
-    `http${secure ? "s" : ""}://${c.req.headers.host ?? `127.0.0.1:${port}`}`;
+  const origin = (_c?: Ctx) =>
+    publicUrl ? publicUrl.origin : `http${secure ? "s" : ""}://127.0.0.1:${port}`;
   const CATEGORIES: Record<string, string> = {
     auth: "auth.%",
     people: "member.%",
@@ -1232,6 +1282,38 @@ export async function startDashboard(opts: DashboardOptions) {
       },
     },
 
+    {
+      method: "GET",
+      path: /^\/auth\/reset$/,
+      perm: "public",
+      handler: (c) => {
+        const info = org.resetInfo(c.url.searchParams.get("token") ?? "");
+        return info
+          ? send(c.res, 200, { email: info.email, org: info.org, mfa: !!info.mfa_enabled })
+          : send(c.res, 404, { error: "This link is invalid or has expired. Ask for a new one." });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/reset$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await body(c);
+        const info = org.resetInfo(String(b.token ?? ""));
+        if (!info)
+          return send(c.res, 404, {
+            error: "This link is invalid or has expired. Ask for a new one.",
+          });
+        try {
+          await auth.completeReset(info.id, String(b.password ?? ""), c.ip);
+          // Not signed in: they sign in with the new password and their second factor.
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+
     // ── integrations: GitHub and model keys ──
     {
       method: "GET",
@@ -1549,6 +1631,7 @@ export async function startDashboard(opts: DashboardOptions) {
             })),
           ),
           canAdd: p.permissions.includes("workspaces.manage"),
+          localFolders: mode === "local",
         });
       },
     },
@@ -1558,6 +1641,9 @@ export async function startDashboard(opts: DashboardOptions) {
       perm: "workspaces.manage",
       stepUp: true,
       handler: async (c) => {
+        // A shared server must not let users point it at arbitrary folders on its disk.
+        if (mode !== "local")
+          return send(c.res, 403, { error: "Add repositories from GitHub on a shared server." });
         try {
           const w = org.addLocal(
             { p: c.p as Principal, ip: c.ip },
@@ -1621,7 +1707,7 @@ export async function startDashboard(opts: DashboardOptions) {
     },
     {
       method: "POST",
-      path: /^\/api\/members\/(usr_[\w-]+)\/(role|deactivate|reactivate|reset-mfa|sign-out|resend-invite)$/,
+      path: /^\/api\/members\/(usr_[\w-]+)\/(role|deactivate|reactivate|reset-mfa|reset-password|sign-out|resend-invite)$/,
       perm: "members.manage",
       stepUp: true,
       handler: async (c) => {
@@ -1646,6 +1732,10 @@ export async function startDashboard(opts: DashboardOptions) {
               break;
             case "resend-invite":
               return send(c.res, 200, { link: `${origin(c)}/#/invite/${org.resendInvite(a, id)}` });
+            case "reset-password":
+              return send(c.res, 200, {
+                link: `${origin(c)}/#/reset/${org.passwordResetLink(a, id)}`,
+              });
           }
           return send(c.res, 200, { ok: true });
         } catch (e) {
@@ -1814,7 +1904,11 @@ export async function startDashboard(opts: DashboardOptions) {
       perm: "audit.view",
       handler: (c) => {
         const rows = auditRows(c.p?.user.org_id ?? "", "", "", 0, 100_000);
-        const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        // Quoted, and a leading = + - @ (or tab/CR) is defused so spreadsheets never run it as a formula.
+        const cell = (v: unknown) =>
+          `"${String(v ?? "")
+            .replace(/^[=+\-@\t\r]/, "'$&")
+            .replace(/"/g, '""')}"`;
         const csv = [
           "seq,time,actor,action,target,ip,detail,hash",
           ...rows.map((r) =>
@@ -2031,12 +2125,16 @@ export async function startDashboard(opts: DashboardOptions) {
     return dir.startsWith(w.runs_dir + sep) && existsSync(join(dir, "job.json")) ? dir : null;
   };
 
-  const server = http.createServer(async (req, res) => {
+  const handle = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     try {
-      // DNS rebinding: only this server's own address may be the Host.
+      // Liveness for load balancers and container health checks: no data, any Host.
+      if (req.method === "GET" && req.url === "/healthz") return send(res, 200, { ok: true });
+      // DNS rebinding and Host-header injection: only this server's own address may be the Host.
       const host = req.headers.host ?? "";
-      if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)
-        return send(res, 421, { error: "wrong host" });
+      const hostOk = publicUrl
+        ? host === publicUrl.host
+        : host === `127.0.0.1:${port}` || host === `localhost:${port}`;
+      if (!hostOk) return send(res, 421, { error: "wrong host" });
       const url = new URL(req.url ?? "/", `http://${host}`);
       const path = url.pathname;
 
@@ -2066,7 +2164,7 @@ export async function startDashboard(opts: DashboardOptions) {
       }
       if (!route || !m) return send(res, 404, { error: "not found" });
 
-      const ip = req.socket.remoteAddress ?? "";
+      const ip = clientIp(req, trusted);
       let ctxW: Workspace | undefined;
       let ctxPerms: string[] = [];
       const token = readCookie(req.headers.cookie, cookieName(secure));
@@ -2082,7 +2180,7 @@ export async function startDashboard(opts: DashboardOptions) {
         if (
           !route.crossSite &&
           origin !== undefined &&
-          origin !== `http${secure ? "s" : ""}://${host}`
+          origin !== (publicUrl ? publicUrl.origin : `http${secure ? "s" : ""}://${host}`)
         )
           return send(res, 403, { error: "cross-origin request refused" });
         if ((route.perm === "public" || route.perm === "pending") && auth.rateLimited(ip))
@@ -2126,26 +2224,39 @@ export async function startDashboard(opts: DashboardOptions) {
       if (!res.headersSent)
         return send(res, 500, { error: String((err as Error).message ?? err).slice(0, 300) });
     }
-  });
+  };
+  const server = opts.tls
+    ? https.createServer({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.2" }, handle)
+    : http.createServer(handle);
+  // Slow-client limits: a request must arrive within 30 s; idle keep-alives close after 5 s.
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 20_000;
+  server.keepAliveTimeout = 5_000;
 
+  const bindHost = opts.host ?? "127.0.0.1";
   await new Promise<void>((ok, fail) => {
     const tryListen = (p: number, attempts: number) => {
       server.once("error", (e: NodeJS.ErrnoException) => {
         if (e.code === "EADDRINUSE" && attempts > 0) tryListen(p + 1, attempts - 1);
         else fail(e);
       });
-      server.listen(p, "127.0.0.1", () => {
+      server.listen(p, bindHost, () => {
         port = p;
         ok();
       });
     };
-    tryListen(port, 20);
+    // A server's port is part of its configuration: fail rather than drift to another one.
+    tryListen(port, mode === "local" && opts.port === undefined ? 20 : 0);
   });
-  const url = `http://127.0.0.1:${port}/`;
+  const url = publicUrl
+    ? `${publicUrl.origin}/`
+    : `http${opts.tls ? "s" : ""}://127.0.0.1:${port}/`;
   return {
     url,
     port,
     dataDir,
+    mode,
+    host: bindHost,
     /** Open once to create the owner account; null when the server is already set up. */
     setupUrl: setupToken ? `${url}#/setup/${setupToken}` : null,
     routes: routes.map((r) => ({

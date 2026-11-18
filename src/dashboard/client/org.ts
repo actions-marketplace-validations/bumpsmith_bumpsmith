@@ -148,7 +148,7 @@ export function membersPage(): string {
             ? `<button class="btn sm" data-act="member-resend" data-id="${esc(u.id)}">${icon("copy")}New link</button><button class="btn sm" data-act="member-deactivate" data-id="${esc(u.id)}">Revoke</button>`
             : off
               ? `<button class="btn sm" data-act="member-reactivate" data-id="${esc(u.id)}">Reactivate</button>`
-              : `${u.mfa_enabled ? `<button class="btn sm" data-act="member-reset-mfa" data-id="${esc(u.id)}" title="They will set up two-factor again at next sign-in">Reset MFA</button>` : ""}<button class="btn sm" data-act="member-signout" data-id="${esc(u.id)}">Sign out</button><button class="btn sm" data-act="member-deactivate" data-id="${esc(u.id)}">Deactivate</button>`;
+              : `${u.mfa_enabled ? `<button class="btn sm" data-act="member-reset-mfa" data-id="${esc(u.id)}" title="They will set up two-factor again at next sign-in">Reset MFA</button>` : ""}<button class="btn sm" data-act="member-reset-password" data-id="${esc(u.id)}" title="A one-time link to choose a new password">Reset password</button><button class="btn sm" data-act="member-signout" data-id="${esc(u.id)}">Sign out</button><button class="btn sm" data-act="member-deactivate" data-id="${esc(u.id)}">Deactivate</button>`;
       return `<tr style="cursor:default" class="${off ? "dim" : ""}"><td><div class="who-c"><span class="me-av">${esc(initials(u.name || u.email))}</span><span><b>${esc(invited ? u.email : u.name)}</b><span class="muted">${esc(invited ? "pending" : u.email)}</span></span></div></td>
         <td>${roleCell}</td><td>${invited ? "" : u.mfa_enabled ? `<span class="st ok">${icon("checkCircle")}on</span>` : `<span class="muted">off</span>`}</td>
         <td>${status}</td><td class="muted">${invited ? "" : u.last_login_at ? esc(agoLong(u.last_login_at)) : "never"}</td><td class="r"><div class="acts">${actions}</div></td></tr>`;
@@ -343,6 +343,8 @@ const ACTION_LABEL: Record<string, string> = {
   "member.deactivated": "Deactivated",
   "member.reactivated": "Reactivated",
   "member.mfa_reset": "Reset two-factor of",
+  "member.password_reset_issued": "Issued a password reset link for",
+  "auth.password_reset": "Reset password with a link",
   "member.sessions_revoked": "Signed out",
   "member.invite_revoked": "Revoked invitation for",
   "member.invite_renewed": "Renewed invitation for",
@@ -508,6 +510,20 @@ export async function orgAction(act: string, t: HTMLElement): Promise<boolean> {
         "Member reactivated",
         "members",
       );
+      return true;
+    case "member-reset-password":
+      try {
+        const r = await post<{ link: string }>(
+          `/api/members/${encodeURIComponent(id)}/reset-password`,
+        );
+        await linkDialog(
+          "Password reset link",
+          "Send this to them privately. It works once, for 24 hours, and signs them out everywhere. Two-factor stays on.",
+          r.link,
+        );
+      } catch (e) {
+        ctx.toast((e as Error).message, true);
+      }
       return true;
     case "member-reset-mfa":
       if (

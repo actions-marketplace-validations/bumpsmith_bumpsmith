@@ -82,7 +82,10 @@ type Mode =
   | "need-setup-link"
   | "mfa"
   | "invite"
-  | "invite-invalid";
+  | "invite-invalid"
+  | "reset"
+  | "reset-invalid"
+  | "reset-done";
 
 const pwField = (id: string, autocomplete: string) => `
   <div class="pw">
@@ -99,10 +102,39 @@ function card(inner: string, foot = true) {
 
 function page(
   mode: Mode,
-  invite?: { email: string; org: string; sso?: boolean },
+  invite?: { email: string; org: string; sso?: boolean; mfa?: boolean },
   sso?: SsoOptions,
   ssoError?: string,
 ): string {
+  if (mode === "reset-invalid")
+    return card(
+      `<h1>This link no longer works</h1>
+      <p class="auth-sub">Password reset links work once and expire after 24 hours. Ask an admin in your organisation for a new one.</p>
+      <a class="btn block" href="#/">Go to sign in</a>`,
+      false,
+    );
+  if (mode === "reset-done")
+    return card(
+      `<h1>Password changed</h1>
+      <p class="auth-sub">You were signed out everywhere. Sign in with your new password${invite ? ` as ${esc(invite.email)}` : ""}.</p>
+      <a class="btn primary block" href="#/">Go to sign in</a>`,
+      false,
+    );
+  if (mode === "reset" && invite)
+    return card(`<h1>Choose a new password</h1>
+      <p class="auth-sub">For ${esc(invite.email)} at ${esc(invite.org)}. You will be signed out everywhere.${invite.mfa ? " Two-factor authentication stays on: you will still need your code to sign in." : ""}</p>
+      <form class="auth-form" data-form="reset" novalidate>
+        <input type="hidden" name="email" value="${esc(invite.email)}" />
+        <div class="field"><label for="a-pw">New password</label>${pwField("a-pw", "new-password")}
+          <ul class="pw-rules" id="pw-rules">
+            <li data-rule="len">${icon("check")}At least 12 characters</li>
+            <li data-rule="own">${icon("check")}Not your name, email or organisation</li>
+            <li data-rule="seq">${icon("check")}No repeats or sequences like 123456</li>
+          </ul>
+        </div>
+        <div class="auth-err" role="alert" hidden></div>
+        <button class="btn primary block" type="submit">Change password</button>
+      </form>`);
   if (mode === "invite-invalid")
     return card(
       `<h1>This invitation no longer works</h1>
@@ -204,11 +236,16 @@ export async function showAuth(
   mode: Mode,
   setupToken = "",
 ): Promise<SessionInfo> {
-  let invite: { email: string; org: string; sso?: boolean } | undefined;
+  let invite: { email: string; org: string; sso?: boolean; mfa?: boolean } | undefined;
   if (mode === "invite") {
     const r = await fetch(`/auth/invite?token=${encodeURIComponent(setupToken)}`);
     if (r.ok) invite = (await r.json()) as { email: string; org: string; sso?: boolean };
     else mode = "invite-invalid";
+  }
+  if (mode === "reset") {
+    const r = await fetch(`/auth/reset?token=${encodeURIComponent(setupToken)}`);
+    if (r.ok) invite = (await r.json()) as { email: string; org: string; mfa: boolean };
+    else mode = "reset-invalid";
   }
   const sso =
     mode === "signin" || mode === "expired" || mode === "invite" ? await ssoOptions() : undefined;
@@ -229,9 +266,9 @@ export async function showAuth(
       b.innerHTML = icon(show ? "eyeOff" : "eye");
       b.setAttribute("aria-label", show ? "Hide password" : "Show password");
     });
-  if (form?.dataset.form === "setup" || form?.dataset.form === "invite")
+  if (form && ["setup", "invite", "reset"].includes(form.dataset.form ?? ""))
     form.addEventListener("input", () => rules(form));
-  if (mode === "invite-invalid")
+  if (mode === "invite-invalid" || mode === "reset-invalid" || mode === "reset-done")
     root.querySelector("a.btn")?.addEventListener("click", (e) => {
       e.preventDefault();
       history.replaceState(null, "", "#/");
@@ -262,20 +299,26 @@ export async function showAuth(
       const err = form.querySelector<HTMLElement>(".auth-err");
       const btn = form.querySelector<HTMLButtonElement>("button[type=submit]");
       const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
-      if (form.dataset.form === "setup" || form.dataset.form === "invite") data.token = setupToken;
+      if (["setup", "invite", "reset"].includes(form.dataset.form ?? "")) data.token = setupToken;
       if (btn) {
         btn.disabled = true;
         btn.dataset.label = btn.textContent ?? "";
         btn.textContent =
           form.dataset.form === "login" || form.dataset.form === "mfa"
             ? "Signing in…"
-            : "Creating account…";
+            : form.dataset.form === "reset"
+              ? "Saving…"
+              : "Creating account…";
       }
       try {
         const endpoint =
-          { setup: "/auth/setup", login: "/auth/login", mfa: "/auth/mfa" }[
-            form.dataset.form ?? "login"
-          ] ?? "/auth/login";
+          {
+            setup: "/auth/setup",
+            login: "/auth/login",
+            mfa: "/auth/mfa",
+            invite: "/auth/invite",
+            reset: "/auth/reset",
+          }[form.dataset.form ?? "login"] ?? "/auth/login";
         const r = await fetch(endpoint, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -291,6 +334,15 @@ export async function showAuth(
           return;
         }
         if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+        if (form.dataset.form === "reset") {
+          history.replaceState(null, "", "#/");
+          root.innerHTML = page("reset-done", invite);
+          root.querySelector("a.btn")?.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            void showAuth(root, "signin").then(done);
+          });
+          return;
+        }
         if (body.mfaRequired) {
           done(await showAuth(root, "mfa"));
           return;

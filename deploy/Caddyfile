@@ -1,0 +1,12 @@
+{$BUMPSMITH_DOMAIN} {
+	encode zstd gzip
+	# Caddy sets X-Forwarded-For itself and keeps the original Host.
+	reverse_proxy bumpsmith:4477 {
+		# Live run logs are server-sent events: don't buffer them.
+		flush_interval -1
+	}
+	log {
+		output stdout
+		format json
+	}
+}

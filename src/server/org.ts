@@ -290,6 +290,47 @@ export class Org {
     return r;
   }
 
+  /**
+   * A one-time password-reset link (24 hours) an admin hands to a member who is locked out.
+   * Two-factor stays as it is, so the link alone does not sign anyone in.
+   */
+  passwordResetLink(a: Actor, userId: string) {
+    const m = this.member(a.p.user.org_id, userId);
+    if (m.status !== "active")
+      throw new AuthError(400, "Only active members can reset a password.");
+    this.assertCanManage(a, m);
+    const token = newToken();
+    this.db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(userId);
+    this.db
+      .prepare(
+        "INSERT INTO password_resets (id, org_id, user_id, hash, created_at, expires_at, created_by) VALUES (?,?,?,?,?,?,?)",
+      )
+      .run(
+        newId("pwr"),
+        a.p.user.org_id,
+        userId,
+        sha256(token),
+        now(),
+        new Date(Date.now() + 24 * 3600_000).toISOString(),
+        a.p.user.id,
+      );
+    this.log(a, "member.password_reset_issued", m.email);
+    return token;
+  }
+
+  /** Public: whose reset link this is, or null if it is unknown, used or expired. */
+  resetInfo(token: string) {
+    const r = this.db
+      .prepare(
+        "SELECT u.email, u.id, u.mfa_enabled, o.name AS org, r.expires_at FROM password_resets r JOIN users u ON u.id = r.user_id JOIN orgs o ON o.id = r.org_id WHERE r.hash = ? AND u.status = 'active'",
+      )
+      .get(sha256(token)) as
+      | { email: string; id: string; mfa_enabled: number; org: string; expires_at: string }
+      | undefined;
+    if (!r || Date.parse(r.expires_at) < Date.now()) return null;
+    return r;
+  }
+
   removeInvite(userId: string) {
     this.db.prepare("DELETE FROM invites WHERE user_id = ?").run(userId);
   }

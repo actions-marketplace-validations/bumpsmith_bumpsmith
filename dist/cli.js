@@ -258729,6 +258729,12 @@ async function verifyPassword(pw, stored) {
   return timingSafeEqual(want, got) && stored !== null;
 }
 async function loadMasterKey(keyFile) {
+  const fromFile = process.env.BUMPSMITH_MASTER_KEY_FILE;
+  if (fromFile) {
+    const k2 = Buffer.from((await readFile15(fromFile, "utf8")).trim(), "base64");
+    if (k2.length !== 32) throw new Error(`${fromFile} does not hold a 32-byte base64 key`);
+    return k2;
+  }
   const env = process.env.BUMPSMITH_MASTER_KEY;
   if (env) {
     const k2 = Buffer.from(env, "base64");
@@ -259015,6 +259021,17 @@ var init_db = __esm({
   `,
       `
   ALTER TABLE sessions ADD COLUMN method TEXT NOT NULL DEFAULT 'password';
+  `,
+      `
+  CREATE TABLE password_resets (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_by TEXT
+  );
   `
     ];
     now = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -259591,6 +259608,34 @@ var init_auth = __esm({
           actorId: u.id,
           actor: u.email,
           action: "auth.password_changed",
+          ip
+        });
+      }
+      /** Finish a password reset: new password, lockout cleared, every session ended, link used up. */
+      async completeReset(userId, next, ip) {
+        const u = this.user(userId);
+        if (!u || u.status !== "active") throw new AuthError(404, "This link is no longer valid.");
+        const problem = passwordProblem(next, [
+          u.name,
+          u.email.split("@")[0] ?? "",
+          this.org(u.org_id)?.name ?? ""
+        ]);
+        if (problem) throw new AuthError(400, problem);
+        if (await verifyPassword(next, u.password_hash))
+          throw new AuthError(400, "Choose a password you have not used here before.");
+        const hash2 = await hashPassword(next);
+        tx(this.db, () => {
+          this.db.prepare(
+            "UPDATE users SET password_hash = ?, password_changed_at = ?, failed_logins = 0, locked_until = NULL WHERE id = ?"
+          ).run(hash2, now(), u.id);
+          this.db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(u.id);
+          this.db.prepare("DELETE FROM sessions WHERE user_id = ?").run(u.id);
+        });
+        audit(this.db, {
+          orgId: u.org_id,
+          actorId: u.id,
+          actor: u.email,
+          action: "auth.password_reset",
           ip
         });
       }
@@ -260256,6 +260301,39 @@ var init_org = __esm({
       inviteInfo(token) {
         const r = this.db.prepare(
           "SELECT u.email, u.id, o.name AS org, i.expires_at FROM invites i JOIN users u ON u.id = i.user_id JOIN orgs o ON o.id = i.org_id WHERE i.hash = ?"
+        ).get(sha256(token));
+        if (!r || Date.parse(r.expires_at) < Date.now()) return null;
+        return r;
+      }
+      /**
+       * A one-time password-reset link (24 hours) an admin hands to a member who is locked out.
+       * Two-factor stays as it is, so the link alone does not sign anyone in.
+       */
+      passwordResetLink(a, userId) {
+        const m = this.member(a.p.user.org_id, userId);
+        if (m.status !== "active")
+          throw new AuthError(400, "Only active members can reset a password.");
+        this.assertCanManage(a, m);
+        const token = newToken();
+        this.db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(userId);
+        this.db.prepare(
+          "INSERT INTO password_resets (id, org_id, user_id, hash, created_at, expires_at, created_by) VALUES (?,?,?,?,?,?,?)"
+        ).run(
+          newId("pwr"),
+          a.p.user.org_id,
+          userId,
+          sha256(token),
+          now(),
+          new Date(Date.now() + 24 * 36e5).toISOString(),
+          a.p.user.id
+        );
+        this.log(a, "member.password_reset_issued", m.email);
+        return token;
+      }
+      /** Public: whose reset link this is, or null if it is unknown, used or expired. */
+      resetInfo(token) {
+        const r = this.db.prepare(
+          "SELECT u.email, u.id, u.mfa_enabled, o.name AS org, r.expires_at FROM password_resets r JOIN users u ON u.id = r.user_id JOIN orgs o ON o.id = r.org_id WHERE r.hash = ? AND u.status = 'active'"
         ).get(sha256(token));
         if (!r || Date.parse(r.expires_at) < Date.now()) return null;
         return r;
@@ -293794,6 +293872,7 @@ var init_sso = __esm({
 // src/dashboard/server.ts
 var server_exports = {};
 __export(server_exports, {
+  clientIp: () => clientIp,
   listRuns: () => listRuns,
   stageOf: () => stageOf,
   startDashboard: () => startDashboard,
@@ -293804,6 +293883,7 @@ import { randomBytes as randomBytes3 } from "node:crypto";
 import { existsSync as existsSync11 } from "node:fs";
 import { readdir as readdir6, readFile as readFile16, realpath as realpath2, rm as rm7, stat as stat3 } from "node:fs/promises";
 import http from "node:http";
+import https from "node:https";
 import { homedir } from "node:os";
 import { basename as basename3, dirname as dirname9, extname as extname2, join as join23, resolve as resolve5, sep as sep3 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
@@ -294012,10 +294092,29 @@ async function clientBundle(root) {
   }
   return readFile16(built, "utf8");
 }
+function normaliseIp(ip) {
+  return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+}
+function clientIp(req, trusted) {
+  const peer = normaliseIp(req.socket.remoteAddress ?? "");
+  if (!trusted.has(peer)) return peer;
+  const hops = String(req.headers["x-forwarded-for"] ?? "").split(",").map((h) => normaliseIp(h.trim())).filter(Boolean);
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const h = hops[i];
+    if (!trusted.has(h)) return h;
+  }
+  return peer;
+}
 async function startDashboard(opts) {
   const root = packageRoot2();
-  const repoDir = resolve5(opts.repoDir);
-  const runsDir = resolve5(opts.runsDir ?? join23(repoDir, ".bumpsmith", "runs"));
+  const mode = opts.mode ?? "local";
+  const repoDir = opts.repoDir ? resolve5(opts.repoDir) : null;
+  const runsDir = repoDir ? resolve5(opts.runsDir ?? join23(repoDir, ".bumpsmith", "runs")) : null;
+  const publicUrl = opts.publicUrl ? new URL(opts.publicUrl) : null;
+  if (mode === "server" && !publicUrl) throw new Error("server mode needs a public URL");
+  if (publicUrl && (publicUrl.pathname !== "/" || publicUrl.search || publicUrl.hash))
+    throw new Error("the public URL must be an origin, like https://bumpsmith.acme.dev");
+  const trusted = new Set((opts.trustedProxies ?? []).map(normaliseIp));
   const dataDir = resolve5(opts.dataDir ?? join23(homedir(), ".bumpsmith"));
   const db = openDb(dataDir);
   const masterKey = await loadMasterKey(join23(dataDir, "master.key"));
@@ -294031,12 +294130,12 @@ async function startDashboard(opts) {
   const firstOrg = () => db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get()?.id;
   const ensureLocalWorkspace = () => {
     const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get();
-    if (o) org.ensureLocal(o.id, repoDir, runsDir, null);
+    if (o && repoDir && runsDir && mode === "local") org.ensureLocal(o.id, repoDir, runsDir, null);
   };
   ensureLocalWorkspace();
   void environment().catch(() => {
   });
-  const secure = !!opts.secureCookies;
+  const secure = !!opts.secureCookies || !!opts.tls || publicUrl?.protocol === "https:";
   const setupToken = auth2.needsSetup() ? auth2.issueSetupToken() : null;
   const live = /* @__PURE__ */ new Map();
   const appJs = await clientBundle(root);
@@ -294203,7 +294302,7 @@ data: ${JSON.stringify(data)}
     req.on("end", () => ok(new URLSearchParams(Buffer.concat(chunks).toString("utf8"))));
   });
   const redirect2 = (res, location) => send(res, 302, "", "text/plain", { location });
-  const origin = (c) => `http${secure ? "s" : ""}://${c.req.headers.host ?? `127.0.0.1:${port}`}`;
+  const origin = (_c) => publicUrl ? publicUrl.origin : `http${secure ? "s" : ""}://127.0.0.1:${port}`;
   const CATEGORIES = {
     auth: "auth.%",
     people: "member.%",
@@ -294784,6 +294883,34 @@ data: ${JSON.stringify(data)}
         }
       }
     },
+    {
+      method: "GET",
+      path: /^\/auth\/reset$/,
+      perm: "public",
+      handler: (c) => {
+        const info = org.resetInfo(c.url.searchParams.get("token") ?? "");
+        return info ? send(c.res, 200, { email: info.email, org: info.org, mfa: !!info.mfa_enabled }) : send(c.res, 404, { error: "This link is invalid or has expired. Ask for a new one." });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/reset$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await body(c);
+        const info = org.resetInfo(String(b.token ?? ""));
+        if (!info)
+          return send(c.res, 404, {
+            error: "This link is invalid or has expired. Ask for a new one."
+          });
+        try {
+          await auth2.completeReset(info.id, String(b.password ?? ""), c.ip);
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
     // ── integrations: GitHub and model keys ──
     {
       method: "GET",
@@ -295087,7 +295214,8 @@ data: ${JSON.stringify(data)}
               permissions: e.permissions
             }))
           ),
-          canAdd: p.permissions.includes("workspaces.manage")
+          canAdd: p.permissions.includes("workspaces.manage"),
+          localFolders: mode === "local"
         });
       }
     },
@@ -295097,6 +295225,8 @@ data: ${JSON.stringify(data)}
       perm: "workspaces.manage",
       stepUp: true,
       handler: async (c) => {
+        if (mode !== "local")
+          return send(c.res, 403, { error: "Add repositories from GitHub on a shared server." });
         try {
           const w = org.addLocal(
             { p: c.p, ip: c.ip },
@@ -295157,7 +295287,7 @@ data: ${JSON.stringify(data)}
     },
     {
       method: "POST",
-      path: /^\/api\/members\/(usr_[\w-]+)\/(role|deactivate|reactivate|reset-mfa|sign-out|resend-invite)$/,
+      path: /^\/api\/members\/(usr_[\w-]+)\/(role|deactivate|reactivate|reset-mfa|reset-password|sign-out|resend-invite)$/,
       perm: "members.manage",
       stepUp: true,
       handler: async (c) => {
@@ -295182,6 +295312,10 @@ data: ${JSON.stringify(data)}
               break;
             case "resend-invite":
               return send(c.res, 200, { link: `${origin(c)}/#/invite/${org.resendInvite(a, id)}` });
+            case "reset-password":
+              return send(c.res, 200, {
+                link: `${origin(c)}/#/reset/${org.passwordResetLink(a, id)}`
+              });
           }
           return send(c.res, 200, { ok: true });
         } catch (e) {
@@ -295341,7 +295475,7 @@ data: ${JSON.stringify(data)}
       perm: "audit.view",
       handler: (c) => {
         const rows = auditRows(c.p?.user.org_id ?? "", "", "", 0, 1e5);
-        const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const cell = (v) => `"${String(v ?? "").replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`;
         const csv = [
           "seq,time,actor,action,target,ip,detail,hash",
           ...rows.map(
@@ -295561,11 +295695,12 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
     const dir = join23(w.runs_dir, id);
     return dir.startsWith(w.runs_dir + sep3) && existsSync11(join23(dir, "job.json")) ? dir : null;
   };
-  const server2 = http.createServer(async (req, res) => {
+  const handle = async (req, res) => {
     try {
+      if (req.method === "GET" && req.url === "/healthz") return send(res, 200, { ok: true });
       const host = req.headers.host ?? "";
-      if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)
-        return send(res, 421, { error: "wrong host" });
+      const hostOk = publicUrl ? host === publicUrl.host : host === `127.0.0.1:${port}` || host === `localhost:${port}`;
+      if (!hostOk) return send(res, 421, { error: "wrong host" });
       const url3 = new URL(req.url ?? "/", `http://${host}`);
       const path5 = url3.pathname;
       if (req.method === "GET" && (path5 === "/" || path5 === "/index.html"))
@@ -295587,7 +295722,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
         }
       }
       if (!route || !m) return send(res, 404, { error: "not found" });
-      const ip = req.socket.remoteAddress ?? "";
+      const ip = clientIp(req, trusted);
       let ctxW;
       let ctxPerms = [];
       const token = readCookie(req.headers.cookie, cookieName(secure));
@@ -295595,7 +295730,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       const p = bearer ? auth2.principalFromToken(bearer) : auth2.principal(token, route.perm === "pending");
       if (req.method !== "GET") {
         const origin2 = req.headers.origin;
-        if (!route.crossSite && origin2 !== void 0 && origin2 !== `http${secure ? "s" : ""}://${host}`)
+        if (!route.crossSite && origin2 !== void 0 && origin2 !== (publicUrl ? publicUrl.origin : `http${secure ? "s" : ""}://${host}`))
           return send(res, 403, { error: "cross-origin request refused" });
         if ((route.perm === "public" || route.perm === "pending") && auth2.rateLimited(ip))
           return send(res, 429, { error: "Too many attempts. Wait a few minutes." });
@@ -295635,25 +295770,32 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       if (!res.headersSent)
         return send(res, 500, { error: String(err.message ?? err).slice(0, 300) });
     }
-  });
+  };
+  const server2 = opts.tls ? https.createServer({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.2" }, handle) : http.createServer(handle);
+  server2.requestTimeout = 3e4;
+  server2.headersTimeout = 2e4;
+  server2.keepAliveTimeout = 5e3;
+  const bindHost = opts.host ?? "127.0.0.1";
   await new Promise((ok, fail) => {
     const tryListen = (p, attempts) => {
       server2.once("error", (e) => {
         if (e.code === "EADDRINUSE" && attempts > 0) tryListen(p + 1, attempts - 1);
         else fail(e);
       });
-      server2.listen(p, "127.0.0.1", () => {
+      server2.listen(p, bindHost, () => {
         port = p;
         ok();
       });
     };
-    tryListen(port, 20);
+    tryListen(port, mode === "local" && opts.port === void 0 ? 20 : 0);
   });
-  const url2 = `http://127.0.0.1:${port}/`;
+  const url2 = publicUrl ? `${publicUrl.origin}/` : `http${opts.tls ? "s" : ""}://127.0.0.1:${port}/`;
   return {
     url: url2,
     port,
     dataDir,
+    mode,
+    host: bindHost,
     /** Open once to create the owner account; null when the server is already set up. */
     setupUrl: setupToken ? `${url2}#/setup/${setupToken}` : null,
     routes: routes.map((r) => ({
@@ -295712,7 +295854,7 @@ var init_server = __esm({
 // src/cli.ts
 var import_semver9 = __toESM(require_semver2(), 1);
 import { mkdir as mkdir15, mkdtemp as mkdtemp5, readFile as readFile17, rm as rm8, writeFile as writeFile9 } from "node:fs/promises";
-import { tmpdir as tmpdir4 } from "node:os";
+import { homedir as homedir2, tmpdir as tmpdir4 } from "node:os";
 import { basename as basename4, join as join24, resolve as resolve6 } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -356712,8 +356854,8 @@ var require_utils = /* @__PURE__ */ __commonJSMin(((exports, module) => {
   };
   const HOST_DELIM_RE = /[@/?#:]/g;
   const HOST_DELIM_NO_COLON_RE = /[@/?#]/g;
-  function reescapeHostDelimiters(host, isIP) {
-    const re2 = isIP ? HOST_DELIM_NO_COLON_RE : HOST_DELIM_RE;
+  function reescapeHostDelimiters(host, isIP2) {
+    const re2 = isIP2 ? HOST_DELIM_NO_COLON_RE : HOST_DELIM_RE;
     re2.lastIndex = 0;
     return host.replace(re2, (ch) => HOST_DELIMS[ch]);
   }
@@ -357028,7 +357170,7 @@ var require_schemes = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     parse: httpParse,
     serialize: httpSerialize
   };
-  const https = {
+  const https2 = {
     scheme: "https",
     domainHost: http2.domainHost,
     parse: httpParse,
@@ -357060,7 +357202,7 @@ var require_schemes = /* @__PURE__ */ __commonJSMin(((exports, module) => {
   };
   const SCHEMES = {
     http: http2,
-    https,
+    https: https2,
     ws,
     wss,
     urn,
@@ -357227,8 +357369,8 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     const host = matches[4];
     return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !isIPLiteral(host) && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
   }
-  function canonicalizeHost(parsed, options, schemeHandler, isIP) {
-    if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) try {
+  function canonicalizeHost(parsed, options, schemeHandler, isIP2) {
+    if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP2 === false && nonSimpleDomain(parsed.host)) try {
       parsed.host = new URL("http://" + parsed.host).hostname;
     } catch (e) {
       parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
@@ -357253,7 +357395,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     let malformedHost = false;
     let malformedIPLiteral = false;
     let malformedScheme = false;
-    let isIP = false;
+    let isIP2 = false;
     if (options.reference === "suffix") if (options.scheme) uri = options.scheme + ":" + uri;
     else uri = "//" + uri;
     const authorityMatch = uri.match(AUTHORITY_PREFIX);
@@ -357304,25 +357446,25 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
         const bracketedIPLiteral = isIPLiteral(parsed.host);
         const hasIPLiteralBracket = parsed.host.indexOf("[") !== -1 || parsed.host.indexOf("]") !== -1;
         const ipv6result = normalizeIPv6(parsed.host);
-        isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
+        isIP2 = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
         malformedIPLiteral = hasIPLiteralBracket && (!bracketedIPLiteral || ipv6result.error === true);
-        parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
+        parsed.host = isIP2 ? ipv6result.host : ipv6result.host.toLowerCase();
         if (malformedIPLiteral) {
           parsed.error = parsed.error || "URI host is malformed.";
           malformedAuthorityOrPort = true;
         }
-      } else isIP = true;
+      } else isIP2 = true;
       if (parsed.scheme === void 0 && parsed.userinfo === void 0 && parsed.host === void 0 && parsed.port === void 0 && parsed.query === void 0 && !parsed.path) parsed.reference = "same-document";
       else if (parsed.scheme === void 0) parsed.reference = "relative";
       else if (parsed.fragment === void 0) parsed.reference = "absolute";
       else parsed.reference = "uri";
       if (options.reference && options.reference !== "suffix" && options.reference !== parsed.reference) parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
       const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-      if (!malformedIPLiteral) malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
+      if (!malformedIPLiteral) malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP2);
       if (uri.indexOf("%") !== -1 && parsed.host !== void 0 && !malformedIPLiteral) {
-        let host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
-        if (!isIP) host = normalizePercentEncoding(host.toLowerCase());
-        parsed.host = reescapeHostDelimiters(host, isIP);
+        let host = isIP2 ? parsed.host : normalizePercentEncoding(parsed.host, true);
+        if (!isIP2) host = normalizePercentEncoding(host.toLowerCase());
+        parsed.host = reescapeHostDelimiters(host, isIP2);
       }
       if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
         if (parsed.path) parsed.path = normalizePathEncoding(parsed.path);
@@ -365432,6 +365574,50 @@ ${req.user}`,
 
 // src/cli.ts
 init_registry();
+
+// src/server/config.ts
+import { isIP } from "node:net";
+var LOOPBACK = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]"]);
+function serverConfig(raw) {
+  if (!raw.publicUrl)
+    throw new Error(
+      "--public-url is required: the address people open, like https://bumpsmith.acme.dev"
+    );
+  let u;
+  try {
+    u = new URL(raw.publicUrl);
+  } catch {
+    throw new Error(`--public-url is not a URL: ${raw.publicUrl}`);
+  }
+  if (u.pathname !== "/" || u.search || u.hash || u.username || u.password)
+    throw new Error("--public-url must be an origin only, like https://bumpsmith.acme.dev");
+  const loopback = LOOPBACK.has(u.hostname);
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback))
+    throw new Error("--public-url must use https (plain http is allowed only for localhost)");
+  if (!!raw.tlsCert !== !!raw.tlsKey) throw new Error("--tls-cert and --tls-key go together");
+  const tls = raw.tlsCert && raw.tlsKey ? { cert: raw.tlsCert, key: raw.tlsKey } : null;
+  if (tls && raw.behindProxy)
+    throw new Error("choose one: --tls-cert/--tls-key (Bumpsmith serves HTTPS) or --behind-proxy");
+  if (u.protocol === "https:" && !tls && !raw.behindProxy)
+    throw new Error(
+      "an https public URL needs --tls-cert and --tls-key, or --behind-proxy when a reverse proxy terminates TLS"
+    );
+  const trustedProxies = raw.behindProxy ? (raw.trustedProxies ?? "127.0.0.1,::1").split(",").map((x) => x.trim()).filter(Boolean) : [];
+  for (const ip of trustedProxies)
+    if (!isIP(ip)) throw new Error(`--trusted-proxy takes IP addresses; got "${ip}"`);
+  const port = Number(raw.port ?? (tls ? 4443 : 4477));
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    throw new Error(`bad --port: ${raw.port}`);
+  return {
+    publicUrl: u.origin,
+    host: raw.host ?? (raw.behindProxy || loopback ? "127.0.0.1" : "0.0.0.0"),
+    port,
+    tls,
+    trustedProxies
+  };
+}
+
+// src/cli.ts
 init_proc();
 var HELP = `bumpsmith \u2014 fix your code when a dependency ships a breaking change
 
@@ -365444,6 +365630,9 @@ Usage (run inside your repository):
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
   bumpsmith dashboard [--data dir]              the dashboard (sign-in required): review diffs, apply patches, start upgrades live
+  bumpsmith server --public-url https://host    self-hosted, multi-user dashboard (see docs/self-hosting.md)
+             [--host 0.0.0.0] [--port 4477] [--data dir]
+             [--tls-cert file --tls-key file | --behind-proxy [--trusted-proxy ip,ip]]
 
 Options: --repo <dir> (default .), --dir <sub-directory> (monorepos), --provider <name>, --model <id>, --base-url <url>, --budget <usd>
 
@@ -365620,6 +365809,12 @@ async function main() {
       runs: { type: "string" },
       data: { type: "string" },
       "no-open": { type: "boolean", default: false },
+      host: { type: "string" },
+      "public-url": { type: "string" },
+      "tls-cert": { type: "string" },
+      "tls-key": { type: "string" },
+      "behind-proxy": { type: "boolean", default: false },
+      "trusted-proxy": { type: "string" },
       help: { type: "boolean", short: "h" }
     }
   });
@@ -365940,12 +366135,49 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       }
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
-    case "dashboard": {
-      process.removeAllListeners("warning");
-      process.on("warning", (w) => {
-        if (w.name === "ExperimentalWarning" && /SQLite/.test(w.message)) return;
-        console.warn(`${w.name}: ${w.message}`);
+    case "server": {
+      quietSqliteWarning();
+      const env = process.env;
+      const cfg = serverConfig({
+        publicUrl: values["public-url"] ?? env.BUMPSMITH_PUBLIC_URL,
+        host: values.host ?? env.BUMPSMITH_HOST,
+        port: values.port ?? env.BUMPSMITH_PORT,
+        tlsCert: values["tls-cert"] ?? env.BUMPSMITH_TLS_CERT,
+        tlsKey: values["tls-key"] ?? env.BUMPSMITH_TLS_KEY,
+        behindProxy: values["behind-proxy"] || env.BUMPSMITH_BEHIND_PROXY === "1",
+        trustedProxies: values["trusted-proxy"] ?? env.BUMPSMITH_TRUSTED_PROXIES
       });
+      const { readFileSync: readFileSync3 } = await import("node:fs");
+      const { startDashboard: startDashboard2 } = await Promise.resolve().then(() => (init_server(), server_exports));
+      const s = await startDashboard2({
+        mode: "server",
+        publicUrl: cfg.publicUrl,
+        host: cfg.host,
+        port: cfg.port,
+        tls: cfg.tls ? { cert: readFileSync3(cfg.tls.cert), key: readFileSync3(cfg.tls.key) } : void 0,
+        trustedProxies: cfg.trustedProxies,
+        dataDir: resolve6(values.data ?? env.BUMPSMITH_DATA ?? join24(homedir2(), ".bumpsmith")),
+        cliEntry: process.argv[1] ?? ""
+      });
+      log2(`Bumpsmith server: ${s.url} (listening on ${s.host}:${s.port}${cfg.tls ? ", TLS" : ""})`);
+      log2(`Data: ${s.dataDir}. Keep it on an encrypted volume and back it up with its master key.`);
+      if (cfg.trustedProxies.length)
+        log2(`Trusting X-Forwarded-For from: ${cfg.trustedProxies.join(", ")}`);
+      if (s.setupUrl) {
+        log2("");
+        log2("First run: open this one-time link to create the owner account (valid for 1 hour):");
+        log2(`  ${s.setupUrl}`);
+        log2("");
+      }
+      const stop = () => void s.close().then(() => process.exit(0));
+      process.once("SIGTERM", stop);
+      process.once("SIGINT", stop);
+      await new Promise(() => {
+      });
+      return;
+    }
+    case "dashboard": {
+      quietSqliteWarning();
       const { startDashboard: startDashboard2 } = await Promise.resolve().then(() => (init_server(), server_exports));
       const dir = resolve6(values.repo ?? ".");
       const { url: url2, setupUrl, dataDir } = await startDashboard2({
@@ -365983,4 +366215,11 @@ main().catch((err) => {
   console.error(err instanceof Error ? err.message : err);
   process.exitCode = 1;
 });
+function quietSqliteWarning() {
+  process.removeAllListeners("warning");
+  process.on("warning", (w) => {
+    if (w.name === "ExperimentalWarning" && /SQLite/.test(w.message)) return;
+    console.warn(`${w.name}: ${w.message}`);
+  });
+}
 /*! For license information please see cli.js.LEGAL.txt */

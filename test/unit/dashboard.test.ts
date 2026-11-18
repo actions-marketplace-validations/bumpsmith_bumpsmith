@@ -375,6 +375,8 @@ describe("dashboard server", { timeout: 30_000 }, () => {
         "/^\\/auth\\/invite$/",
         "/^\\/auth\\/login$/",
         "/^\\/auth\\/oidc\\/callback$/",
+        "/^\\/auth\\/reset$/",
+        "/^\\/auth\\/reset$/",
         "/^\\/auth\\/(oidc|saml)\\/start$/",
         "/^\\/auth\\/saml\\/acs$/",
         "/^\\/auth\\/saml\\/metadata$/",
@@ -512,6 +514,42 @@ describe("dashboard server", { timeout: 30_000 }, () => {
       (await post("/api/roles", { name: "Mine", description: "", permissions: ["runs.view"] }, sam))
         .status,
     ).toBe(403);
+  });
+
+  it("lets an admin hand out a one-time password reset link", async () => {
+    const { members } = (await (await fetch(`${base}/api/members`, { headers: h })).json()) as {
+      members: { id: string; email: string }[];
+    };
+    const id = members.find((m) => m.email === "sam@acme.dev")?.id ?? "";
+    const owner = members.find((m) => m.email === "dana@acme.dev")?.id ?? "";
+    // Not for yourself (use the account page), and not by someone without the permission.
+    expect((await post(`/api/members/${owner}/reset-password`, {}, h)).status).toBe(403);
+    expect((await post(`/api/members/${owner}/reset-password`, {}, sam)).status).toBe(403);
+    const r = await post(`/api/members/${id}/reset-password`, {}, h);
+    expect(r.status).toBe(200);
+    const token = ((await r.json()) as { link: string }).link.split("#/reset/")[1] ?? "";
+    expect(token.length).toBeGreaterThanOrEqual(40);
+    expect(await (await fetch(`${base}/auth/reset?token=${token}`)).json()).toEqual({
+      email: "sam@acme.dev",
+      org: "Acme",
+      mfa: false,
+    });
+    expect((await fetch(`${base}/auth/reset?token=${"x".repeat(43)}`)).status).toBe(404);
+    expect((await post("/auth/reset", { token, password: "password1234" })).status).toBe(400);
+    const ok = await post("/auth/reset", { token, password: "Granite-Meadow-Compass-4" });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("set-cookie")).toBeNull(); // not signed in by the link
+    // Signed out everywhere; the link is used up; the new password works.
+    expect((await fetch(`${base}${W}/state`, { headers: sam })).status).toBe(401);
+    expect((await post("/auth/reset", { token, password: "Another-Fine-Password-9" })).status).toBe(
+      404,
+    );
+    const again = await post("/auth/login", {
+      email: "sam@acme.dev",
+      password: "Granite-Meadow-Compass-4",
+    });
+    expect(again.status).toBe(200);
+    sam = await signedIn(again);
   });
 
   it("hides restricted repositories until access is granted, and grants only what is held", async () => {

@@ -73,6 +73,14 @@ const DUMMY_HASH = `scrypt$${KDF.N}$8$1$${Buffer.alloc(16).toString("base64")}$$
  * production so a stolen disk image does not hold both the data and its key.
  */
 export async function loadMasterKey(keyFile: string): Promise<Buffer> {
+  // A file named by BUMPSMITH_MASTER_KEY_FILE (Docker/Kubernetes secrets, a KMS-decrypted
+  // tmpfs file) wins over the variable, which wins over the key file in the data directory.
+  const fromFile = process.env.BUMPSMITH_MASTER_KEY_FILE;
+  if (fromFile) {
+    const k = Buffer.from((await readFile(fromFile, "utf8")).trim(), "base64");
+    if (k.length !== 32) throw new Error(`${fromFile} does not hold a 32-byte base64 key`);
+    return k;
+  }
   const env = process.env.BUMPSMITH_MASTER_KEY;
   if (env) {
     const k = Buffer.from(env, "base64");

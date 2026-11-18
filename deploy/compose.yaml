@@ -1,0 +1,63 @@
+# Bumpsmith behind Caddy (automatic HTTPS from Let's Encrypt).
+#
+#   cd deploy
+#   echo "BUMPSMITH_DOMAIN=bumpsmith.example.com" > .env
+#   openssl rand -base64 32 > master.key && chmod 600 master.key   # keep a copy somewhere safe
+#   docker compose up -d
+#   docker compose logs bumpsmith    # prints the one-time setup link on first start
+#
+# See ../docs/self-hosting.md for backups, key rotation, upgrades and running upgrades in a sandbox.
+
+services:
+  bumpsmith:
+    build: ..
+    image: bumpsmith:local
+    restart: unless-stopped
+    environment:
+      BUMPSMITH_PUBLIC_URL: https://${BUMPSMITH_DOMAIN:?set BUMPSMITH_DOMAIN in deploy/.env}
+      BUMPSMITH_BEHIND_PROXY: "1"
+      # Only Caddy's fixed address may set X-Forwarded-For.
+      BUMPSMITH_TRUSTED_PROXIES: 172.28.0.2
+      BUMPSMITH_MASTER_KEY_FILE: /run/secrets/master_key
+    secrets: [master_key]
+    volumes:
+      - bumpsmith-data:/data
+    networks:
+      edge:
+        ipv4_address: 172.28.0.3
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Not published on the host: only Caddy reaches it.
+    expose: ["4477"]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      BUMPSMITH_DOMAIN: ${BUMPSMITH_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      edge:
+        ipv4_address: 172.28.0.2
+    depends_on: [bumpsmith]
+
+secrets:
+  master_key:
+    file: ./master.key
+
+volumes:
+  bumpsmith-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

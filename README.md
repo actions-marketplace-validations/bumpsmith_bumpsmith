@@ -118,6 +118,25 @@ It runs on 127.0.0.1 and sends nothing anywhere: fonts are bundled and there's n
 
 Accounts, the audit log and the encryption key live in `~/.bumpsmith` (or `--data`), readable only by your user.
 
+### Self-hosted server for your team
+
+```sh
+cd deploy && echo "BUMPSMITH_DOMAIN=bumpsmith.acme.dev" > .env
+openssl rand -base64 32 > master.key && docker compose up -d
+```
+
+The same app runs as a multi-user server behind HTTPS. Members are added by invitation, or created on their first SSO
+sign-in.
+
+- **Sign-in:** two-factor authentication, single sign-on (OIDC and SAML) with group-to-role mapping.
+- **Roles:** built-in and custom roles.
+- **Access control:** an access control center for each repository.
+- **Integrations:** encrypted GitHub and model credentials.
+- **Onboarding:** guided in the browser.
+
+Read [Self-hosting](docs/self-hosting.md) to deploy it. Read [Security controls](docs/security/controls.md) for the
+SOC 2, ISO 27001, NIST 800-63B and OWASP ASVS mapping, and for what you are responsible for as the operator.
+
 ## How Bumpsmith stays safe
 
 Bumpsmith runs code it did not write (your dependencies' install and test steps) and lets

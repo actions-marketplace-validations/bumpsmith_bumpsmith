@@ -1,0 +1,20 @@
+# Optional: let the containerised server run upgrades in sandboxes on this host's Docker engine.
+#
+#   docker compose -f compose.yaml -f compose.sandbox.yaml up -d
+#
+# WARNING: access to the Docker socket is root on this host. Use a host dedicated to Bumpsmith.
+# Sandboxes bind-mount repository folders, so the data folder must have the same path inside the
+# container and on the host: here /var/lib/bumpsmith on both.
+#   sudo mkdir -p /var/lib/bumpsmith/tmp && sudo chown -R 10001 /var/lib/bumpsmith && sudo chmod 700 /var/lib/bumpsmith
+#   export DOCKER_GID=$(getent group docker | cut -d: -f3)
+
+services:
+  bumpsmith:
+    environment:
+      BUMPSMITH_DATA: /var/lib/bumpsmith
+      TMPDIR: /var/lib/bumpsmith/tmp
+    volumes:
+      - /var/lib/bumpsmith:/var/lib/bumpsmith
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - ${DOCKER_GID:?set DOCKER_GID to the docker group id}

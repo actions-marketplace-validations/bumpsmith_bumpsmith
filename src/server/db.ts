@@ -133,6 +133,17 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE sessions ADD COLUMN method TEXT NOT NULL DEFAULT 'password';
   `,
+  `
+  CREATE TABLE password_resets (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_by TEXT
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

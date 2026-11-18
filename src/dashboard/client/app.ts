@@ -138,6 +138,7 @@ const ui = {
   ws: "",
   workspaces: [] as WsItem[],
   canAddWs: false,
+  localFolders: false,
   switcher: false,
   switchQ: "",
   data: null as State | null,
@@ -183,7 +184,7 @@ const $app = document.getElementById("app") as HTMLElement;
 const wapi = (path: string) => `/api/w/${encodeURIComponent(ui.ws)}${path}`;
 /** May the signed-in user do this in the current repository? */
 const wcan = (p: string) => !!ui.data?.perms?.includes(p);
-const ORG_ROUTE = /^(account|onboarding|org\/|invite\/|setup\/)/;
+const ORG_ROUTE = /^(account|onboarding|org\/|invite\/|setup\/|reset\/)/;
 
 const isGood = (r: Run) => r.state === "ready" || r.state === "safe";
 const verified = (r: Run) =>
@@ -1471,7 +1472,7 @@ function render() {
   const html = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
   // Repository links in templates are written as "#/runs/…"; point them at this repository.
   $app.innerHTML = html.replace(
-    /href="#\/(?!w\/|account|onboarding|org\/|invite\/|setup\/)/g,
+    /href="#\/(?!w\/|account|onboarding|org\/|invite\/|setup\/|reset\/)/g,
     `href="#/w/${ui.ws}/`,
   );
   for (const el of $app.querySelectorAll<HTMLElement>("[data-need]"))
@@ -1551,9 +1552,12 @@ async function switchWorkspace(slug: string) {
 }
 
 async function loadWorkspaces() {
-  const r = await api<{ workspaces: WsItem[]; canAdd: boolean }>("/api/workspaces");
+  const r = await api<{ workspaces: WsItem[]; canAdd: boolean; localFolders: boolean }>(
+    "/api/workspaces",
+  );
   ui.workspaces = r.workspaces;
   ui.canAddWs = r.canAdd;
+  ui.localFolders = r.localFolders;
 }
 
 document.addEventListener("click", async (e) => {
@@ -1588,7 +1592,7 @@ document.addEventListener("click", async (e) => {
   if (act === "ws-add") {
     ui.switcher = false;
     render();
-    const slug = await addRepositoryDialog(ui.canAddWs);
+    const slug = await addRepositoryDialog(ui.localFolders);
     if (slug) {
       await loadWorkspaces();
       if (ui.route.startsWith("onboarding")) {
@@ -1980,7 +1984,7 @@ document.addEventListener("mousemove", (e) => {
 });
 window.addEventListener("hashchange", () => {
   // A setup link pasted into a tab already showing the sign-in screen.
-  if (!started && /^#\/(setup|invite)\//.test(location.hash)) void gate();
+  if (!started && /^#\/(setup|invite|reset)\//.test(location.hash)) void gate();
   else void onRoute();
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
@@ -2055,11 +2059,15 @@ async function startApp() {
 async function gate(reason: "signin" | "expired" = "signin") {
   const setup = /^#\/setup\/([\w-]{20,})$/.exec(location.hash);
   const invite = /^#\/invite\/([\w-]{20,})$/.exec(location.hash);
+  const reset = /^#\/reset\/([\w-]{20,})$/.exec(location.hash);
   const { info, setupRequired } = await fetchSession().catch(() => ({
     info: null,
     setupRequired: false,
   }));
-  if (!info && invite?.[1]) {
+  if (!info && reset?.[1]) {
+    await showAuth($app, "reset", reset[1]);
+    history.replaceState(null, "", "#/");
+  } else if (!info && invite?.[1]) {
     await showAuth($app, "invite", invite[1]);
     history.replaceState(null, "", "#/");
   } else if (!info) {
@@ -2074,7 +2082,7 @@ async function gate(reason: "signin" | "expired" = "signin") {
     } else {
       await showAuth($app, reason);
     }
-  } else if (setup || invite) history.replaceState(null, "", "#/");
+  } else if (setup || invite || reset) history.replaceState(null, "", "#/");
   if (session.info?.mustEnrollMfa) await showEnroll($app);
   document.title = "Bumpsmith";
   $app.className = "shell";

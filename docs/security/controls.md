@@ -1,0 +1,117 @@
+# Security controls
+
+This page lists the security controls built into Bumpsmith, maps each one to common frameworks, and says which
+controls belong to whoever runs it. It is written for security reviewers, for auditors, and for teams
+self-hosting Bumpsmith inside a SOC 2 or ISO 27001 scope.
+
+**Certification belongs to a deployment, not to software.** The hosted Bumpsmith service will be audited on its
+own. A self-hosted install inherits the controls below and adds its own: hosting, people and processes (see
+[Shared responsibility](#shared-responsibility)).
+
+**Frameworks referenced:**
+
+- **SOC 2:** 2017 Trust Services Criteria (revised 2022): CC6 logical access, CC7 operations, CC8 change management.
+- **ISO 27001:** ISO/IEC 27001:2022 Annex A.
+- **NIST 800-63B:** Digital Identity Guidelines, authenticator assurance level 2 (AAL2).
+- **ASVS:** OWASP Application Security Verification Standard 4.0.3, level 2.
+
+Every control below is enforced on the server and covered by automated tests in `test/unit/`. The browser
+interface only hides what the server would refuse anyway.
+
+## Identity and authentication
+
+| Control                                 | How Bumpsmith does it                                                                                                                                                                                                                                                                                | SOC 2        | ISO 27001  | NIST 800-63B     | ASVS           |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------- | ---------------- | -------------- |
+| Unique accounts                         | One account per person, identified by email and scoped to an organisation. No shared or default accounts.                                                                                                                                                                                            | CC6.1        | 5.16       | 4.1              | V2.1           |
+| Protected first owner                   | The first owner account needs a one-time, 256-bit setup token, valid for 1 hour, which only the server operator sees. An exposed fresh install cannot be claimed by someone else.                                                                                                                    | CC6.1, CC6.2 | 5.16, 8.5  | —                | V2.5           |
+| Password policy                         | At least 12 and at most 128 characters, with all Unicode allowed. Checked against a breached and common password list, and against the user's name, email and organisation. No composition rules and no forced expiry.                                                                               | CC6.1        | 5.17       | 5.1.1.2          | V2.1.1–V2.1.12 |
+| Password storage                        | scrypt (N=2^17, r=8, p=1) with a random salt per password, compared in constant time.                                                                                                                                                                                                                | CC6.1        | 5.17, 8.24 | 5.1.1.2          | V2.4.1, V2.4.3 |
+| Login throttling                        | **Per account:** 5 free attempts, then a lockout doubling from 1 minute to a 1-hour cap. **Per address:** a rate limit. The same error is shown for an unknown email and a wrong password, with the same timing.                                                                                     | CC6.1        | 8.5        | 5.2.2            | V2.2.1         |
+| Multi-factor authentication             | TOTP (RFC 6238) in authenticator apps, with ±1 time step and replay of a used code blocked. 10 single-use recovery codes, stored hashed. Policy is set per organisation: off, admins (anyone holding a manage permission) or everyone. When it applies, users must enrol before doing anything else. | CC6.1        | 5.17, 8.5  | AAL2, 5.1.5      | V2.8           |
+| Single sign-on: OIDC                    | Authorization code flow with PKCE, `state` and `nonce`. ID tokens are verified with the provider's JWKS for signature, issuer, audience, expiry and nonce.                                                                                                                                           | CC6.1        | 5.16, 8.5  | 4.2 (federation) | V2.10, V3.5    |
+| Single sign-on: SAML                    | Signed assertions required, with `InResponseTo` checked against a request this server issued (which also blocks replay). Audience and recipient are checked, and clock skew is limited to 3 minutes. Tests cover forged and replayed responses.                                                      | CC6.1        | 5.16, 8.5  | 4.2              | V2.10          |
+| SSO account controls                    | Accounts are created just in time with a default role. Identity-provider groups map to roles, but never to Owner. An email-domain allowlist is available. SSO can be enforced, which turns off passwords for everyone except Owners (break-glass).                                                   | CC6.2, CC6.3 | 5.16, 5.18 | —                | V2.10          |
+| Re-authentication for sensitive actions | A password or second factor entered in the last 10 minutes is required before changing keys, roles, members, access, security settings or SSO, or before applying a patch.                                                                                                                           | CC6.1        | 8.5        | 4.2.3            | V3.7.1         |
+| Account recovery                        | An admin issues a one-time reset link, valid for 24 hours and stored hashed. Using it ends every session, and two-factor stays on. There are no security questions.                                                                                                                                  | CC6.2        | 5.17       | 6.1.2.3          | V2.5           |
+| API access                              | Personal API tokens: 256-bit, stored as SHA-256 hashes, with a chosen expiry and narrow scopes. They cannot manage accounts or apply patches, and are revoked when their owner is deactivated.                                                                                                       | CC6.1        | 5.17, 8.5  | —                | V2.10, V13     |
+
+## Sessions
+
+| Control              | How Bumpsmith does it                                                                                                                                                              | SOC 2 | ISO 27001 | ASVS            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------- | --------------- |
+| Server-side sessions | An opaque 256-bit token in the cookie `__Host-bs_session` over HTTPS. The cookie is `HttpOnly`, `Secure` and `SameSite=Strict`, and only its hash is stored.                       | CC6.1 | 8.5       | V3.2, V3.4      |
+| Timeouts             | Each organisation sets an idle timeout (default 30 minutes) and an absolute limit (default 12 hours).                                                                              | CC6.1 | 8.5       | V3.3.1, V3.3.2  |
+| Rotation             | A new session is issued at sign-in and after the second factor; a session from before sign-in is never reused.                                                                     | CC6.1 | 8.5       | V3.2.1          |
+| Revocation           | **Users:** list and end their own sessions. **Admins:** sign a member out everywhere. **Automatic:** password change, password reset, MFA reset and deactivation all end sessions. | CC6.2 | 5.18      | V3.3.3, V3.3.4  |
+| CSRF                 | Every request that changes state needs the session's CSRF token in a header, a matching `Origin` and a `SameSite=Strict` cookie.                                                   | CC6.6 | 8.26      | V4.2.2, V13.2.3 |
+
+## Authorisation and access control
+
+| Control                        | How Bumpsmith does it                                                                                                                                                                                                                      | SOC 2        | ISO 27001  | ASVS           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | ---------- | -------------- |
+| Deny by default                | Every route declares a permission in one route table, checked before its handler runs. A test fails if any route lacks one.                                                                                                                | CC6.1, CC6.3 | 5.15, 8.3  | V4.1.1, V4.1.5 |
+| Roles                          | Six built-in roles (Owner, Admin, Maintainer, Reviewer, Viewer, Auditor), plus custom roles built from a permission catalogue.                                                                                                             | CC6.3        | 5.15, 5.18 | V4.1.3         |
+| Least privilege per repository | Each repository is open to the whole organisation or restricted. Grants go to people or roles, and effective access is the intersection with the person's organisation role. A restricted repository answers 404 to anyone without access. | CC6.3        | 5.15, 8.3  | V4.2.1         |
+| Escalation guards              | Nobody can grant, assign or create a role with permissions they do not hold. Nobody can manage someone with more permissions, or their own account, from the members page. The last Owner cannot be removed or demoted.                    | CC6.3        | 5.18, 8.2  | V4.1.3         |
+| Access review                  | The access control center shows every person and role against every repository. The "effective access" checker explains why someone has each permission.                                                                                   | CC6.2, CC6.3 | 5.18       | —              |
+| Joiners and leavers            | Invitations are one-time links valid for 72 hours, stored hashed. Deactivation ends sessions and revokes API tokens immediately, while history stays in the audit log.                                                                     | CC6.2        | 5.16, 5.18 | —              |
+
+## Logging and monitoring
+
+| Control                  | How Bumpsmith does it                                                                                                                                                                                                                                                                                                         | SOC 2 | ISO 27001  | ASVS       |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ---------- | ---------- |
+| Audit trail              | The audit log records these events, each with actor, time, client IP and target:<ul><li>sign-in attempts, success and failure;</li><li>MFA and password changes;</li><li>member, role and access changes;</li><li>integration and key changes;</li><li>security settings;</li><li>runs started, applied or deleted.</li></ul> | CC7.2 | 8.15       | V7.1, V7.2 |
+| Tamper evidence          | The log is append-only and hash-chained: each row stores SHA-256 of the previous hash plus its canonical content. **Audit log → Chain intact** checks the whole chain and shows the first broken row.                                                                                                                         | CC7.2 | 8.15       | V7.3.3     |
+| No secrets in logs       | Passwords, tokens and keys are never written to the audit log or API responses; secrets show only their last 4 characters. Run logs mask secrets found in files.                                                                                                                                                              | CC6.1 | 8.11, 8.15 | V7.1.1     |
+| Trusted client addresses | `X-Forwarded-For` is believed only from proxies the operator lists, so a client cannot forge its IP for rate limits or the log.                                                                                                                                                                                               | CC7.2 | 8.15       | V7.1       |
+| Export                   | CSV export, with protection against spreadsheet formula injection. It is available to the Auditor role and to `audit.view` API tokens for SIEM collection.                                                                                                                                                                    | CC7.2 | 8.15, 8.16 | V7.1       |
+
+## Cryptography and data protection
+
+| Control                      | How Bumpsmith does it                                                                                                                                                                                     | SOC 2        | ISO 27001 | ASVS       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------- | ---------- |
+| Encryption of stored secrets | AES-256-GCM, with a random 96-bit IV and the record identity bound in as AAD, so a value cannot be moved to another record. Covers GitHub App keys, GitHub tokens, model keys and the OIDC client secret. | CC6.1, CC6.7 | 8.24      | V6.2, V6.4 |
+| Key management               | The master key comes from `BUMPSMITH_MASTER_KEY_FILE` (a Docker or Kubernetes secret, or a file decrypted from your KMS) or `BUMPSMITH_MASTER_KEY`. Otherwise Bumpsmith generates one in a 0600 file.     | CC6.1        | 8.24      | V6.4.1     |
+| Encryption in transit        | HTTPS is required for a shared server, with TLS 1.2 or later when Bumpsmith terminates TLS, and HSTS on every response.                                                                                   | CC6.7        | 8.24      | V9.1       |
+| Data at rest                 | The data folder is 0700 and its files 0600. Disk encryption is the operator's job (see below).                                                                                                            | CC6.1        | 8.24      | V8.3       |
+| Randomness                   | `node:crypto` CSPRNG for every token, ID and IV.                                                                                                                                                          | CC6.1        | 8.24      | V6.3       |
+
+## Application and transport hardening
+
+| Control                               | How Bumpsmith does it                                                                                                                                                                                                                                                                 | SOC 2        | ISO 27001       | ASVS        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------------- | ----------- |
+| Security headers                      | **Content Security Policy:** strict, with no inline script, no third-party origins and `frame-ancestors 'none'`.<br>**Other headers:** `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, COOP and CORP `same-origin`, a restrictive `Permissions-Policy`, and HSTS. | CC6.6        | 8.26, 8.28      | V14.4       |
+| Host and origin checks                | Only the configured public host is served (DNS rebinding and Host-header injection get a 421). Links, SSO callbacks and redirects are built from the configured URL, never from request headers.                                                                                      | CC6.6        | 8.26            | V5.1, V14.5 |
+| Input limits                          | Request bodies are size-limited, with a separate limit for SAML responses. Slow-client timeouts apply. Inputs are validated with allowlists (names, slugs, repositories, packages).                                                                                                   | CC6.6        | 8.28            | V5.1, V12.1 |
+| Path safety                           | Run files are served only from inside the run's folder, with symlinks resolved first. On a shared server, users cannot point Bumpsmith at folders on its disk.                                                                                                                        | CC6.6        | 8.28            | V12.3       |
+| No third-party calls from the browser | Fonts and scripts are bundled, and there is no analytics.                                                                                                                                                                                                                             | CC6.7        | 5.14            | V14.2       |
+| Dependencies                          | Exact pinned versions; installs only versions at least 3 days old; no install scripts unless allow-listed; CI runs typecheck, lint and tests on every change; `dist/` is checked against its source.                                                                                  | CC7.1, CC8.1 | 8.8, 8.25, 8.28 | V14.2       |
+| Untrusted code in upgrades            | Sandboxed: no credentials, resource limits, and network access only to a read-only registry mirror. An independent review and diff rules run before anything is written. See [How Bumpsmith stays safe](../../README.md#how-bumpsmith-stays-safe).                                    | CC6.8, CC7.1 | 8.7, 8.22, 8.28 | V10, V14    |
+| Least-privilege runtime               | **Docker image:** non-root, read-only root filesystem, all capabilities dropped and `no-new-privileges`.<br>**systemd unit:** `ProtectSystem=strict`, an empty capability set and private `/tmp`.                                                                                     | CC6.8        | 8.9             | V14.1       |
+| Vulnerability disclosure              | [SECURITY.md](../../SECURITY.md): private reporting, with a 2-business-day acknowledgement and a 7-day fix target for critical issues.                                                                                                                                                | CC7.3, CC7.4 | 5.24–5.26, 8.8  | V14.2       |
+
+## Shared responsibility
+
+Who owns each part when you self-host:
+
+| Area              | Bumpsmith (the software)                                | You (the operator)                                                                                                          |
+| ----------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Identity          | Policies above, SSO, MFA, sessions                      | Your identity provider's own controls, joiner/mover/leaver process, periodic access reviews using the access control center |
+| Transport         | HTTPS enforcement, HSTS, host checks                    | Certificates, the reverse proxy, firewalls, and which networks may reach the server                                         |
+| Data at rest      | Encrypted secrets, file permissions                     | Disk or volume encryption; master key custody (ideally KMS); encrypted, tested, off-host backups                            |
+| Logging           | Tamper-evident audit log, export                        | Shipping it to your SIEM, alerting, retention to your policy (the log is never pruned automatically)                        |
+| Hosting           | Hardened container and unit files                       | OS patching, container runtime, Docker socket exposure, host monitoring, capacity                                           |
+| Change management | Signed, reviewed, CI-tested releases; changelog         | Testing upgrades on a copy; your own change approval                                                                        |
+| Incident response | Fixes and advisories ([SECURITY.md](../../SECURITY.md)) | Your incident process; revoking sessions and keys from the dashboard when needed                                            |
+| Vendors           | —                                                       | Your GitHub and model-provider agreements; Bumpsmith sends code context only to the model provider you configure            |
+
+## Known gaps and plans
+
+We list these openly so reviewers don't have to find them:
+
+- **Master key rotation is manual.** See [self-hosting](../self-hosting.md#rotating-keys-and-credentials). A `bumpsmith rekey` command is planned.
+- **The audit log is exported, not streamed.** SIEM collection polls the export endpoint. A push stream (webhook or syslog) is planned.
+- **No built-in email.** Invitation and reset links are handed over by an admin. SMTP delivery is planned.
+- **SCIM provisioning is not available yet.** Accounts come from invitations or SSO just-in-time creation; deprovisioning happens in Bumpsmith or by blocking at the identity provider.
+- **WebAuthn and passkeys are not supported yet.** TOTP meets AAL2; phishing-resistant authenticators are planned.
+- **No penetration test yet.** A third-party test is planned before the hosted service launches; the report will be shared under NDA.
