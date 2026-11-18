@@ -130,6 +130,9 @@ const MIGRATIONS: string[] = [
     created_by TEXT
   );
   `,
+  `
+  ALTER TABLE sessions ADD COLUMN method TEXT NOT NULL DEFAULT 'password';
+  `,
 ];
 
 export type Db = DatabaseSync;

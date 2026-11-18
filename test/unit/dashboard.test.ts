@@ -374,8 +374,13 @@ describe("dashboard server", { timeout: 30_000 }, () => {
         "/^\\/auth\\/invite$/",
         "/^\\/auth\\/invite$/",
         "/^\\/auth\\/login$/",
+        "/^\\/auth\\/oidc\\/callback$/",
+        "/^\\/auth\\/(oidc|saml)\\/start$/",
+        "/^\\/auth\\/saml\\/acs$/",
+        "/^\\/auth\\/saml\\/metadata$/",
         "/^\\/auth\\/session$/",
         "/^\\/auth\\/setup$/",
+        "/^\\/auth\\/sso$/",
       ].sort(),
     );
   });
@@ -478,7 +483,7 @@ describe("dashboard server", { timeout: 30_000 }, () => {
         .status,
     ).toBe(409);
     const token = ((await inv.json()) as { link: string }).link.split("#/invite/")[1] ?? "";
-    expect(await (await fetch(`${base}/auth/invite?token=${token}`)).json()).toEqual({
+    expect(await (await fetch(`${base}/auth/invite?token=${token}`)).json()).toMatchObject({
       email: "sam@acme.dev",
       org: "Acme",
     });

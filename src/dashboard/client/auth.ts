@@ -12,7 +12,31 @@ export interface SessionInfo {
   csrf: string;
   /** The organisation requires MFA and this user has not set it up yet. */
   mustEnrollMfa?: boolean;
+  /** How this session signed in: "password" or "sso". */
+  method?: string;
 }
+
+interface SsoOptions {
+  oidc: { label: string } | null;
+  saml: { label: string } | null;
+  enforce: boolean;
+}
+async function ssoOptions(): Promise<SsoOptions> {
+  try {
+    return (await (await fetch("/auth/sso")).json()) as SsoOptions;
+  } catch {
+    return { oidc: null, saml: null, enforce: false };
+  }
+}
+const ssoButtons = (o: SsoOptions) =>
+  [
+    o.oidc
+      ? `<a class="btn block sso" href="/auth/oidc/start">${icon("key")}Continue with ${esc(o.oidc.label)}</a>`
+      : "",
+    o.saml
+      ? `<a class="btn block sso" href="/auth/saml/start">${icon("key")}Continue with ${esc(o.saml.label)}</a>`
+      : "",
+  ].join("");
 
 /** POST with the CSRF token (used here so this module does not depend on net.ts). */
 async function call<T>(path: string, data: unknown = {}): Promise<T> {
@@ -73,7 +97,12 @@ function card(inner: string, foot = true) {
   </div>${foot ? `<p class="auth-foot">${icon("lock")}<span>Sessions end after 30 minutes without activity. Every sign-in is recorded in the audit log.</span></p>` : ""}</main>`;
 }
 
-function page(mode: Mode, invite?: { email: string; org: string }): string {
+function page(
+  mode: Mode,
+  invite?: { email: string; org: string; sso?: boolean },
+  sso?: SsoOptions,
+  ssoError?: string,
+): string {
   if (mode === "invite-invalid")
     return card(
       `<h1>This invitation no longer works</h1>
@@ -81,6 +110,10 @@ function page(mode: Mode, invite?: { email: string; org: string }): string {
       <a class="btn block" href="#/">Go to sign in</a>`,
       false,
     );
+  if (mode === "invite" && invite?.sso && sso)
+    return card(`<h1>Join ${esc(invite.org)}</h1>
+      <p class="auth-sub">You were invited as ${esc(invite.email)}. ${esc(invite.org)} signs in with single sign-on: continue with your company account.</p>
+      <div class="sso-g">${ssoButtons(sso)}</div>`);
   if (mode === "invite" && invite)
     return card(`<h1>Join ${esc(invite.org)}</h1>
       <p class="auth-sub">You were invited to ${esc(invite.org)} on Bumpsmith. Choose your name and a password to finish.</p>
@@ -131,14 +164,18 @@ function page(mode: Mode, invite?: { email: string; org: string }): string {
         <button class="btn primary block" type="submit">Verify</button>
         <button class="linkish" type="button" data-recovery>Use a recovery code instead</button>
       </form>`);
+  const hasSso = !!(sso?.oidc || sso?.saml);
+  const enforce = hasSso && sso?.enforce;
   return card(`<h1>${mode === "expired" ? "Your session ended" : "Sign in"}</h1>
-    <p class="auth-sub">${mode === "expired" ? "For your security, sessions end after a period without activity. Sign in again to continue." : "Sign in to your Bumpsmith workspace."}</p>
+    <p class="auth-sub">${mode === "expired" ? "For your security, sessions end after a period without activity. Sign in again to continue." : enforce ? "Your organisation signs in with single sign-on." : "Sign in to your Bumpsmith workspace."}</p>
+    ${ssoError ? `<div class="auth-err" role="alert">${icon("alertCircle")}<span>${esc(ssoError)}</span></div>` : ""}
+    ${hasSso && sso ? `<div class="sso-g">${ssoButtons(sso)}</div>${enforce ? `<details class="owner-pw"><summary>Owner? Sign in with a password</summary>` : `<div class="or"><span>or</span></div>`}` : ""}
     <form class="auth-form" data-form="login" novalidate>
       <div class="field"><label for="a-email">Work email</label><input class="input" id="a-email" name="email" type="email" autocomplete="username" required maxlength="254" /></div>
       <div class="field"><label for="a-pw">Password</label>${pwField("a-pw", "current-password")}</div>
       <div class="auth-err" role="alert" hidden></div>
-      <button class="btn primary block" type="submit">Sign in</button>
-    </form>`);
+      <button class="btn ${enforce ? "" : "primary"} block" type="submit">Sign in</button>
+    </form>${enforce ? "</details>" : ""}`);
 }
 
 function rules(form: HTMLFormElement) {
@@ -167,14 +204,19 @@ export async function showAuth(
   mode: Mode,
   setupToken = "",
 ): Promise<SessionInfo> {
-  let invite: { email: string; org: string } | undefined;
+  let invite: { email: string; org: string; sso?: boolean } | undefined;
   if (mode === "invite") {
     const r = await fetch(`/auth/invite?token=${encodeURIComponent(setupToken)}`);
-    if (r.ok) invite = (await r.json()) as { email: string; org: string };
+    if (r.ok) invite = (await r.json()) as { email: string; org: string; sso?: boolean };
     else mode = "invite-invalid";
   }
+  const sso =
+    mode === "signin" || mode === "expired" || mode === "invite" ? await ssoOptions() : undefined;
+  // An identity-provider error comes back as ?sso_error=…; show it once, then drop it.
+  const ssoError = new URLSearchParams(location.search).get("sso_error") ?? undefined;
+  if (ssoError) history.replaceState(null, "", `/${location.hash}`);
   root.className = "shell auth-shell";
-  root.innerHTML = page(mode, invite);
+  root.innerHTML = page(mode, invite, sso, ssoError);
   document.title = mode === "setup" ? "Set up Bumpsmith" : "Sign in · Bumpsmith";
   const form = root.querySelector<HTMLFormElement>("form");
   (form?.querySelector<HTMLInputElement>("input") ?? null)?.focus();
@@ -384,8 +426,17 @@ export async function showEnroll(root: HTMLElement): Promise<void> {
 }
 
 /** "Confirm it's you" before a sensitive action: MFA code if enrolled, else password. */
-export function reauthDialog(): Promise<boolean> {
+export async function reauthDialog(): Promise<boolean> {
   const mfa = !!session.info?.user.mfa;
+  if (session.info?.method === "sso" && !mfa) {
+    // No Bumpsmith password or authenticator: confirm through the identity provider again.
+    const o = await ssoOptions();
+    await openDialog({
+      title: "Confirm it's you",
+      body: `<p class="dialog-p">This action changes something sensitive, so sign in again with your company account. You come back here afterwards; then repeat the action.</p><div class="sso-g">${ssoButtons(o)}</div>`,
+    });
+    return false;
+  }
   return openDialog({
     title: "Confirm it's you",
     body: `<p class="dialog-p">This action changes something sensitive, so we check it's still you. You won't be asked again for 10 minutes.</p>

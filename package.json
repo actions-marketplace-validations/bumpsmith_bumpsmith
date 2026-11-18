@@ -27,10 +27,12 @@
     "@ast-grep/napi": "0.51.2",
     "@modelcontextprotocol/node": "2.1.2",
     "@modelcontextprotocol/server": "2.4.0",
+    "@node-saml/node-saml": "5.1.0",
     "@octokit/core": "7.0.8",
     "@octokit/plugin-retry": "8.1.1",
     "@octokit/plugin-throttling": "11.0.5",
     "diff": "9.0.0",
+    "jose": "6.1.0",
     "openai": "7.57.0",
     "qrcode": "1.5.4",
     "semver": "7.8.6",
@@ -47,7 +49,8 @@
     "esbuild": "0.28.2",
     "hono": "4.13.18",
     "tsx": "4.23.15",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "xml-crypto": "6.4.0"
   },
   "license": "Apache-2.0",
   "exports": {

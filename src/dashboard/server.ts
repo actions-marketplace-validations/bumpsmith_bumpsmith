@@ -26,6 +26,7 @@ import { openDb } from "../server/db.ts";
 import { Integrations, KEY_PROVIDERS } from "../server/integrations.ts";
 import { Org, type Workspace, WS_PERMS } from "../server/org.ts";
 import { can, PERMISSIONS, type Permission } from "../server/rbac.ts";
+import { type Identity, Sso, type SsoConfig } from "../server/sso.ts";
 import { run } from "../util/proc.ts";
 
 /**
@@ -372,6 +373,19 @@ export async function startDashboard(opts: DashboardOptions) {
   const auth = new Auth(db, DEFAULT_POLICY, masterKey);
   const org = new Org(db);
   const integrations = new Integrations(db, masterKey);
+  const sso = new Sso(
+    db,
+    (id) => auth.extra(id),
+    (id, patch) => auth.setExtra(id, patch),
+    (id, name) => integrations.get(id, name),
+  );
+  /** Self-hosted installs hold one organisation; SSO and sign-in belong to it. */
+  const firstOrg = () =>
+    (
+      db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get() as
+        | { id: string }
+        | undefined
+    )?.id;
   /** The repository this dashboard was started in becomes the organisation's first one. */
   const ensureLocalWorkspace = () => {
     const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get() as
@@ -538,6 +552,8 @@ export async function startDashboard(opts: DashboardOptions) {
     enroll?: boolean;
     /** Account routes: never usable with a personal API token. */
     noToken?: boolean;
+    /** Accepts a cross-site POST (the SAML response from the identity provider). */
+    crossSite?: boolean;
     /** The first capture is a repository slug; permission is checked inside that repository. */
     ws?: boolean;
     handler: (c: Ctx) => Promise<void> | void;
@@ -550,6 +566,7 @@ export async function startDashboard(opts: DashboardOptions) {
     permissions: p.permissions,
     csrf: p.session.csrf,
     mustEnrollMfa: p.mustEnrollMfa,
+    method: p.session.method ?? "password",
   });
   const ua = (c: Ctx) => String(c.req.headers["user-agent"] ?? "");
   const cookieFor = (token: string) => sessionCookie(token, secure, 72 * 3600);
@@ -581,6 +598,29 @@ export async function startDashboard(opts: DashboardOptions) {
       env.defaultProvider;
     return { ...env, providers, defaultProvider: def };
   };
+  /** Signed in through the identity provider: a fresh session, then into the app. */
+  const ssoSignIn = (c: Ctx, orgId: string, identity: Identity) => {
+    const user = sso.resolve(orgId, identity, c.ip);
+    if (c.token) auth.endSession(c.token, null, c.ip);
+    const s = auth.createSession(user, c.ip, ua(c), false, "sso");
+    return send(c.res, 302, "", "text/plain", {
+      location: "/#/",
+      "set-cookie": cookieFor(s.token),
+    });
+  };
+  const readForm = (req: http.IncomingMessage) =>
+    new Promise<URLSearchParams>((ok, fail) => {
+      let size = 0;
+      const chunks: Buffer[] = [];
+      req.on("data", (d: Buffer) => {
+        size += d.length;
+        if (size > 1024 * 1024) {
+          fail(new AuthError(413, "SAML response too large."));
+          req.destroy();
+        } else chunks.push(d);
+      });
+      req.on("end", () => ok(new URLSearchParams(Buffer.concat(chunks).toString("utf8"))));
+    });
   const redirect = (res: http.ServerResponse, location: string) =>
     send(res, 302, "", "text/plain", { location });
   const origin = (c: Ctx) =>
@@ -682,6 +722,12 @@ export async function startDashboard(opts: DashboardOptions) {
         const b = await readBody(c.req);
         try {
           const user = await auth.login(String(b.email ?? ""), String(b.password ?? ""), c.ip);
+          // With SSO required, passwords are for Owners only (break-glass if the IdP is down).
+          if (sso.config(user.org_id).enforce && user.role_id !== `${user.org_id}:owner`)
+            return send(c.res, 403, {
+              error: "Your organisation signs in with single sign-on. Use the SSO button.",
+              sso: true,
+            });
           return signIn(c, user);
         } catch (e) {
           return authErr(c, e);
@@ -988,6 +1034,155 @@ export async function startDashboard(opts: DashboardOptions) {
       handler: (c) => send(c.res, 200, verifyAudit(db)),
     },
 
+    // ── single sign-on ──
+    {
+      // Which SSO buttons the sign-in page shows (no secrets).
+      method: "GET",
+      path: /^\/auth\/sso$/,
+      perm: "public",
+      handler: (c) => {
+        const orgId = firstOrg();
+        if (!orgId) return send(c.res, 200, { oidc: null, saml: null, enforce: false });
+        const s = sso.config(orgId);
+        return send(c.res, 200, {
+          oidc: s.oidc.enabled ? { label: s.oidc.label } : null,
+          saml: s.saml.enabled ? { label: s.saml.label } : null,
+          enforce: s.enforce,
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/auth\/(oidc|saml)\/start$/,
+      perm: "public",
+      handler: async (c) => {
+        const orgId = firstOrg();
+        if (!orgId) return redirect(c.res, "/");
+        try {
+          const url =
+            c.m[1] === "oidc"
+              ? await sso.oidcStart(orgId, origin(c))
+              : await sso.samlStart(orgId, origin(c));
+          return redirect(c.res, url);
+        } catch (e) {
+          return redirect(
+            c.res,
+            `/?sso_error=${encodeURIComponent(e instanceof AuthError ? e.message : "Single sign-on is unavailable.")}#/`,
+          );
+        }
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/auth\/oidc\/callback$/,
+      perm: "public",
+      handler: async (c) => {
+        try {
+          const err = c.url.searchParams.get("error");
+          if (err)
+            throw new AuthError(
+              400,
+              `Your identity provider refused the sign-in (${err.slice(0, 60)}).`,
+            );
+          const { orgId, identity } = await sso.oidcCallback(
+            c.url.searchParams.get("code") ?? "",
+            c.url.searchParams.get("state") ?? "",
+            origin(c),
+          );
+          return ssoSignIn(c, orgId, identity);
+        } catch (e) {
+          return redirect(
+            c.res,
+            `/?sso_error=${encodeURIComponent(e instanceof AuthError ? e.message : "Single sign-on failed.")}#/`,
+          );
+        }
+      },
+    },
+    {
+      // The identity provider posts the signed SAML response here from its own site.
+      method: "POST",
+      path: /^\/auth\/saml\/acs$/,
+      perm: "public",
+      crossSite: true,
+      handler: async (c) => {
+        const orgId = firstOrg();
+        try {
+          if (!orgId) throw new AuthError(400, "Not set up.");
+          const form = await readForm(c.req);
+          const identity = await sso.samlCallback(orgId, origin(c), form.get("SAMLResponse") ?? "");
+          return ssoSignIn(c, orgId, identity);
+        } catch (e) {
+          return redirect(
+            c.res,
+            `/?sso_error=${encodeURIComponent(e instanceof AuthError ? e.message : "Single sign-on failed.")}#/`,
+          );
+        }
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/auth\/saml\/metadata$/,
+      perm: "public",
+      handler: (c) =>
+        send(
+          c.res,
+          200,
+          sso.samlMetadata(origin(c)),
+          "application/samlmetadata+xml; charset=utf-8",
+        ),
+    },
+    {
+      method: "GET",
+      path: /^\/api\/sso$/,
+      perm: "security.manage",
+      handler: (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const secret = integrations.list(orgId).find((x) => x.name === "OIDC_CLIENT_SECRET");
+        return send(c.res, 200, {
+          config: sso.config(orgId),
+          clientSecret: secret ? { last4: secret.last4 } : null,
+          sp: {
+            oidcRedirect: `${origin(c)}/auth/oidc/callback`,
+            samlAcs: `${origin(c)}/auth/saml/acs`,
+            samlEntityId: `${origin(c)}/auth/saml/metadata`,
+            samlMetadata: `${origin(c)}/auth/saml/metadata`,
+          },
+          roles: org.roles(orgId).map(({ id, name, permissions }) => ({
+            id,
+            name,
+            owner: permissions.includes("org.manage"),
+          })),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/sso$/,
+      perm: "security.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const b = (await body(c)) as { config?: SsoConfig; clientSecret?: string };
+        try {
+          if (b.clientSecret?.trim())
+            integrations.set(orgId, "OIDC_CLIENT_SECRET", b.clientSecret, c.p?.user.id ?? "");
+          if (!b.config) throw new AuthError(400, "Missing settings.");
+          const before = sso.config(orgId);
+          const after = sso.save(orgId, b.config, org.roles(orgId));
+          act(c, "security.sso_changed", undefined, {
+            oidc: after.oidc.enabled,
+            saml: after.saml.enabled,
+            enforce: after.enforce,
+            jit: after.jit,
+            enforceBefore: before.enforce,
+          });
+          return send(c.res, 200, after);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+
     // ── invitations (public: the link is the credential) ──
     {
       method: "GET",
@@ -996,7 +1191,11 @@ export async function startDashboard(opts: DashboardOptions) {
       handler: (c) => {
         const info = org.inviteInfo(c.url.searchParams.get("token") ?? "");
         return info
-          ? send(c.res, 200, { email: info.email, org: info.org })
+          ? send(c.res, 200, {
+              email: info.email,
+              org: info.org,
+              sso: sso.config(firstOrg() ?? "").enforce,
+            })
           : send(c.res, 404, {
               error: "This invitation is invalid or has expired. Ask for a new one.",
             });
@@ -1012,6 +1211,11 @@ export async function startDashboard(opts: DashboardOptions) {
         if (!info)
           return send(c.res, 404, {
             error: "This invitation is invalid or has expired. Ask for a new one.",
+          });
+        if (sso.config(firstOrg() ?? "").enforce)
+          return send(c.res, 400, {
+            error: "Your organisation signs in with single sign-on. Use the SSO button to join.",
+            sso: true,
           });
         try {
           const user = await auth.acceptInvite(
@@ -1875,7 +2079,11 @@ export async function startDashboard(opts: DashboardOptions) {
       // also blocked by SameSite=Strict cookies; this is defence in depth).
       if (req.method !== "GET") {
         const origin = req.headers.origin;
-        if (origin !== undefined && origin !== `http${secure ? "s" : ""}://${host}`)
+        if (
+          !route.crossSite &&
+          origin !== undefined &&
+          origin !== `http${secure ? "s" : ""}://${host}`
+        )
           return send(res, 403, { error: "cross-origin request refused" });
         if ((route.perm === "public" || route.perm === "pending") && auth.rateLimited(ip))
           return send(res, 429, { error: "Too many attempts. Wait a few minutes." });

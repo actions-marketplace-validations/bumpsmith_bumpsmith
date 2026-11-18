@@ -33,7 +33,42 @@ export interface OrgSecurity {
   absoluteHours: number;
 }
 
-export const state = { me: null as Me | null, security: null as OrgSecurity | null };
+export interface SsoState {
+  config: {
+    oidc: {
+      enabled: boolean;
+      label: string;
+      issuer: string;
+      clientId: string;
+      scopes: string;
+      groupsClaim: string;
+    };
+    saml: {
+      enabled: boolean;
+      label: string;
+      entryPoint: string;
+      idpIssuer: string;
+      idpCert: string;
+      emailAttribute: string;
+      nameAttribute: string;
+      groupsAttribute: string;
+    };
+    mapping: { group: string; roleId: string }[];
+    defaultRoleId: string;
+    domains: string[];
+    jit: boolean;
+    enforce: boolean;
+    trustIdpMfa: boolean;
+  };
+  clientSecret: { last4: string } | null;
+  sp: { oidcRedirect: string; samlAcs: string; samlEntityId: string; samlMetadata: string };
+  roles: { id: string; name: string; owner: boolean }[];
+}
+export const state = {
+  me: null as Me | null,
+  security: null as OrgSecurity | null,
+  sso: null as SsoState | null,
+};
 let ctx = { render: () => {}, toast: (_m: string, _bad?: boolean) => {} };
 export const setup = (c: typeof ctx) => {
   ctx = c;
@@ -43,7 +78,115 @@ export async function loadMe() {
   state.me = await api<Me>("/api/me");
 }
 export async function loadSecurity() {
-  state.security = await api<OrgSecurity>("/api/org/security");
+  [state.security, state.sso] = await Promise.all([
+    api<OrgSecurity>("/api/org/security"),
+    api<SsoState>("/api/sso"),
+  ]);
+}
+
+const copyRow = (label: string, value: string) =>
+  `<div class="field"><label>${esc(label)}</label><div class="mfa-key"><code>${esc(value)}</code><button type="button" class="btn icon ghost" data-act="copy-text" data-v="${esc(value)}" aria-label="Copy ${esc(label)}">${icon("copy")}</button></div></div>`;
+const toggle = (id: string, on: boolean, label: string, hint = "") =>
+  `<label class="switch-row"><span><b>${esc(label)}</b>${hint ? `<span class="muted">${esc(hint)}</span>` : ""}</span><input type="checkbox" class="switch" id="${id}" ${on ? "checked" : ""} /></label>`;
+const input = (
+  id: string,
+  label: string,
+  value: string,
+  opts: { placeholder?: string; mono?: boolean; type?: string; hint?: string } = {},
+) =>
+  `<div class="field"><label for="${id}">${esc(label)}</label><input class="input ${opts.mono ? "mono" : ""}" id="${id}" type="${opts.type ?? "text"}" value="${esc(value)}" placeholder="${esc(opts.placeholder ?? "")}" autocomplete="off" spellcheck="false" />${opts.hint ? `<div class="hint">${esc(opts.hint)}</div>` : ""}</div>`;
+
+function ssoSection(): string {
+  const x = state.sso;
+  if (!x) return "";
+  const c = x.config;
+  const roleOpts = (sel: string) =>
+    x.roles
+      .filter((r) => !r.owner)
+      .map(
+        (r) =>
+          `<option value="${esc(r.id)}" ${r.id === sel ? "selected" : ""}>${esc(r.name)}</option>`,
+      )
+      .join("");
+  const mapRows = c.mapping
+    .map(
+      (m, i) =>
+        `<div class="map-r" data-map="${i}"><input class="input mono" data-map-group value="${esc(m.group)}" placeholder="engineering" aria-label="Group" />${icon("arrowR")}<select class="input" data-map-role aria-label="Role">${roleOpts(m.roleId)}</select><button type="button" class="btn icon ghost" data-act="sso-map-remove" data-v="${i}" aria-label="Remove mapping">${icon("x")}</button></div>`,
+    )
+    .join("");
+  return `<h2 class="sec-h">Single sign-on</h2>
+    <div class="grid g-1-1">
+      <div class="panel"><div class="panel-h"><h2>OIDC</h2><span class="sub">Okta, Microsoft Entra ID, Google Workspace, Auth0, Keycloak</span><div class="r">${c.oidc.enabled ? `<span class="badge ok"><span class="dot ok"></span>on</span>` : `<span class="badge">off</span>`}</div></div>
+        <div class="panel-b form">
+          ${toggle("oidc-on", c.oidc.enabled, "Allow OIDC sign-in")}
+          ${input("oidc-issuer", "Issuer URL", c.oidc.issuer, { placeholder: "https://acme.okta.com", mono: true })}
+          ${input("oidc-client", "Client ID", c.oidc.clientId, { mono: true })}
+          ${input("oidc-secret", "Client secret", "", { type: "password", mono: true, placeholder: x.clientSecret ? `saved, ends in ${x.clientSecret.last4}` : "", hint: "Stored encrypted. Leave empty to keep the saved one." })}
+          ${input("oidc-label", "Button label", c.oidc.label, { placeholder: "Okta" })}
+          ${input("oidc-groups", "Groups claim", c.oidc.groupsClaim, { mono: true, hint: "The ID-token claim that lists the person's groups." })}
+          ${copyRow("Redirect URI (give this to your identity provider)", x.sp.oidcRedirect)}
+        </div></div>
+      <div class="panel"><div class="panel-h"><h2>SAML 2.0</h2><span class="sub">any SAML identity provider</span><div class="r">${c.saml.enabled ? `<span class="badge ok"><span class="dot ok"></span>on</span>` : `<span class="badge">off</span>`}</div></div>
+        <div class="panel-b form">
+          ${toggle("saml-on", c.saml.enabled, "Allow SAML sign-in")}
+          ${input("saml-entry", "Identity provider sign-in URL", c.saml.entryPoint, { placeholder: "https://idp.acme.dev/sso/saml", mono: true })}
+          ${input("saml-issuer", "Identity provider entity ID (optional)", c.saml.idpIssuer, { mono: true })}
+          <div class="field"><label for="saml-cert">Signing certificate</label><textarea class="input mono area" id="saml-cert" rows="4" placeholder="-----BEGIN CERTIFICATE-----" spellcheck="false">${esc(c.saml.idpCert)}</textarea><div class="hint">Assertions must be signed with this certificate.</div></div>
+          ${input("saml-label", "Button label", c.saml.label, { placeholder: "Company SSO" })}
+          <div class="field-3">${input("saml-email", "Email attribute", c.saml.emailAttribute, { mono: true })}${input("saml-name", "Name attribute", c.saml.nameAttribute, { mono: true })}${input("saml-groups", "Groups attribute", c.saml.groupsAttribute, { mono: true })}</div>
+          ${copyRow("ACS URL", x.sp.samlAcs)}${copyRow("Entity ID / metadata", x.sp.samlEntityId)}
+        </div></div>
+    </div>
+    <div class="panel mt"><div class="panel-h"><h2>Accounts and roles</h2><span class="sub">what happens when someone signs in with SSO</span></div>
+      <div class="panel-b form">
+        ${toggle("sso-jit", c.jit, "Create accounts on first sign-in", "Otherwise people must be invited first.")}
+        <div class="field"><label for="sso-default">Role for new accounts</label><select class="input" id="sso-default">${roleOpts(c.defaultRoleId)}</select><div class="hint">When none of their groups is mapped below. SSO never gives the Owner role.</div></div>
+        ${input("sso-domains", "Allowed email domains", c.domains.join(", "), { placeholder: "acme.dev, acme.io", hint: "Comma-separated. Empty allows any domain your identity provider sends." })}
+        <div class="field"><label>Group to role</label><div class="hint" style="margin:0 0 8px">First match wins. Roles follow the groups at every sign-in (Owners are never changed).</div>
+          <div class="map">${mapRows || `<p class="empty-line">${icon("users")}No mappings: everyone gets the role above.</p>`}</div>
+          <div class="row-a" style="margin-top:8px"><button type="button" class="btn sm" data-act="sso-map-add">${icon("plus")}Add mapping</button></div></div>
+        ${toggle("sso-trust", c.trustIdpMfa, "Trust the identity provider's MFA", "People signing in with SSO do not also need an authenticator app here.")}
+        ${toggle("sso-enforce", c.enforce, "Require SSO", "Password sign-in stays available to Owners only, as a break-glass account.")}
+      </div>
+      <div class="panel-f"><div class="grow"></div><button class="btn primary" data-act="sso-save">Save single sign-on</button></div></div>`;
+}
+
+function readSso(): SsoState["config"] | null {
+  const x = state.sso;
+  if (!x) return null;
+  const v = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value ?? "";
+  const on = (id: string) => !!(document.getElementById(id) as HTMLInputElement | null)?.checked;
+  return {
+    oidc: {
+      enabled: on("oidc-on"),
+      label: v("oidc-label"),
+      issuer: v("oidc-issuer"),
+      clientId: v("oidc-client"),
+      scopes: x.config.oidc.scopes,
+      groupsClaim: v("oidc-groups"),
+    },
+    saml: {
+      enabled: on("saml-on"),
+      label: v("saml-label"),
+      entryPoint: v("saml-entry"),
+      idpIssuer: v("saml-issuer"),
+      idpCert: v("saml-cert"),
+      emailAttribute: v("saml-email"),
+      nameAttribute: v("saml-name"),
+      groupsAttribute: v("saml-groups"),
+    },
+    mapping: [...document.querySelectorAll<HTMLElement>("[data-map]")].map((r) => ({
+      group: (r.querySelector("[data-map-group]") as HTMLInputElement).value,
+      roleId: (r.querySelector("[data-map-role]") as HTMLSelectElement).value,
+    })),
+    defaultRoleId: v("sso-default"),
+    domains: v("sso-domains")
+      .split(/[,\s]+/)
+      .filter(Boolean),
+    jit: on("sso-jit"),
+    enforce: on("sso-enforce"),
+    trustIdpMfa: on("sso-trust"),
+  };
 }
 
 /** "Chrome on macOS" from a user-agent string; good enough to recognise your own devices. */
@@ -207,6 +350,7 @@ export function securityPage(): string {
           <dt>Audit</dt><dd>hash-chained, tamper-evident log of sign-ins and changes</dd>
         </dl></div></div>
     </div>
+    ${ssoSection()}
   </div>`;
 }
 
@@ -379,6 +523,50 @@ export async function accountAction(act: string, t: HTMLElement): Promise<boolea
           t.dataset.v ?? "";
       ctx.render();
       return true;
+    case "sso-map-add": {
+      const cfg = readSso();
+      if (cfg && state.sso) {
+        cfg.mapping.push({
+          group: "",
+          roleId:
+            state.sso.roles.find((r) => !r.owner && /viewer/i.test(r.name))?.id ??
+            cfg.defaultRoleId,
+        });
+        state.sso.config = cfg;
+      }
+      ctx.render();
+      return true;
+    }
+    case "sso-map-remove": {
+      const cfg = readSso();
+      if (cfg && state.sso) {
+        cfg.mapping.splice(Number(t.dataset.v), 1);
+        state.sso.config = cfg;
+      }
+      ctx.render();
+      return true;
+    }
+    case "sso-save": {
+      const cfg = readSso();
+      if (!cfg || !state.sso) return true;
+      state.sso.config = cfg;
+      const secret =
+        (document.getElementById("oidc-secret") as HTMLInputElement | null)?.value ?? "";
+      if (
+        cfg.enforce &&
+        !(await confirmDialog(
+          "Require single sign-on?",
+          "Everyone except Owners will have to sign in through your identity provider. Make sure an SSO sign-in works first.",
+          "Require SSO",
+        ))
+      )
+        return true;
+      await run(async () => {
+        await post("/api/sso", { config: cfg, clientSecret: secret });
+        await loadSecurity();
+      }, "Single sign-on saved");
+      return true;
+    }
     case "sec-save":
       await run(async () => {
         if (!state.security) return;

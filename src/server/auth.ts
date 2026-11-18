@@ -51,6 +51,8 @@ export interface Session {
   expires_at: string;
   auth_at: string;
   mfa_pending: number;
+  /** "password" or "sso". */
+  method?: string;
 }
 export interface Principal {
   session: Session;
@@ -367,7 +369,13 @@ export class Auth {
   }
 
   /** A new session (rotated on every sign-in). Returns the raw token for the cookie. */
-  createSession(user: User, ip: string, userAgent: string, mfaPending = false) {
+  createSession(
+    user: User,
+    ip: string,
+    userAgent: string,
+    mfaPending = false,
+    method: "password" | "sso" = "password",
+  ) {
     const token = newToken();
     const csrf = newToken();
     const t = now();
@@ -376,7 +384,7 @@ export class Auth {
     ).toISOString();
     this.db
       .prepare(
-        "INSERT INTO sessions (id_hash, user_id, org_id, csrf, created_at, last_seen_at, expires_at, auth_at, mfa_pending, ip, user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO sessions (id_hash, user_id, org_id, csrf, created_at, last_seen_at, expires_at, auth_at, mfa_pending, ip, user_agent, method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
       )
       .run(
         sha256(token),
@@ -390,15 +398,19 @@ export class Auth {
         mfaPending ? 1 : 0,
         ip,
         userAgent.slice(0, 300),
+        method,
       );
-    if (!mfaPending)
+    if (!mfaPending) {
+      this.db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(t, user.id);
       audit(this.db, {
         orgId: user.org_id,
         actorId: user.id,
         actor: user.email,
         action: "auth.login",
         ip,
+        detail: method === "sso" ? { via: "sso" } : undefined,
       });
+    }
     return { token, csrf };
   }
 
@@ -455,7 +467,14 @@ export class Auth {
       user,
       role: { id: role.id, name: role.name },
       permissions,
-      mustEnrollMfa: needs && !u.mfa_enabled,
+      // A sign-in through the organisation's identity provider carries its MFA, if trusted.
+      mustEnrollMfa:
+        needs &&
+        !u.mfa_enabled &&
+        !(
+          s.method === "sso" &&
+          (this.extra(u.org_id).sso as { trustIdpMfa?: boolean } | undefined)?.trustIdpMfa !== false
+        ),
     };
   }
 

@@ -65,6 +65,7 @@ const SECRET_NAMES = new Set<string>([
   ...KEY_PROVIDERS.map((p) => p.env),
   "GITHUB_TOKEN",
   "GITHUB_APP",
+  "OIDC_CLIENT_SECRET",
 ]);
 
 export interface GithubApp {
