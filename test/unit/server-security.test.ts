@@ -54,7 +54,7 @@ describe("crypto", () => {
     expect(() => decrypt(Buffer.alloc(32, 8), box, "secret:org_1:ANTHROPIC_API_KEY")).toThrow();
   });
 
-  it("hashes passwords with scrypt and a per-password salt", async () => {
+  it("hashes passwords with scrypt and a per-password salt", { timeout: 20_000 }, async () => {
     const a = await hashPassword("Tidal-Lantern-Quartz-42");
     const b = await hashPassword("Tidal-Lantern-Quartz-42");
     expect(a).toMatch(/^scrypt\$131072\$8\$1\$/);
@@ -107,7 +107,7 @@ describe("audit log", () => {
 });
 
 describe("sessions", () => {
-  it("expire after inactivity and at the absolute limit", async () => {
+  it("expire after inactivity and at the absolute limit", { timeout: 20_000 }, async () => {
     const db = openDb(await mkdtemp(join(tmpdir(), "bs-sess-")));
     const auth = new Auth(db, { idleMinutes: 30, absoluteHours: 12 });
     const user = await auth.setupOwner({

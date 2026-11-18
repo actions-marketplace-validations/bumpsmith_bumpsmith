@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { stageOf, startDashboard, summarise } from "../../src/dashboard/server.ts";
@@ -134,7 +134,8 @@ describe("dashboard data", () => {
   });
 });
 
-describe("dashboard server", () => {
+// Password hashing is deliberately slow (scrypt), and these tests sign in several times.
+describe("dashboard server", { timeout: 30_000 }, () => {
   let base = "";
   let port = 0;
   let close: () => Promise<void> = async () => {};
@@ -147,6 +148,9 @@ describe("dashboard server", () => {
   let mfaSecret = "";
   let recovery: string[] = [];
   let dataDir = "";
+  /** API prefix of the test repository, e.g. /api/w/bumpsmith-dash-abc123. */
+  let W = "";
+  let sam: Record<string, string> = {};
   /** A TOTP code for `offset` 30-second steps from now. */
   const code = (offset = 0) =>
     hotp(base32Decode(mfaSecret), Math.floor(Date.now() / 30_000) + offset);
@@ -182,6 +186,11 @@ describe("dashboard server", () => {
     setupUrl = d.setupUrl ?? "";
     routes = d.routes;
     dataDir = d.dataDir;
+    W = `/api/w/${basename(repo)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40)}`;
   });
   afterAll(() => close());
 
@@ -229,7 +238,7 @@ describe("dashboard server", () => {
   });
 
   it("makes an admin set up two-factor authentication before anything else", async () => {
-    const blocked = await fetch(`${base}/api/state`, { headers: h });
+    const blocked = await fetch(`${base}${W}/state`, { headers: h });
     expect(blocked.status).toBe(403);
     expect(await blocked.json()).toMatchObject({ mfaEnrollmentRequired: true });
     const start = (await (await post("/api/me/mfa/start", {}, h)).json()) as {
@@ -243,7 +252,7 @@ describe("dashboard server", () => {
     expect(done.status).toBe(200);
     recovery = ((await done.json()) as { recoveryCodes: string[] }).recoveryCodes;
     expect(recovery).toHaveLength(10);
-    expect((await fetch(`${base}/api/state`, { headers: h })).status).toBe(200);
+    expect((await fetch(`${base}${W}/state`, { headers: h })).status).toBe(200);
   });
 
   it("asks for the code at sign-in and refuses a replayed code", async () => {
@@ -251,7 +260,7 @@ describe("dashboard server", () => {
     expect(await pw.clone().json()).toEqual({ mfaRequired: true });
     const pending = (pw.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
     // Half signed in: nothing works yet.
-    expect((await fetch(`${base}/api/state`, { headers: { cookie: pending } })).status).toBe(401);
+    expect((await fetch(`${base}${W}/state`, { headers: { cookie: pending } })).status).toBe(401);
     expect((await post("/auth/mfa", { code: "123456" }, { cookie: pending })).status).toBe(400);
     const c = code(1);
     const ok = await post("/auth/mfa", { code: c }, { cookie: pending });
@@ -272,12 +281,12 @@ describe("dashboard server", () => {
 
   it("asks you to confirm it's you before sensitive actions", async () => {
     staleSession();
-    const r = await post(`/api/runs/20261118000000-abc123/apply`, {}, h);
+    const r = await post(`${W}/runs/20261118000000-abc123/apply`, {}, h);
     expect(r.status).toBe(403);
     expect(await r.json()).toMatchObject({ reauth: true });
     expect((await post("/api/me/reauth", { code: "000000" }, h)).status).toBe(400);
     expect((await post("/api/me/reauth", { code: recovery[1] }, h)).status).toBe(200);
-    expect((await post(`/api/runs/20261118000000-abc123/apply`, {}, h)).status).toBe(409); // got through to git
+    expect((await post(`${W}/runs/20261118000000-abc123/apply`, {}, h)).status).toBe(409); // got through to git
   });
 
   it("issues scoped API tokens that cannot change accounts or apply patches", async () => {
@@ -289,21 +298,21 @@ describe("dashboard server", () => {
     const { token, id } = (await r.json()) as { token: string; id: string };
     expect(token).toMatch(/^bs_pat_/);
     const bearer = { authorization: `Bearer ${token}` };
-    expect((await fetch(`${base}/api/state`, { headers: bearer })).status).toBe(200);
-    expect((await post(`/api/runs/20261118000000-abc123/apply`, {}, bearer)).status).toBe(403);
-    expect((await post("/api/runs", { package: "zod", version: "4.1.0" }, bearer)).status).toBe(
+    expect((await fetch(`${base}${W}/state`, { headers: bearer })).status).toBe(200);
+    expect((await post(`${W}/runs/20261118000000-abc123/apply`, {}, bearer)).status).toBe(403);
+    expect((await post(`${W}/runs`, { package: "zod", version: "4.1.0" }, bearer)).status).toBe(
       403,
     );
     expect((await fetch(`${base}/api/me`, { headers: bearer })).status).toBe(403);
     expect(
       (
-        await fetch(`${base}/api/state`, {
+        await fetch(`${base}${W}/state`, {
           headers: { authorization: "Bearer bs_pat_nope-nope-nope-nope-nope" },
         })
       ).status,
     ).toBe(401);
     expect((await post(`/api/me/tokens/${id}/revoke`, {}, h)).status).toBe(200);
-    expect((await fetch(`${base}/api/state`, { headers: bearer })).status).toBe(401);
+    expect((await fetch(`${base}${W}/state`, { headers: bearer })).status).toBe(401);
   });
 
   it("lets a security admin tighten the session policy", async () => {
@@ -358,37 +367,45 @@ describe("dashboard server", () => {
         .filter((r) => r.perm === "public")
         .map((r) => r.path)
         .sort(),
-    ).toEqual(["/^\\/auth\\/login$/", "/^\\/auth\\/session$/", "/^\\/auth\\/setup$/"].sort());
+    ).toEqual(
+      [
+        "/^\\/auth\\/invite$/",
+        "/^\\/auth\\/invite$/",
+        "/^\\/auth\\/login$/",
+        "/^\\/auth\\/session$/",
+        "/^\\/auth\\/setup$/",
+      ].sort(),
+    );
   });
 
   it("refuses API calls without a session, without CSRF, cross-origin, or with a foreign Host", async () => {
-    expect((await fetch(`${base}/api/state`)).status).toBe(401);
-    expect(await raw("/api/state", { host: `evil.example:${port}`, cookie: h.cookie ?? "" })).toBe(
+    expect((await fetch(`${base}${W}/state`)).status).toBe(401);
+    expect(await raw(`${W}/state`, { host: `evil.example:${port}`, cookie: h.cookie ?? "" })).toBe(
       421,
     );
     expect(await raw("/", { host: "evil.example" })).toBe(421);
-    const apply = `/api/runs/20261118000000-abc123/apply`;
+    const apply = `${W}/runs/20261118000000-abc123/apply`;
     expect((await post(apply, {}, { cookie: h.cookie ?? "" })).status).toBe(403);
     expect((await post(apply, {}, { ...h, origin: "https://evil.example" })).status).toBe(403);
   });
 
   it("lists runs and serves one, but never paths outside the runs directory", async () => {
-    const state = (await (await fetch(`${base}/api/state`, { headers: h })).json()) as {
+    const state = (await (await fetch(`${base}${W}/state`, { headers: h })).json()) as {
       runs: { id: string; agent_lines: number }[];
       repo: { dependencies: Record<string, string> };
     };
     expect(state.runs.map((r) => r.id)).toEqual(["20261118000000-abc123"]);
     expect(state.repo.dependencies.zod).toBe("^3.23.8");
-    expect((await fetch(`${base}/api/runs/20261118000000-abc123`, { headers: h })).status).toBe(
+    expect((await fetch(`${base}${W}/runs/20261118000000-abc123`, { headers: h })).status).toBe(
       200,
     );
-    expect((await fetch(`${base}/api/runs/..%2F..%2Fetc`, { headers: h })).status).toBe(404);
-    expect((await fetch(`${base}/api/runs/nope`, { headers: h })).status).toBe(404);
+    expect((await fetch(`${base}${W}/runs/..%2F..%2Fetc`, { headers: h })).status).toBe(404);
+    expect((await fetch(`${base}${W}/runs/nope`, { headers: h })).status).toBe(404);
   });
 
   it("serves a run's stored full file for context, and nothing outside it", async () => {
     const file = (q: string, headers = h) =>
-      fetch(`${base}/api/runs/20261118000000-abc123/file?${q}`, { headers });
+      fetch(`${base}${W}/runs/20261118000000-abc123/file?${q}`, { headers });
     const ok = await file("side=after&path=src/a.ts");
     expect(ok.status).toBe(200);
     expect(((await ok.json()) as { text: string }).text).toBe("export const a = 1;\n");
@@ -402,13 +419,13 @@ describe("dashboard server", () => {
   });
 
   it("explains a patch that does not apply instead of half-applying it", async () => {
-    const r = await post(`/api/runs/20261118000000-abc123/apply`, {}, h);
+    const r = await post(`${W}/runs/20261118000000-abc123/apply`, {}, h);
     expect(r.status).toBe(409);
     expect(((await r.json()) as { error: string }).error).toMatch(/does not apply/);
   });
 
   it("validates upgrade requests before starting anything", async () => {
-    const r = await post("/api/runs", { package: "zod; rm -rf /", version: "4.1.0" }, h);
+    const r = await post(`${W}/runs`, { package: "zod; rm -rf /", version: "4.1.0" }, h);
     expect(r.status).toBe(400);
   });
 
@@ -442,8 +459,140 @@ describe("dashboard server", () => {
     );
   });
 
+  it("invites a member, who joins with a password and gets only their role", async () => {
+    expect((await post("/api/org/security", { mfa: "admins" }, h)).status).toBe(200);
+    const mem = (await (await fetch(`${base}/api/members`, { headers: h })).json()) as {
+      roles: { id: string; name: string }[];
+    };
+    const roles = Object.fromEntries(mem.roles.map((r) => [r.name, r.id]));
+    const inv = await post(
+      "/api/members/invite",
+      { email: "sam@acme.dev", roleId: roles.Viewer },
+      h,
+    );
+    expect(inv.status).toBe(200);
+    expect(
+      (await post("/api/members/invite", { email: "sam@acme.dev", roleId: roles.Viewer }, h))
+        .status,
+    ).toBe(409);
+    const token = ((await inv.json()) as { link: string }).link.split("#/invite/")[1] ?? "";
+    expect(await (await fetch(`${base}/auth/invite?token=${token}`)).json()).toEqual({
+      email: "sam@acme.dev",
+      org: "Acme",
+    });
+    expect(
+      (await post("/auth/invite", { token, name: "Sam Patel", password: "password1234" })).status,
+    ).toBe(400);
+    const joined = await post("/auth/invite", {
+      token,
+      name: "Sam Patel",
+      password: "Copper-Harbour-Lantern-7",
+    });
+    expect(joined.status).toBe(200);
+    sam = await signedIn(joined);
+    expect(
+      (await post("/auth/invite", { token, name: "X", password: "Copper-Harbour-Lantern-7" }))
+        .status,
+    ).toBe(404);
+    expect((await fetch(`${base}${W}/state`, { headers: sam })).status).toBe(200);
+    expect((await post(`${W}/runs/20261118000000-abc123/apply`, {}, sam)).status).toBe(403);
+    expect(
+      (await post("/api/members/invite", { email: "x@acme.dev", roleId: roles.Viewer }, sam))
+        .status,
+    ).toBe(403);
+    expect((await fetch(`${base}/api/access`, { headers: sam })).status).toBe(403);
+    expect(
+      (await post("/api/roles", { name: "Mine", description: "", permissions: ["runs.view"] }, sam))
+        .status,
+    ).toBe(403);
+  });
+
+  it("hides restricted repositories until access is granted, and grants only what is held", async () => {
+    const slug = W.split("/").pop();
+    expect(
+      (await post("/api/access/visibility", { workspace: slug, visibility: "restricted" }, h))
+        .status,
+    ).toBe(200);
+    expect((await fetch(`${base}${W}/state`, { headers: sam })).status).toBe(404);
+    expect(
+      (
+        await fetch(`${base}${W}/runs/20261118000000-abc123/file?side=after&path=src/a.ts`, {
+          headers: sam,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        (await (await fetch(`${base}/api/workspaces`, { headers: sam })).json()) as {
+          workspaces: unknown[];
+        }
+      ).workspaces,
+    ).toEqual([]);
+    expect(
+      (await post("/api/roles", { name: "Bad", description: "", permissions: ["org.manage"] }, h))
+        .status,
+    ).toBe(400);
+    const role = await post(
+      "/api/roles",
+      {
+        name: "Release manager",
+        description: "",
+        permissions: ["runs.view", "runs.apply", "workspaces.view"],
+      },
+      h,
+    );
+    const roleId = ((await role.json()) as { id: string }).id;
+    const access = (await (await fetch(`${base}/api/access`, { headers: h })).json()) as {
+      members: { id: string; email: string }[];
+    };
+    const samId = access.members.find((m) => m.email === "sam@acme.dev")?.id ?? "";
+    expect(
+      (
+        await post(
+          "/api/access/grant",
+          { workspace: slug, principalType: "user", principalId: samId, roleId },
+          h,
+        )
+      ).status,
+    ).toBe(200);
+    expect((await post(`${W}/runs/20261118000000-abc123/apply`, {}, sam)).status).toBe(409); // allowed: reaches git
+    expect((await post(`${W}/runs/20261118000000-abc123/delete`, {}, sam)).status).toBe(403); // not granted
+    const check = (await (
+      await fetch(`${base}/api/access/check?user=${samId}`, { headers: h })
+    ).json()) as { repositories: { why: string[] }[] };
+    expect(check.repositories[0]?.why).toEqual(["Granted Release manager directly"]);
+    expect((await post(`/api/roles/${roleId}/delete`, {}, h)).status).toBe(409); // still granted
+  });
+
+  it("refuses self-service escalation and ends a deactivated member's sessions", async () => {
+    const me = (await (await fetch(`${base}/api/members`, { headers: h })).json()) as {
+      me: string;
+      members: { id: string; email: string }[];
+      roles: { id: string; name: string }[];
+    };
+    const viewer = me.roles.find((r) => r.name === "Viewer")?.id;
+    expect((await post(`/api/members/${me.me}/role`, { roleId: viewer }, h)).status).toBe(403); // not your own role
+    const samId = me.members.find((m) => m.email === "sam@acme.dev")?.id ?? "";
+    expect((await post(`/api/members/${samId}/deactivate`, {}, h)).status).toBe(200);
+    expect((await fetch(`${base}/api/workspaces`, { headers: sam })).status).toBe(401);
+  });
+
+  it("records people and access changes in the audit log", async () => {
+    const a = (await (await fetch(`${base}/api/audit?cat=access`, { headers: h })).json()) as {
+      rows: { action: string }[];
+      chain: { ok: boolean };
+    };
+    expect(a.rows.map((r) => r.action)).toEqual(
+      expect.arrayContaining(["access.granted", "access.visibility_changed"]),
+    );
+    expect(a.chain.ok).toBe(true);
+    const csv = await fetch(`${base}/api/audit/export`, { headers: h });
+    expect(csv.headers.get("content-type")).toMatch(/text\/csv/);
+    expect(await csv.text()).toMatch(/^seq,time,actor,action/);
+  });
+
   it("ends the session on sign-out", async () => {
     expect((await post("/auth/logout", {}, h)).status).toBe(200);
-    expect((await fetch(`${base}/api/state`, { headers: h })).status).toBe(401);
+    expect((await fetch(`${base}${W}/state`, { headers: h })).status).toBe(401);
   });
 });

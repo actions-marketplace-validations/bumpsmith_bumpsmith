@@ -23,6 +23,7 @@ import {
 } from "../server/auth.ts";
 import { loadMasterKey, safeEqual, verifyPassword } from "../server/crypto.ts";
 import { openDb } from "../server/db.ts";
+import { Org, type Workspace, WS_PERMS } from "../server/org.ts";
 import { can, PERMISSIONS, type Permission } from "../server/rbac.ts";
 import { run } from "../util/proc.ts";
 
@@ -166,6 +167,9 @@ async function readRun(runsDir: string, id: string) {
   return { job, patch, evidence };
 }
 
+/** Summaries keyed by run directory, re-read only when job.json or patch.diff changes. */
+const summaryCache = new Map<string, { key: string; summary: RunSummary }>();
+
 export async function listRuns(runsDir: string): Promise<RunSummary[]> {
   let ids: string[] = [];
   try {
@@ -173,16 +177,29 @@ export async function listRuns(runsDir: string): Promise<RunSummary[]> {
   } catch {
     return [];
   }
-  const out: RunSummary[] = [];
-  for (const id of ids) {
-    try {
-      const { job, patch } = await readRun(runsDir, id);
-      out.push(summarise(job, patch));
-    } catch {
-      // not a finished run (or unreadable): skip it
-    }
-  }
-  return out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const out = await Promise.all(
+    ids.map(async (id) => {
+      const dir = join(runsDir, id);
+      try {
+        const [j, p] = await Promise.all([
+          stat(join(dir, "job.json")),
+          stat(join(dir, "patch.diff")).catch(() => null),
+        ]);
+        const key = `${j.mtimeMs}:${j.size}:${p?.mtimeMs ?? 0}:${p?.size ?? 0}`;
+        const hit = summaryCache.get(dir);
+        if (hit?.key === key) return hit.summary;
+        const { job, patch } = await readRun(runsDir, id);
+        const summary = summarise(job, patch);
+        summaryCache.set(dir, { key, summary });
+        return summary;
+      } catch {
+        return null; // not a finished run (or unreadable): skip it
+      }
+    }),
+  );
+  return out
+    .filter((x): x is RunSummary => x !== null)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 const git = async (dir: string, args: string[]) => {
@@ -207,18 +224,48 @@ const onPath = async (cmd: string) =>
   (await run("sh", ["-c", `command -v ${cmd}`], { timeoutMs: 3000 }).catch(() => null))
     ?.exitCode === 0;
 
-async function environment() {
-  const docker = await run("docker", ["info", "--format", "{{.ServerVersion}}"], {
-    timeoutMs: 5000,
-  }).catch(() => null);
+type Env = Awaited<ReturnType<typeof checkEnvironment>>;
+let envCache: { at: number; value: Env | null; pending: Promise<Env> | null } = {
+  at: 0,
+  value: null,
+  pending: null,
+};
+
+/**
+ * Docker and model-tool status. Checking Docker takes seconds, so requests get the last
+ * result at once and a fresh check runs in the background when it is over a minute old.
+ */
+async function environment(): Promise<Env> {
+  const stale = Date.now() - envCache.at > 60_000;
+  if (stale && !envCache.pending)
+    envCache.pending = checkEnvironment()
+      .then((v) => {
+        envCache = { at: Date.now(), value: v, pending: null };
+        return v;
+      })
+      .catch((e) => {
+        envCache.pending = null;
+        throw e;
+      });
+  return envCache.value ?? (envCache.pending as Promise<Env>);
+}
+
+async function checkEnvironment() {
+  const [docker, claude, codex] = await Promise.all([
+    run("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 5000 }).catch(
+      () => null,
+    ),
+    onPath("claude"),
+    onPath("codex"),
+  ]);
   const providers = [
     {
       id: "claude-code",
       label: "Claude Code",
       detail: "your subscription",
-      ok: await onPath("claude"),
+      ok: claude,
     },
-    { id: "codex", label: "Codex", detail: "your ChatGPT plan", ok: await onPath("codex") },
+    { id: "codex", label: "Codex", detail: "your ChatGPT plan", ok: codex },
     {
       id: "anthropic-api",
       label: "Anthropic API",
@@ -243,6 +290,8 @@ async function environment() {
 
 interface LiveRun {
   id: string;
+  /** The repository (workspace) it runs in. */
+  ws: string;
   package: string;
   version: string;
   provider: string;
@@ -320,6 +369,16 @@ export async function startDashboard(opts: DashboardOptions) {
   const db = openDb(dataDir);
   const masterKey = await loadMasterKey(join(dataDir, "master.key"));
   const auth = new Auth(db, DEFAULT_POLICY, masterKey);
+  const org = new Org(db);
+  /** The repository this dashboard was started in becomes the organisation's first one. */
+  const ensureLocalWorkspace = () => {
+    const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get() as
+      | { id: string }
+      | undefined;
+    if (o) org.ensureLocal(o.id, repoDir, runsDir, null);
+  };
+  ensureLocalWorkspace();
+  void environment().catch(() => {}); // warm: Docker takes seconds to answer
   const secure = !!opts.secureCookies;
   const setupToken = auth.needsSetup() ? auth.issueSetupToken() : null;
   const live = new Map<string, LiveRun>();
@@ -372,16 +431,23 @@ export async function startDashboard(opts: DashboardOptions) {
       });
     });
 
-  const cli = (args: string[]) =>
+  const cli = (args: string[], cwd: string) =>
     spawn(process.execPath, [...process.execArgv, opts.cliEntry, ...args], {
-      cwd: repoDir,
+      cwd,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-  const startRun = (pkg: string, version: string, provider: string, budget: number): LiveRun => {
+  const startRun = (
+    w: Workspace,
+    pkg: string,
+    version: string,
+    provider: string,
+    budget: number,
+  ): LiveRun => {
     const lr: LiveRun = {
       id: randomBytes(6).toString("hex"),
+      ws: w.id,
       package: pkg,
       version,
       provider,
@@ -394,16 +460,19 @@ export async function startDashboard(opts: DashboardOptions) {
       listeners: new Set(),
     };
     live.set(lr.id, lr);
-    const child = cli([
-      "fix",
-      `${pkg}@${version}`,
-      "--repo",
-      repoDir,
-      "--provider",
-      provider,
-      "--budget",
-      String(budget),
-    ]);
+    const child = cli(
+      [
+        "fix",
+        `${pkg}@${version}`,
+        "--repo",
+        w.path,
+        "--provider",
+        provider,
+        "--budget",
+        String(budget),
+      ],
+      w.path,
+    );
     const emit = (event: string, data: unknown) => {
       for (const l of lr.listeners) l.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
@@ -445,6 +514,10 @@ export async function startDashboard(opts: DashboardOptions) {
     p: Principal | null;
     ip: string;
     token: string | undefined;
+    /** The repository, for routes under /api/w/<slug>/. */
+    w?: Workspace;
+    /** What the user may do in that repository. */
+    wsPerms: string[];
   };
   interface Route {
     method: "GET" | "POST";
@@ -461,6 +534,8 @@ export async function startDashboard(opts: DashboardOptions) {
     enroll?: boolean;
     /** Account routes: never usable with a personal API token. */
     noToken?: boolean;
+    /** The first capture is a repository slug; permission is checked inside that repository. */
+    ws?: boolean;
     handler: (c: Ctx) => Promise<void> | void;
   }
 
@@ -488,6 +563,47 @@ export async function startDashboard(opts: DashboardOptions) {
     return send(c.res, 200, sessionPayload(p), undefined, { "set-cookie": cookieFor(s.token) });
   };
   const mfaFailures = new Map<string, number>();
+  const origin = (c: Ctx) =>
+    `http${secure ? "s" : ""}://${c.req.headers.host ?? `127.0.0.1:${port}`}`;
+  const CATEGORIES: Record<string, string> = {
+    auth: "auth.%",
+    people: "member.%",
+    access: "access.%",
+    roles: "role.%",
+    runs: "run.%",
+    security: "security.%",
+  };
+  const auditRows = (orgId: string, q: string, cat: string, before: number, limit: number) => {
+    const where = ["(org_id = ? OR org_id IS NULL)"];
+    const args: (string | number)[] = [orgId];
+    if (before > 0) {
+      where.push("seq < ?");
+      args.push(before);
+    }
+    if (CATEGORIES[cat]) {
+      where.push("action LIKE ?");
+      args.push(CATEGORIES[cat] as string);
+    }
+    if (q.trim()) {
+      where.push("(actor LIKE ? OR action LIKE ? OR target LIKE ? OR ip LIKE ?)");
+      const like = `%${q.trim().slice(0, 80)}%`;
+      args.push(like, like, like, like);
+    }
+    return db
+      .prepare(
+        `SELECT seq, at, actor, action, target, ip, detail, hash FROM audit WHERE ${where.join(" AND ")} ORDER BY seq DESC LIMIT ?`,
+      )
+      .all(...args, Math.max(1, limit)) as unknown as {
+      seq: number;
+      at: string;
+      actor: string;
+      action: string;
+      target: string | null;
+      ip: string | null;
+      detail: string;
+      hash: string;
+    }[];
+  };
   const body = async (c: Ctx) => readBody(c.req);
   const authErr = (c: Ctx, e: unknown) => {
     if (e instanceof AuthError) return send(c.res, e.status, { error: e.message });
@@ -531,6 +647,7 @@ export async function startDashboard(opts: DashboardOptions) {
             password: String(b.password ?? ""),
             ip: c.ip,
           });
+          ensureLocalWorkspace();
           return signIn(c, user);
         } catch (e) {
           return authErr(c, e);
@@ -851,45 +968,395 @@ export async function startDashboard(opts: DashboardOptions) {
       handler: (c) => send(c.res, 200, verifyAudit(db)),
     },
 
+    // ── invitations (public: the link is the credential) ──
+    {
+      method: "GET",
+      path: /^\/auth\/invite$/,
+      perm: "public",
+      handler: (c) => {
+        const info = org.inviteInfo(c.url.searchParams.get("token") ?? "");
+        return info
+          ? send(c.res, 200, { email: info.email, org: info.org })
+          : send(c.res, 404, {
+              error: "This invitation is invalid or has expired. Ask for a new one.",
+            });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/invite$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await body(c);
+        const info = org.inviteInfo(String(b.token ?? ""));
+        if (!info)
+          return send(c.res, 404, {
+            error: "This invitation is invalid or has expired. Ask for a new one.",
+          });
+        try {
+          const user = await auth.acceptInvite(
+            info.id,
+            String(b.name ?? ""),
+            String(b.password ?? ""),
+            c.ip,
+          );
+          org.removeInvite(user.id);
+          return signIn(c, user);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+
+    // ── repositories ──
+    {
+      method: "GET",
+      path: /^\/api\/workspaces$/,
+      perm: "session",
+      handler: async (c) => {
+        const p = c.p as Principal;
+        const list = org.visible(p);
+        return send(c.res, 200, {
+          workspaces: await Promise.all(
+            list.map(async ({ w, e }) => ({
+              slug: w.slug,
+              name: w.name,
+              kind: w.kind,
+              visibility: w.visibility,
+              path: p.permissions.includes("workspaces.manage") ? w.path : null,
+              branch:
+                w.kind === "local"
+                  ? await git(w.path, ["rev-parse", "--abbrev-ref", "HEAD"])
+                  : null,
+              runs: (await readdir(w.runs_dir).catch(() => [])).filter((d) => ID.test(d)).length,
+              permissions: e.permissions,
+            })),
+          ),
+          canAdd: p.permissions.includes("workspaces.manage"),
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/workspaces$/,
+      perm: "workspaces.manage",
+      stepUp: true,
+      handler: async (c) => {
+        try {
+          const w = org.addLocal(
+            { p: c.p as Principal, ip: c.ip },
+            String((await body(c)).path ?? ""),
+          );
+          return send(c.res, 200, { slug: w.slug });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/workspaces\/([a-z0-9-]+)\/remove$/,
+      perm: "workspaces.manage",
+      stepUp: true,
+      handler: (c) => {
+        try {
+          org.removeWorkspace({ p: c.p as Principal, ip: c.ip }, c.m[1] as string);
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+
+    // ── members, roles and access ──
+    {
+      method: "GET",
+      path: /^\/api\/members$/,
+      perm: "members.view",
+      handler: (c) => {
+        const p = c.p as Principal;
+        return send(c.res, 200, {
+          members: org.members(p.user.org_id),
+          roles: org
+            .roles(p.user.org_id)
+            .map(({ id, name, permissions, builtin }) => ({ id, name, permissions, builtin })),
+          me: p.user.id,
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/members\/invite$/,
+      perm: "members.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          const r = org.invite(
+            { p: c.p as Principal, ip: c.ip },
+            String(b.email ?? ""),
+            String(b.roleId ?? ""),
+          );
+          return send(c.res, 200, { userId: r.userId, link: `${origin(c)}/#/invite/${r.token}` });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/members\/(usr_[\w-]+)\/(role|deactivate|reactivate|reset-mfa|sign-out|resend-invite)$/,
+      perm: "members.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const a = { p: c.p as Principal, ip: c.ip };
+        const id = c.m[1] as string;
+        try {
+          switch (c.m[2]) {
+            case "role":
+              org.setRole(a, id, String((await body(c)).roleId ?? ""));
+              break;
+            case "deactivate":
+              org.setActive(a, id, false);
+              break;
+            case "reactivate":
+              org.setActive(a, id, true);
+              break;
+            case "reset-mfa":
+              org.resetMfa(a, id);
+              break;
+            case "sign-out":
+              org.signOutEverywhere(a, id);
+              break;
+            case "resend-invite":
+              return send(c.res, 200, { link: `${origin(c)}/#/invite/${org.resendInvite(a, id)}` });
+          }
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/roles$/,
+      perm: "members.view",
+      handler: (c) =>
+        send(c.res, 200, {
+          roles: org.roles(c.p?.user.org_id ?? ""),
+          catalogue: PERMISSIONS,
+          workspacePermissions: WS_PERMS,
+          mine: c.p?.permissions,
+        }),
+    },
+    {
+      method: "POST",
+      path: /^\/api\/roles$/,
+      perm: "roles.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          const id = org.createRole(
+            { p: c.p as Principal, ip: c.ip },
+            String(b.name ?? ""),
+            String(b.description ?? ""),
+            Array.isArray(b.permissions) ? b.permissions.map(String) : [],
+          );
+          return send(c.res, 200, { id });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/roles\/([\w:-]+)\/(update|delete)$/,
+      perm: "roles.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const a = { p: c.p as Principal, ip: c.ip };
+        try {
+          if (c.m[2] === "delete") org.deleteRole(a, c.m[1] as string);
+          else {
+            const b = await body(c);
+            org.updateRole(
+              a,
+              c.m[1] as string,
+              String(b.name ?? ""),
+              String(b.description ?? ""),
+              Array.isArray(b.permissions) ? b.permissions.map(String) : [],
+            );
+          }
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/access$/,
+      perm: "access.manage",
+      handler: (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        return send(c.res, 200, {
+          workspaces: org
+            .workspaces(orgId)
+            .map(({ slug, name, visibility }) => ({ slug, name, visibility })),
+          roles: org
+            .roles(orgId)
+            .map(({ id, name, permissions, builtin }) => ({ id, name, permissions, builtin })),
+          members: org
+            .members(orgId)
+            .filter((m) => m.status !== "disabled")
+            .map(({ id, name, email, role_id, status }) => ({ id, name, email, role_id, status })),
+          grants: org.grants(orgId).map(({ slug, principal_type, principal_id, role_id }) => ({
+            workspace: slug,
+            principalType: principal_type,
+            principalId: principal_id,
+            roleId: role_id,
+          })),
+          mine: c.p?.permissions,
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/access\/(grant|visibility)$/,
+      perm: "access.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const a = { p: c.p as Principal, ip: c.ip };
+        const b = await body(c);
+        try {
+          if (c.m[1] === "visibility")
+            org.setVisibility(a, String(b.workspace ?? ""), String(b.visibility ?? ""));
+          else
+            org.setGrant(
+              a,
+              String(b.workspace ?? ""),
+              String(b.principalType ?? ""),
+              String(b.principalId ?? ""),
+              b.roleId ? String(b.roleId) : null,
+            );
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/access\/check$/,
+      perm: "access.manage",
+      handler: (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const target = org.members(orgId).find((m) => m.id === c.url.searchParams.get("user"));
+        if (!target) return send(c.res, 404, { error: "No such member." });
+        const role = org.role(orgId, target.role_id);
+        const perms = role?.permissions ?? [];
+        return send(c.res, 200, {
+          user: {
+            id: target.id,
+            name: target.name,
+            email: target.email,
+            role: role?.name,
+            status: target.status,
+          },
+          organisation: perms.filter((x) => !WS_PERMS.includes(x)),
+          repositories: org.workspaces(orgId).map((w) => ({
+            workspace: w.slug,
+            name: w.name,
+            visibility: w.visibility,
+            ...org.effective(target, perms, w),
+          })),
+        });
+      },
+    },
+
+    // ── audit log ──
+    {
+      method: "GET",
+      path: /^\/api\/audit$/,
+      perm: "audit.view",
+      handler: (c) => {
+        const q = c.url.searchParams;
+        const rows = auditRows(
+          c.p?.user.org_id ?? "",
+          q.get("q") ?? "",
+          q.get("cat") ?? "",
+          Number(q.get("before") ?? 0),
+          Math.min(200, Number(q.get("limit") ?? 100)),
+        );
+        return send(c.res, 200, { rows, chain: verifyAudit(db) });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/audit\/export$/,
+      perm: "audit.view",
+      handler: (c) => {
+        const rows = auditRows(c.p?.user.org_id ?? "", "", "", 0, 100_000);
+        const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const csv = [
+          "seq,time,actor,action,target,ip,detail,hash",
+          ...rows.map((r) =>
+            [r.seq, r.at, r.actor, r.action, r.target, r.ip, r.detail, r.hash].map(cell).join(","),
+          ),
+        ].join("\n");
+        act(c, "audit.exported", undefined, { rows: rows.length });
+        return send(c.res, 200, csv, "text/csv; charset=utf-8", {
+          "content-disposition": `attachment; filename="bumpsmith-audit-${new Date().toISOString().slice(0, 10)}.csv"`,
+        });
+      },
+    },
+
     // ── the repository and its runs ──
     {
       method: "GET",
-      path: /^\/api\/state$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/state$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
-        const debtFile = join(repoDir, ".bumpsmith", "debt.json");
-        let deps: Record<string, string> = {};
-        let ecosystem: string | null = null;
-        let packageManager: string | null = null;
-        try {
-          const inv = await inventory(repoDir);
-          deps = inv.dependencies;
-          ecosystem = inv.ecosystem;
-          packageManager = inv.packageManager;
-        } catch {
-          // not a supported repository: the dashboard still shows runs
-        }
+        const W = c.w as Workspace;
+        const debtFile = join(W.path, ".bumpsmith", "debt.json");
+        const [inv, repo, env, runs] = await Promise.all([
+          inventory(W.path).catch(() => null), // not a supported repository: still show runs
+          repoInfo(W.path),
+          environment(),
+          listRuns(W.runs_dir),
+        ]);
         return send(c.res, 200, {
-          repo: { ...(await repoInfo(repoDir)), ecosystem, packageManager, dependencies: deps },
-          env: await environment(),
-          runsDir,
-          runs: await listRuns(runsDir),
+          repo: {
+            ...repo,
+            ecosystem: inv?.ecosystem ?? null,
+            packageManager: inv?.packageManager ?? null,
+            dependencies: inv?.dependencies ?? {},
+          },
+          env,
+          runsDir: W.runs_dir,
+          runs,
           debt: existsSync(debtFile) ? JSON.parse(await readFile(debtFile, "utf8")) : null,
-          live: [...live.values()].map(({ listeners: _l, ...r }) => r),
+          live: [...live.values()].filter((l) => l.ws === W.id).map(({ listeners: _l, ...r }) => r),
+          workspace: { slug: W.slug, name: W.name, kind: W.kind, visibility: W.visibility },
+          perms: c.wsPerms,
         });
       },
     },
     {
       // One file from a run's before/ or after/ snapshot (diff "expand context").
       method: "GET",
-      path: /^\/api\/runs\/([\w.-]+)\/file$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)\/file$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
-        const id = c.m[1] as string;
+        const W = c.w as Workspace;
+        const id = c.m[2] as string;
         if (!ID.test(id)) return send(c.res, 400, { error: "bad run id" });
         const side = c.url.searchParams.get("side") === "before" ? "before" : "after";
         const rel = c.url.searchParams.get("path") ?? "";
-        const base = join(runsDir, id, side);
+        const base = join(W.runs_dir, id, side);
         const file = resolve(base, rel);
         if (!rel || rel.includes("\0") || !file.startsWith(base + sep))
           return send(c.res, 400, { error: "bad path" });
@@ -907,33 +1374,37 @@ export async function startDashboard(opts: DashboardOptions) {
     },
     {
       method: "GET",
-      path: /^\/api\/runs\/([\w.-]+)$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
-        const dir = runDir(c.m[1] as string);
+        const W = c.w as Workspace;
+        const dir = runDir(W, c.m[2] as string);
         if (!dir) return send(c.res, 404, { error: "no such run" });
-        const r = await readRun(runsDir, c.m[1] as string);
+        const r = await readRun(W.runs_dir, c.m[2] as string);
         return send(c.res, 200, { ...r, summary: summarise(r.job, r.patch) });
       },
     },
     {
       method: "POST",
-      path: /^\/api\/runs\/([\w.-]+)\/apply$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)\/apply$/,
+      ws: true,
       perm: "runs.apply",
       stepUp: true,
       handler: async (c) => {
-        const dir = runDir(c.m[1] as string);
+        const W = c.w as Workspace;
+        const dir = runDir(W, c.m[2] as string);
         if (!dir) return send(c.res, 404, { error: "no such run" });
         const patchFile = join(dir, "patch.diff");
         if (!(await stat(patchFile).catch(() => null))?.size)
           return send(c.res, 400, { error: "this run has no patch" });
-        const check = await run("git", ["-C", repoDir, "apply", "--check", "--index", patchFile]);
+        const check = await run("git", ["-C", W.path, "apply", "--check", "--index", patchFile]);
         if (check.exitCode !== 0)
           return send(c.res, 409, {
             error: `the patch does not apply to your working tree: ${(check.stderr || check.stdout).trim().slice(0, 400)}`,
           });
-        await run("git", ["-C", repoDir, "apply", "--index", patchFile]);
-        act(c, "run.applied", c.m[1]);
+        await run("git", ["-C", W.path, "apply", "--index", patchFile]);
+        act(c, "run.applied", c.m[2]);
         return send(c.res, 200, {
           ok: true,
           message: "Applied and staged. Review with git diff --cached.",
@@ -942,21 +1413,25 @@ export async function startDashboard(opts: DashboardOptions) {
     },
     {
       method: "POST",
-      path: /^\/api\/runs\/([\w.-]+)\/delete$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)\/delete$/,
+      ws: true,
       perm: "runs.delete",
       handler: async (c) => {
-        const dir = runDir(c.m[1] as string);
+        const W = c.w as Workspace;
+        const dir = runDir(W, c.m[2] as string);
         if (!dir) return send(c.res, 404, { error: "no such run" });
         await rm(dir, { recursive: true, force: true });
-        act(c, "run.deleted", c.m[1]);
+        act(c, "run.deleted", c.m[2]);
         return send(c.res, 200, { ok: true });
       },
     },
     {
       method: "POST",
-      path: /^\/api\/runs$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs$/,
+      ws: true,
       perm: "runs.start",
       handler: async (c) => {
+        const W = c.w as Workspace;
         const b = await readBody(c.req);
         const pkg = String(b.package ?? "").trim();
         const version = String(b.version ?? "").trim();
@@ -965,18 +1440,20 @@ export async function startDashboard(opts: DashboardOptions) {
         if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(pkg) || !/^\d[\w.+-]*$/.test(version))
           return send(c.res, 400, { error: "expected a package name and an exact version" });
         if (!/^[\w-]+$/.test(provider)) return send(c.res, 400, { error: "bad provider" });
-        const lr = startRun(pkg, version, provider, budget);
+        const lr = startRun(W, pkg, version, provider, budget);
         act(c, "run.started", `${pkg}@${version}`, { provider, budget });
         return send(c.res, 200, { id: lr.id });
       },
     },
     {
       method: "GET",
-      path: /^\/api\/live\/([a-f0-9]{12})$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/live\/([a-f0-9]{12})$/,
+      ws: true,
       perm: "runs.view",
       handler: (c) => {
-        const lr = live.get(c.m[1] as string);
-        if (!lr) return send(c.res, 404, { error: "no such live run" });
+        const W = c.w as Workspace;
+        const lr = live.get(c.m[2] as string);
+        if (!lr || lr.ws !== W.id) return send(c.res, 404, { error: "no such live run" });
         c.res.writeHead(200, {
           "content-type": "text/event-stream",
           "cache-control": "no-store",
@@ -999,14 +1476,16 @@ export async function startDashboard(opts: DashboardOptions) {
     },
     {
       method: "POST",
-      path: /^\/api\/scan$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/scan$/,
+      ws: true,
       perm: "runs.start",
       handler: async (c) => {
-        const child = cli(["scan", "--repo", repoDir]);
+        const W = c.w as Workspace;
+        const child = cli(["scan", "--repo", W.path], W.path);
         let err = "";
         child.stderr.on("data", (d: Buffer) => (err += d.toString()));
         const code = await new Promise<number | null>((r) => child.on("close", r));
-        const debtFile = join(repoDir, ".bumpsmith", "debt.json");
+        const debtFile = join(W.path, ".bumpsmith", "debt.json");
         if (code !== 0 || !existsSync(debtFile))
           return send(c.res, 500, {
             error: err.trim().split("\n").slice(-3).join(" ") || "scan failed",
@@ -1017,9 +1496,11 @@ export async function startDashboard(opts: DashboardOptions) {
     },
     {
       method: "GET",
-      path: /^\/api\/latest$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/latest$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
+        const W = c.w as Workspace;
         const name = c.url.searchParams.get("name") ?? "";
         const eco = c.url.searchParams.get("ecosystem") === "pypi" ? "pypi" : "npm";
         if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) return send(c.res, 400, { error: "bad name" });
@@ -1028,10 +1509,10 @@ export async function startDashboard(opts: DashboardOptions) {
     },
   ];
 
-  const runDir = (id: string) => {
+  const runDir = (w: Workspace, id: string) => {
     if (!ID.test(id)) return null;
-    const dir = join(runsDir, id);
-    return dir.startsWith(runsDir + sep) && existsSync(join(dir, "job.json")) ? dir : null;
+    const dir = join(w.runs_dir, id);
+    return dir.startsWith(w.runs_dir + sep) && existsSync(join(dir, "job.json")) ? dir : null;
   };
 
   const server = http.createServer(async (req, res) => {
@@ -1070,6 +1551,8 @@ export async function startDashboard(opts: DashboardOptions) {
       if (!route || !m) return send(res, 404, { error: "not found" });
 
       const ip = req.socket.remoteAddress ?? "";
+      let ctxW: Workspace | undefined;
+      let ctxPerms: string[] = [];
       const token = readCookie(req.headers.cookie, cookieName(secure));
       const bearer = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
       const p = bearer
@@ -1101,12 +1584,24 @@ export async function startDashboard(opts: DashboardOptions) {
             error: "Your organisation requires two-factor authentication. Set it up to continue.",
             mfaEnrollmentRequired: true,
           });
-        if (route.perm !== "session" && !can(p.permissions, route.perm))
+        if (route.ws) {
+          const w = org.workspace(p.user.org_id, m[1] ?? "");
+          const e = w ? org.effective(p.user, p.permissions, w) : null;
+          // A repository you cannot see does not exist, as far as you can tell.
+          if (!w || !e?.permissions.length) return send(res, 404, { error: "No such repository." });
+          const scoped = p.apiToken
+            ? e.permissions.filter((x) => p.permissions.includes(x))
+            : e.permissions;
+          if (route.perm !== "session" && !scoped.includes(route.perm))
+            return send(res, 403, { error: "Your access to this repository does not allow this." });
+          ctxW = w;
+          ctxPerms = scoped;
+        } else if (route.perm !== "session" && !can(p.permissions, route.perm))
           return send(res, 403, { error: "Your role does not allow this." });
         if (route.stepUp && !auth.fresh(p))
           return send(res, 403, { error: "Confirm it's you to continue.", reauth: true });
       }
-      await route.handler({ req, res, url, m, p, ip, token });
+      await route.handler({ req, res, url, m, p, ip, token, w: ctxW, wsPerms: ctxPerms });
     } catch (err) {
       if (!res.headersSent)
         return send(res, 500, { error: String((err as Error).message ?? err).slice(0, 300) });

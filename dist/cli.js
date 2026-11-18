@@ -10044,8 +10044,8 @@ var require_light = __commonJS({
           return this.Promise.resolve();
         }
         yieldLoop(t = 0) {
-          return new this.Promise(function(resolve6, reject) {
-            return setTimeout(resolve6, t);
+          return new this.Promise(function(resolve7, reject) {
+            return setTimeout(resolve7, t);
           });
         }
         computePenalty() {
@@ -10256,15 +10256,15 @@ var require_light = __commonJS({
           return this._queue.length === 0;
         }
         async _tryToRun() {
-          var args, cb, error62, reject, resolve6, returned, task;
+          var args, cb, error62, reject, resolve7, returned, task;
           if (this._running < 1 && this._queue.length > 0) {
             this._running++;
-            ({ task, args, resolve: resolve6, reject } = this._queue.shift());
+            ({ task, args, resolve: resolve7, reject } = this._queue.shift());
             cb = await (async function() {
               try {
                 returned = await task(...args);
                 return function() {
-                  return resolve6(returned);
+                  return resolve7(returned);
                 };
               } catch (error1) {
                 error62 = error1;
@@ -10279,13 +10279,13 @@ var require_light = __commonJS({
           }
         }
         schedule(task, ...args) {
-          var promise2, reject, resolve6;
-          resolve6 = reject = null;
+          var promise2, reject, resolve7;
+          resolve7 = reject = null;
           promise2 = new this.Promise(function(_resolve, _reject) {
-            resolve6 = _resolve;
+            resolve7 = _resolve;
             return reject = _reject;
           });
-          this._queue.push({ task, args, resolve: resolve6, reject });
+          this._queue.push({ task, args, resolve: resolve7, reject });
           this._tryToRun();
           return promise2;
         }
@@ -10686,14 +10686,14 @@ var require_light = __commonJS({
                 counts = this._states.counts;
                 return counts[0] + counts[1] + counts[2] + counts[3] === at;
               };
-              return new this.Promise((resolve6, reject) => {
+              return new this.Promise((resolve7, reject) => {
                 if (finished()) {
-                  return resolve6();
+                  return resolve7();
                 } else {
                   return this.on("done", () => {
                     if (finished()) {
                       this.removeAllListeners("done");
-                      return resolve6();
+                      return resolve7();
                     }
                   });
                 }
@@ -10786,9 +10786,9 @@ var require_light = __commonJS({
               options = parser$5.load(options, this.jobDefaults);
             }
             task = (...args2) => {
-              return new this.Promise(function(resolve6, reject) {
+              return new this.Promise(function(resolve7, reject) {
                 return fn(...args2, function(...args3) {
-                  return (args3[0] != null ? reject : resolve6)(args3);
+                  return (args3[0] != null ? reject : resolve7)(args3);
                 });
               });
             };
@@ -10983,7 +10983,7 @@ import { spawn } from "node:child_process";
 function run(cmd, args, opts = {}) {
   const max = opts.maxBytes ?? 256 * 1024;
   const started = Date.now();
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd,
       env: opts.env ?? process.env,
@@ -11005,7 +11005,7 @@ function run(cmd, args, opts = {}) {
     });
     child.on("close", (code, signal) => {
       if (timer) clearTimeout(timer);
-      resolve6({
+      resolve7({
         exitCode: code ?? (signal ? 137 : 1),
         stdout: out.toString("utf8"),
         stderr: err.toString("utf8"),
@@ -11527,16 +11527,16 @@ var init_values = __esm({
 var sleep;
 var init_sleep = __esm({
   "node_modules/.pnpm/@anthropic-ai+sdk@1.8.0_zod@4.6.7/node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs"() {
-    sleep = (ms, signal) => new Promise((resolve6) => {
+    sleep = (ms, signal) => new Promise((resolve7) => {
       if (signal?.aborted)
-        return resolve6();
+        return resolve7();
       const onAbort = () => {
         clearTimeout(timer);
-        resolve6();
+        resolve7();
       };
       const timer = setTimeout(() => {
         signal?.removeEventListener("abort", onAbort);
-        resolve6();
+        resolve7();
       }, ms);
       signal?.addEventListener("abort", onAbort, { once: true });
     });
@@ -15271,8 +15271,8 @@ var init_api_promise = __esm({
     APIPromise = /* @__PURE__ */ (() => {
       class APIPromise3 extends Promise {
         constructor(client, responsePromise, parseResponse2 = defaultParseResponse) {
-          super((resolve6) => {
-            resolve6(null);
+          super((resolve7) => {
+            resolve7(null);
           });
           this.responsePromise = responsePromise;
           this.parseResponse = parseResponse2;
@@ -18158,16 +18158,16 @@ var init_async_queue = __esm({
           if (__classPrivateFieldGet(this, _AsyncQueue_closed, "f") || signal?.aborted) {
             return Promise.resolve({ done: true, value: void 0 });
           }
-          return new Promise((resolve6) => {
+          return new Promise((resolve7) => {
             const waiter = (r) => {
               signal?.removeEventListener("abort", onAbort);
-              resolve6(r);
+              resolve7(r);
             };
             const onAbort = () => {
               const idx = __classPrivateFieldGet(this, _AsyncQueue_waiters, "f").indexOf(waiter);
               if (idx >= 0)
                 __classPrivateFieldGet(this, _AsyncQueue_waiters, "f").splice(idx, 1);
-              resolve6({ done: true, value: void 0 });
+              resolve7({ done: true, value: void 0 });
             };
             __classPrivateFieldGet(this, _AsyncQueue_waiters, "f").push(waiter);
             signal?.addEventListener("abort", onAbort, { once: true });
@@ -19022,13 +19022,13 @@ var init_json_schema = __esm({
 
 // node_modules/.pnpm/@anthropic-ai+sdk@1.8.0_zod@4.6.7/node_modules/@anthropic-ai/sdk/internal/utils/promise.mjs
 function promiseWithResolvers() {
-  let resolve6;
+  let resolve7;
   let reject;
   const promise2 = new Promise((res, rej) => {
-    resolve6 = res;
+    resolve7 = res;
     reject = rej;
   });
-  return { promise: promise2, resolve: resolve6, reject };
+  return { promise: promise2, resolve: resolve7, reject };
 }
 var init_promise = __esm({
   "node_modules/.pnpm/@anthropic-ai+sdk@1.8.0_zod@4.6.7/node_modules/@anthropic-ai/sdk/internal/utils/promise.mjs"() {
@@ -19846,10 +19846,10 @@ async function settledOrAborted(p, signal) {
     return;
   }
   let onAbort;
-  const aborted2 = new Promise((resolve6) => {
-    onAbort = resolve6;
+  const aborted2 = new Promise((resolve7) => {
+    onAbort = resolve7;
     if (signal.aborted)
-      resolve6();
+      resolve7();
   });
   signal.addEventListener("abort", onAbort, { once: true });
   try {
@@ -20936,7 +20936,7 @@ function betaGrepTool(ctx) {
   });
 }
 function runRipgrep(rg, pattern, searchPath, signal) {
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     const proc = cp.spawn(rg, ["-n", "--no-heading", "-e", pattern, "--", searchPath], {
       ...signal ? { signal } : {}
     });
@@ -20958,12 +20958,12 @@ function runRipgrep(rg, pattern, searchPath, signal) {
       if (signal?.aborted)
         return reject(new ToolError("grep: aborted"));
       if (truncated)
-        return resolve6(out + `
+        return resolve7(out + `
 [output truncated at ${GREP_OUTPUT_LIMIT} bytes]`);
       if (code === 0)
-        return resolve6(out);
+        return resolve7(out);
       if (code === 1)
-        return resolve6("no matches");
+        return resolve7("no matches");
       reject(new ToolError(`grep: rg failed: ${errOut || `exit ${code}`}`));
     });
     proc.on("error", (e) => {
@@ -21148,8 +21148,8 @@ var init_node2 = __esm({
 `;
           __classPrivateFieldGet(this, _BashSession_proc, "f").stdin.write(wrapped);
           if (__classPrivateFieldGet(this, _BashSession_buf, "f").indexOf(sentinel3) < 0) {
-            const { promise: sentinelSeen, resolve: resolve6 } = promiseWithResolvers();
-            __classPrivateFieldSet(this, _BashSession_waiting, { sentinel: sentinel3, resolve: resolve6 }, "f");
+            const { promise: sentinelSeen, resolve: resolve7 } = promiseWithResolvers();
+            __classPrivateFieldSet(this, _BashSession_waiting, { sentinel: sentinel3, resolve: resolve7 }, "f");
             let timer;
             let onAbort;
             try {
@@ -21311,8 +21311,8 @@ async function withTimeout(p, ms) {
   try {
     return await Promise.race([
       p.then(() => false, () => false),
-      new Promise((resolve6) => {
-        timer = setTimeout(() => resolve6(true), ms);
+      new Promise((resolve7) => {
+        timer = setTimeout(() => resolve7(true), ms);
       })
     ]);
   } finally {
@@ -23643,12 +23643,12 @@ var init_BetaMessageStream = __esm({
             }
             return this._emit("error", new AnthropicError(String(error62)));
           });
-          __classPrivateFieldSet(this, _BetaMessageStream_connectedPromise, new Promise((resolve6, reject) => {
-            __classPrivateFieldSet(this, _BetaMessageStream_resolveConnectedPromise, resolve6, "f");
+          __classPrivateFieldSet(this, _BetaMessageStream_connectedPromise, new Promise((resolve7, reject) => {
+            __classPrivateFieldSet(this, _BetaMessageStream_resolveConnectedPromise, resolve7, "f");
             __classPrivateFieldSet(this, _BetaMessageStream_rejectConnectedPromise, reject, "f");
           }), "f");
-          __classPrivateFieldSet(this, _BetaMessageStream_endPromise, new Promise((resolve6, reject) => {
-            __classPrivateFieldSet(this, _BetaMessageStream_resolveEndPromise, resolve6, "f");
+          __classPrivateFieldSet(this, _BetaMessageStream_endPromise, new Promise((resolve7, reject) => {
+            __classPrivateFieldSet(this, _BetaMessageStream_resolveEndPromise, resolve7, "f");
             __classPrivateFieldSet(this, _BetaMessageStream_rejectEndPromise, reject, "f");
           }), "f");
           __classPrivateFieldGet(this, _BetaMessageStream_connectedPromise, "f").catch(() => {
@@ -23861,11 +23861,11 @@ var init_BetaMessageStream = __esm({
          *   const message = await stream.emitted('message') // rejects if the stream errors
          */
         emitted(event) {
-          return new Promise((resolve6, reject) => {
+          return new Promise((resolve7, reject) => {
             __classPrivateFieldSet(this, _BetaMessageStream_catchingPromiseCreated, true, "f");
             if (event !== "error")
               this.once("error", reject);
-            this.once(event, resolve6);
+            this.once(event, resolve7);
           });
         }
         async done() {
@@ -24253,7 +24253,7 @@ var init_BetaMessageStream = __esm({
                 if (done) {
                   return { value: void 0, done: true };
                 }
-                return new Promise((resolve6, reject) => readQueue.push({ resolve: resolve6, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+                return new Promise((resolve7, reject) => readQueue.push({ resolve: resolve7, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
               }
               const chunk = pushQueue.shift();
               return { value: chunk, done: false };
@@ -35049,12 +35049,12 @@ var init_MessageStream = __esm({
             }
             return this._emit("error", new AnthropicError(String(error62)));
           });
-          __classPrivateFieldSet(this, _MessageStream_connectedPromise, new Promise((resolve6, reject) => {
-            __classPrivateFieldSet(this, _MessageStream_resolveConnectedPromise, resolve6, "f");
+          __classPrivateFieldSet(this, _MessageStream_connectedPromise, new Promise((resolve7, reject) => {
+            __classPrivateFieldSet(this, _MessageStream_resolveConnectedPromise, resolve7, "f");
             __classPrivateFieldSet(this, _MessageStream_rejectConnectedPromise, reject, "f");
           }), "f");
-          __classPrivateFieldSet(this, _MessageStream_endPromise, new Promise((resolve6, reject) => {
-            __classPrivateFieldSet(this, _MessageStream_resolveEndPromise, resolve6, "f");
+          __classPrivateFieldSet(this, _MessageStream_endPromise, new Promise((resolve7, reject) => {
+            __classPrivateFieldSet(this, _MessageStream_resolveEndPromise, resolve7, "f");
             __classPrivateFieldSet(this, _MessageStream_rejectEndPromise, reject, "f");
           }), "f");
           __classPrivateFieldGet(this, _MessageStream_connectedPromise, "f").catch(() => {
@@ -35246,11 +35246,11 @@ var init_MessageStream = __esm({
          *   const message = await stream.emitted('message') // rejects if the stream errors
          */
         emitted(event) {
-          return new Promise((resolve6, reject) => {
+          return new Promise((resolve7, reject) => {
             __classPrivateFieldSet(this, _MessageStream_catchingPromiseCreated, true, "f");
             if (event !== "error")
               this.once("error", reject);
-            this.once(event, resolve6);
+            this.once(event, resolve7);
           });
         }
         async done() {
@@ -35585,7 +35585,7 @@ var init_MessageStream = __esm({
                 if (done) {
                   return { value: void 0, done: true };
                 }
-                return new Promise((resolve6, reject) => readQueue.push({ resolve: resolve6, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+                return new Promise((resolve7, reject) => readQueue.push({ resolve: resolve7, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
               }
               const chunk = pushQueue.shift();
               return { value: chunk, done: false };
@@ -50672,7 +50672,7 @@ ${lanes.join("\n")}
               return process.memoryUsage().heapUsed;
             },
             getFileSize(path5) {
-              const stat4 = statSync(path5);
+              const stat4 = statSync2(path5);
               if (stat4 == null ? void 0 : stat4.isFile()) {
                 return stat4.size;
               }
@@ -50716,7 +50716,7 @@ ${lanes.join("\n")}
             }
           };
           return nodeSystem;
-          function statSync(path5) {
+          function statSync2(path5) {
             try {
               return _fs.statSync(path5, statSyncOptions);
             } catch {
@@ -50775,7 +50775,7 @@ ${lanes.join("\n")}
               activeSession.post("Profiler.stop", (err, { profile }) => {
                 var _a8;
                 if (!err) {
-                  if ((_a8 = statSync(profilePath)) == null ? void 0 : _a8.isDirectory()) {
+                  if ((_a8 = statSync2(profilePath)) == null ? void 0 : _a8.isDirectory()) {
                     profilePath = _path.join(profilePath, `${(/* @__PURE__ */ new Date()).toISOString().replace(/:/g, "-")}+P${process.pid}.cpuprofile`);
                   }
                   try {
@@ -50895,7 +50895,7 @@ ${lanes.join("\n")}
                 let stat4;
                 if (typeof dirent === "string" || dirent.isSymbolicLink()) {
                   const name = combinePaths(path5, entry);
-                  stat4 = statSync(name);
+                  stat4 = statSync2(name);
                   if (!stat4) {
                     continue;
                   }
@@ -50919,7 +50919,7 @@ ${lanes.join("\n")}
             return matchFiles(path5, extensions, excludes, includes, useCaseSensitiveFileNames2, process.cwd(), depth, getAccessibleFileSystemEntries, realpath3);
           }
           function fileSystemEntryExists(path5, entryKind) {
-            const stat4 = statSync(path5);
+            const stat4 = statSync2(path5);
             if (!stat4) {
               return false;
             }
@@ -50961,7 +50961,7 @@ ${lanes.join("\n")}
           }
           function getModifiedTime3(path5) {
             var _a8;
-            return (_a8 = statSync(path5)) == null ? void 0 : _a8.mtime;
+            return (_a8 = statSync2(path5)) == null ? void 0 : _a8.mtime;
           }
           function setModifiedTime(path5, time3) {
             try {
@@ -166314,7 +166314,7 @@ ${lanes.join("\n")}
           }
         }
         function createImportCallExpressionAMD(arg, containsLexicalThis) {
-          const resolve6 = factory2.createUniqueName("resolve");
+          const resolve7 = factory2.createUniqueName("resolve");
           const reject = factory2.createUniqueName("reject");
           const parameters = [
             factory2.createParameterDeclaration(
@@ -166323,7 +166323,7 @@ ${lanes.join("\n")}
               /*dotDotDotToken*/
               void 0,
               /*name*/
-              resolve6
+              resolve7
             ),
             factory2.createParameterDeclaration(
               /*modifiers*/
@@ -166340,7 +166340,7 @@ ${lanes.join("\n")}
                 factory2.createIdentifier("require"),
                 /*typeArguments*/
                 void 0,
-                [factory2.createArrayLiteralExpression([arg || factory2.createOmittedExpression()]), resolve6, reject]
+                [factory2.createArrayLiteralExpression([arg || factory2.createOmittedExpression()]), resolve7, reject]
               )
             )
           ]);
@@ -179151,9 +179151,9 @@ ${lanes.join("\n")}
             /*ignoreCase*/
             false
           )) {
-            const basename4 = getBaseFileName(a.fileName);
-            if (basename4 === "lib.d.ts" || basename4 === "lib.es6.d.ts") return 0;
-            const name = removeSuffix(removePrefix(basename4, "lib."), ".d.ts");
+            const basename5 = getBaseFileName(a.fileName);
+            if (basename5 === "lib.d.ts" || basename5 === "lib.es6.d.ts") return 0;
+            const name = removeSuffix(removePrefix(basename5, "lib."), ".d.ts");
             const index = libs.indexOf(name);
             if (index !== -1) return index + 1;
           }
@@ -243099,8 +243099,8 @@ ${options.prefix}` : "\n" : options.prefix
             }
           };
           for (const file2 of files) {
-            const basename4 = getBaseFileName(file2);
-            if (basename4 === "package.json" || basename4 === "bower.json") {
+            const basename5 = getBaseFileName(file2);
+            if (basename5 === "package.json" || basename5 === "bower.json") {
               createProjectWatcher(
                 file2,
                 "FileWatcher"
@@ -246784,8 +246784,8 @@ All files are: ${JSON.stringify(names)}`,
               var _a8;
               const fileOrDirectoryPath = removeIgnoredPath(this.toPath(fileOrDirectory));
               if (!fileOrDirectoryPath) return;
-              const basename4 = getBaseFileName(fileOrDirectoryPath);
-              if (((_a8 = result.affectedModuleSpecifierCacheProjects) == null ? void 0 : _a8.size) && (basename4 === "package.json" || basename4 === "node_modules")) {
+              const basename5 = getBaseFileName(fileOrDirectoryPath);
+              if (((_a8 = result.affectedModuleSpecifierCacheProjects) == null ? void 0 : _a8.size) && (basename5 === "package.json" || basename5 === "node_modules")) {
                 result.affectedModuleSpecifierCacheProjects.forEach((project) => {
                   var _a22;
                   (_a22 = project.getModuleSpecifierCache()) == null ? void 0 : _a22.clear();
@@ -253271,8 +253271,8 @@ Additional information: BADCLIENT: Bad error code, ${badCode} not found in range
         installPackage(options) {
           this.packageInstallId++;
           const request2 = { kind: "installPackage", ...options, id: this.packageInstallId };
-          const promise2 = new Promise((resolve6, reject) => {
-            (this.packageInstalledPromise ?? (this.packageInstalledPromise = /* @__PURE__ */ new Map())).set(this.packageInstallId, { resolve: resolve6, reject });
+          const promise2 = new Promise((resolve7, reject) => {
+            (this.packageInstalledPromise ?? (this.packageInstalledPromise = /* @__PURE__ */ new Map())).set(this.packageInstallId, { resolve: resolve7, reject });
           });
           this.installer.send(request2);
           return promise2;
@@ -258537,10 +258537,10 @@ var require_browser = __commonJS({
           text = canvas;
           canvas = void 0;
         }
-        return new Promise(function(resolve6, reject) {
+        return new Promise(function(resolve7, reject) {
           try {
             const data = QRCode2.create(text, opts);
-            resolve6(renderFunc(data, canvas, opts));
+            resolve7(renderFunc(data, canvas, opts));
           } catch (e) {
             reject(e);
           }
@@ -258621,11 +258621,11 @@ var require_server = __commonJS({
     }
     function render(renderFunc, text, params) {
       if (!params.cb) {
-        return new Promise(function(resolve6, reject) {
+        return new Promise(function(resolve7, reject) {
           try {
             const data = QRCode2.create(text, params.opts);
             return renderFunc(data, params.opts, function(err, data2) {
-              return err ? reject(err) : resolve6(data2);
+              return err ? reject(err) : resolve7(data2);
             });
           } catch (e) {
             reject(e);
@@ -258976,6 +258976,42 @@ var init_db = __esm({
     last_used_at TEXT
   );
   CREATE INDEX api_tokens_user ON api_tokens(user_id);
+  `,
+      `
+  CREATE TABLE workspaces (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    path TEXT NOT NULL,
+    runs_dir TEXT NOT NULL,
+    repo TEXT,
+    visibility TEXT NOT NULL DEFAULT 'org',
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    UNIQUE (org_id, slug)
+  );
+  CREATE TABLE grants (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    principal_type TEXT NOT NULL,
+    principal_id TEXT NOT NULL,
+    role_id TEXT NOT NULL REFERENCES roles(id),
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    UNIQUE (workspace_id, principal_type, principal_id)
+  );
+  CREATE TABLE invites (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_by TEXT
+  );
   `
     ];
     now = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -259045,7 +259081,10 @@ var init_audit = __esm({
 function can(perms, p) {
   return perms.includes(p);
 }
-var PERMISSIONS, ALL2, BUILTIN_ROLES;
+function canGrant(granter, wanted) {
+  return wanted.every((p) => granter.includes(p));
+}
+var PERMISSIONS, ALL2, BUILTIN_ROLES, isPermission;
 var init_rbac = __esm({
   "src/server/rbac.ts"() {
     "use strict";
@@ -259115,6 +259154,7 @@ var init_rbac = __esm({
         permissions: ["runs.view", "workspaces.view", "members.view", "audit.view"]
       }
     ];
+    isPermission = (p) => ALL2.includes(p);
   }
 });
 
@@ -259245,8 +259285,11 @@ var init_auth = __esm({
       checkSetupToken(t) {
         return !!this.setupHash && Date.now() < this.setupExpires && safeEqual(sha256(t), this.setupHash);
       }
-      /** True when this IP has made too many authentication attempts recently. */
-      rateLimited(ip, max = 20) {
+      /**
+       * True when this IP has made too many authentication requests recently. Generous enough
+       * for an office behind one address; per-account lockout stops guessing at any one account.
+       */
+      rateLimited(ip, max = 60) {
         const t = Date.now();
         const list = (this.attempts.get(ip) ?? []).filter((x) => t - x < 10 * 60 * 1e3);
         list.push(t);
@@ -259298,6 +259341,26 @@ var init_auth = __esm({
           target: orgName,
           ip: input3.ip
         });
+        return this.user(userId);
+      }
+      /** An invited person sets their name and password; the account becomes active. */
+      async acceptInvite(userId, nameRaw, password, ip) {
+        const u = this.user(userId);
+        if (!u || u.status !== "invited")
+          throw new AuthError(404, "This invitation is no longer valid.");
+        const name = nameRaw.trim();
+        if (!name || name.length > 80)
+          throw new AuthError(400, "Enter your name (up to 80 characters).");
+        const problem = passwordProblem(password, [
+          name,
+          u.email.split("@")[0] ?? "",
+          this.org(u.org_id)?.name ?? ""
+        ]);
+        if (problem) throw new AuthError(400, problem);
+        this.db.prepare(
+          "UPDATE users SET name = ?, password_hash = ?, status = 'active', password_changed_at = ? WHERE id = ?"
+        ).run(name, await hashPassword(password), now(), userId);
+        audit(this.db, { orgId: u.org_id, actorId: u.id, actor: u.email, action: "member.joined", ip });
         return this.user(userId);
       }
       user(id) {
@@ -259628,6 +259691,371 @@ var init_auth = __esm({
   }
 });
 
+// src/server/org.ts
+import { existsSync as existsSync10, statSync } from "node:fs";
+import { basename as basename2, isAbsolute as isAbsolute3, join as join22, resolve as resolve4 } from "node:path";
+var WS_PERMS, ALL_REPOS, slugify2, Org;
+var init_org = __esm({
+  "src/server/org.ts"() {
+    "use strict";
+    init_audit();
+    init_auth();
+    init_crypto();
+    init_db();
+    init_rbac();
+    WS_PERMS = ["runs.view", "runs.start", "runs.apply", "runs.delete", "workspaces.view"];
+    ALL_REPOS = "access.manage";
+    slugify2 = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "repo";
+    Org = class {
+      constructor(db) {
+        this.db = db;
+      }
+      db;
+      log(a, action, target, detail) {
+        audit(this.db, {
+          orgId: a.p.user.org_id,
+          actorId: a.p.user.id,
+          actor: a.p.user.email,
+          action,
+          target,
+          ip: a.ip,
+          detail
+        });
+      }
+      // ── roles ──
+      roles(orgId) {
+        return this.db.prepare("SELECT * FROM roles WHERE org_id = ? ORDER BY builtin DESC, name").all(orgId).map((r) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description,
+          permissions: JSON.parse(r.permissions),
+          builtin: !!r.builtin,
+          members: this.db.prepare("SELECT COUNT(*) AS n FROM users WHERE role_id = ? AND status != 'disabled'").get(r.id).n,
+          grants: this.db.prepare(
+            "SELECT COUNT(*) AS n FROM grants WHERE role_id = ? OR (principal_type = 'role' AND principal_id = ?)"
+          ).get(r.id, r.id).n
+        }));
+      }
+      role(orgId, id) {
+        return this.roles(orgId).find((r) => r.id === id);
+      }
+      checkRoleInput(a, name, description, permissions) {
+        const n = name.trim();
+        if (!n || n.length > 40)
+          throw new AuthError(400, "Give the role a name (up to 40 characters).");
+        if (description.length > 200)
+          throw new AuthError(400, "Keep the description under 200 characters.");
+        const perms = [...new Set(permissions)];
+        if (!perms.every(isPermission)) throw new AuthError(400, "Unknown permission.");
+        if (perms.includes("org.manage"))
+          throw new AuthError(400, "Only the Owner role can manage the organisation itself.");
+        if (!canGrant(a.p.permissions, perms))
+          throw new AuthError(403, "You can only give a role permissions you have yourself.");
+        return { n, perms };
+      }
+      createRole(a, name, description, permissions) {
+        const { n, perms } = this.checkRoleInput(a, name, description, permissions);
+        const orgId = a.p.user.org_id;
+        if (this.db.prepare("SELECT 1 FROM roles WHERE org_id = ? AND name = ? COLLATE NOCASE").get(orgId, n))
+          throw new AuthError(409, "A role with that name exists.");
+        const id = newId("role");
+        this.db.prepare(
+          "INSERT INTO roles (id, org_id, name, description, permissions, builtin) VALUES (?,?,?,?,?,0)"
+        ).run(id, orgId, n, description.trim(), JSON.stringify(perms));
+        this.log(a, "role.created", n, { permissions: perms });
+        return id;
+      }
+      updateRole(a, id, name, description, permissions) {
+        const r = this.role(a.p.user.org_id, id);
+        if (!r) throw new AuthError(404, "No such role.");
+        if (r.builtin)
+          throw new AuthError(400, "Built-in roles cannot be changed. Duplicate it instead.");
+        if (a.p.user.role_id === id) throw new AuthError(403, "You cannot change the role you hold.");
+        if (!canGrant(a.p.permissions, r.permissions))
+          throw new AuthError(403, "This role has permissions you do not have.");
+        const { n, perms } = this.checkRoleInput(a, name, description, permissions);
+        if (this.db.prepare("SELECT 1 FROM roles WHERE org_id = ? AND name = ? COLLATE NOCASE AND id != ?").get(a.p.user.org_id, n, id))
+          throw new AuthError(409, "A role with that name exists.");
+        this.db.prepare("UPDATE roles SET name = ?, description = ?, permissions = ? WHERE id = ?").run(n, description.trim(), JSON.stringify(perms), id);
+        this.log(a, "role.updated", n, { before: r.permissions, after: perms });
+      }
+      deleteRole(a, id) {
+        const r = this.role(a.p.user.org_id, id);
+        if (!r) throw new AuthError(404, "No such role.");
+        if (r.builtin) throw new AuthError(400, "Built-in roles cannot be deleted.");
+        if (r.members || r.grants)
+          throw new AuthError(409, "Move its members and remove its repository grants first.");
+        this.db.prepare("DELETE FROM roles WHERE id = ?").run(id);
+        this.log(a, "role.deleted", r.name);
+      }
+      // ── members and invitations ──
+      members(orgId) {
+        return this.db.prepare(
+          `SELECT u.id, u.name, u.email, u.role_id, u.status, u.mfa_enabled, u.last_login_at, u.created_at, u.sso_subject, i.expires_at AS invite_expires
+         FROM users u LEFT JOIN invites i ON i.user_id = u.id WHERE u.org_id = ? ORDER BY u.status = 'disabled', u.name COLLATE NOCASE`
+        ).all(orgId);
+      }
+      member(orgId, id) {
+        const m = this.members(orgId).find((x) => x.id === id);
+        if (!m) throw new AuthError(404, "No such member.");
+        return m;
+      }
+      owners(orgId) {
+        return this.db.prepare(
+          "SELECT COUNT(*) AS n FROM users WHERE org_id = ? AND role_id = ? AND status = 'active'"
+        ).get(orgId, `${orgId}:owner`).n;
+      }
+      assertCanAssign(a, roleId) {
+        const r = this.role(a.p.user.org_id, roleId);
+        if (!r) throw new AuthError(400, "No such role.");
+        if (!canGrant(a.p.permissions, r.permissions))
+          throw new AuthError(
+            403,
+            `You cannot give the ${r.name} role: it has permissions you do not have.`
+          );
+        return r;
+      }
+      assertCanManage(a, target) {
+        if (target.id === a.p.user.id)
+          throw new AuthError(403, "You cannot do this to your own account here.");
+        const r = this.role(a.p.user.org_id, target.role_id);
+        if (r && !canGrant(a.p.permissions, r.permissions))
+          throw new AuthError(403, "This member has permissions you do not have.");
+      }
+      invite(a, emailRaw, roleId) {
+        const email3 = emailRaw.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email3) || email3.length > 254)
+          throw new AuthError(400, "Enter a valid email address.");
+        const role = this.assertCanAssign(a, roleId);
+        const orgId = a.p.user.org_id;
+        if (this.db.prepare("SELECT 1 FROM users WHERE org_id = ? AND email = ?").get(orgId, email3))
+          throw new AuthError(409, "That person is already a member or invited.");
+        const userId = newId("usr");
+        const token = newToken();
+        tx(this.db, () => {
+          this.db.prepare(
+            "INSERT INTO users (id, org_id, email, name, role_id, status, created_at) VALUES (?,?,?,?,?, 'invited', ?)"
+          ).run(userId, orgId, email3, email3.split("@")[0] ?? email3, roleId, now());
+          this.db.prepare(
+            "INSERT INTO invites (id, org_id, user_id, hash, created_at, expires_at, created_by) VALUES (?,?,?,?,?,?,?)"
+          ).run(
+            newId("inv"),
+            orgId,
+            userId,
+            sha256(token),
+            now(),
+            new Date(Date.now() + 72 * 36e5).toISOString(),
+            a.p.user.id
+          );
+        });
+        this.log(a, "member.invited", email3, { role: role.name });
+        return { userId, token };
+      }
+      resendInvite(a, userId) {
+        const m = this.member(a.p.user.org_id, userId);
+        if (m.status !== "invited") throw new AuthError(400, "This member has already joined.");
+        this.assertCanManage(a, m);
+        const token = newToken();
+        this.db.prepare("DELETE FROM invites WHERE user_id = ?").run(userId);
+        this.db.prepare(
+          "INSERT INTO invites (id, org_id, user_id, hash, created_at, expires_at, created_by) VALUES (?,?,?,?,?,?,?)"
+        ).run(
+          newId("inv"),
+          a.p.user.org_id,
+          userId,
+          sha256(token),
+          now(),
+          new Date(Date.now() + 72 * 36e5).toISOString(),
+          a.p.user.id
+        );
+        this.log(a, "member.invite_renewed", m.email);
+        return token;
+      }
+      /** Public: who an invite link is for (without revealing anything if it is invalid). */
+      inviteInfo(token) {
+        const r = this.db.prepare(
+          "SELECT u.email, u.id, o.name AS org, i.expires_at FROM invites i JOIN users u ON u.id = i.user_id JOIN orgs o ON o.id = i.org_id WHERE i.hash = ?"
+        ).get(sha256(token));
+        if (!r || Date.parse(r.expires_at) < Date.now()) return null;
+        return r;
+      }
+      removeInvite(userId) {
+        this.db.prepare("DELETE FROM invites WHERE user_id = ?").run(userId);
+      }
+      setRole(a, userId, roleId) {
+        const orgId = a.p.user.org_id;
+        const m = this.member(orgId, userId);
+        this.assertCanManage(a, m);
+        const role = this.assertCanAssign(a, roleId);
+        if (m.role_id === `${orgId}:owner` && roleId !== m.role_id && this.owners(orgId) <= 1)
+          throw new AuthError(409, "Keep at least one Owner.");
+        this.db.prepare("UPDATE users SET role_id = ? WHERE id = ?").run(roleId, userId);
+        this.log(a, "member.role_changed", m.email, {
+          from: this.role(orgId, m.role_id)?.name,
+          to: role.name
+        });
+      }
+      setActive(a, userId, active) {
+        const orgId = a.p.user.org_id;
+        const m = this.member(orgId, userId);
+        this.assertCanManage(a, m);
+        if (!active && m.role_id === `${orgId}:owner` && this.owners(orgId) <= 1)
+          throw new AuthError(409, "Keep at least one Owner.");
+        if (m.status === "invited") {
+          if (active) throw new AuthError(400, "They have not accepted the invitation yet.");
+          this.db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+          this.log(a, "member.invite_revoked", m.email);
+          return;
+        }
+        this.db.prepare("UPDATE users SET status = ? WHERE id = ?").run(active ? "active" : "disabled", userId);
+        if (!active) {
+          this.db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+          this.db.prepare("DELETE FROM api_tokens WHERE user_id = ?").run(userId);
+        }
+        this.log(a, active ? "member.reactivated" : "member.deactivated", m.email);
+      }
+      resetMfa(a, userId) {
+        const m = this.member(a.p.user.org_id, userId);
+        this.assertCanManage(a, m);
+        this.db.prepare(
+          "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL, recovery = '[]', mfa_last_step = -1 WHERE id = ?"
+        ).run(userId);
+        this.db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+        this.log(a, "member.mfa_reset", m.email);
+      }
+      signOutEverywhere(a, userId) {
+        const m = this.member(a.p.user.org_id, userId);
+        this.assertCanManage(a, m);
+        const n = Number(this.db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId).changes);
+        this.log(a, "member.sessions_revoked", m.email, { count: n });
+      }
+      // ── repositories ──
+      workspaces(orgId) {
+        return this.db.prepare("SELECT * FROM workspaces WHERE org_id = ? ORDER BY name COLLATE NOCASE").all(orgId);
+      }
+      workspace(orgId, slug) {
+        return this.db.prepare("SELECT * FROM workspaces WHERE org_id = ? AND slug = ?").get(orgId, slug);
+      }
+      /** Register a local repository (local mode). Returns the existing one for the same path. */
+      ensureLocal(orgId, path5, runsDir, createdBy) {
+        const abs = resolve4(path5);
+        const existing = this.db.prepare("SELECT * FROM workspaces WHERE org_id = ? AND path = ?").get(orgId, abs);
+        if (existing) return existing;
+        let slug = slugify2(basename2(abs));
+        for (let i = 2; this.db.prepare("SELECT 1 FROM workspaces WHERE org_id = ? AND slug = ?").get(orgId, slug); i++)
+          slug = `${slugify2(basename2(abs))}-${i}`;
+        const id = newId("ws");
+        this.db.prepare(
+          "INSERT INTO workspaces (id, org_id, slug, name, kind, path, runs_dir, created_at, created_by) VALUES (?,?,?,?, 'local', ?,?,?,?)"
+        ).run(id, orgId, slug, basename2(abs), abs, resolve4(runsDir), now(), createdBy);
+        return this.workspace(orgId, slug);
+      }
+      addLocal(a, pathRaw) {
+        const path5 = pathRaw.trim();
+        if (!isAbsolute3(path5))
+          throw new AuthError(400, "Enter the full path to the repository folder, starting with /.");
+        if (!existsSync10(path5) || !statSync(path5).isDirectory())
+          throw new AuthError(400, "That folder does not exist on this machine.");
+        if (!existsSync10(join22(path5, ".git")))
+          throw new AuthError(400, "That folder is not a git repository.");
+        const w = this.ensureLocal(
+          a.p.user.org_id,
+          path5,
+          join22(path5, ".bumpsmith", "runs"),
+          a.p.user.id
+        );
+        this.log(a, "workspace.added", w.slug, { path: w.path });
+        return w;
+      }
+      removeWorkspace(a, slug) {
+        const w = this.workspace(a.p.user.org_id, slug);
+        if (!w) throw new AuthError(404, "No such repository.");
+        this.db.prepare("DELETE FROM workspaces WHERE id = ?").run(w.id);
+        this.log(a, "workspace.removed", w.slug);
+      }
+      setVisibility(a, slug, visibility) {
+        const w = this.workspace(a.p.user.org_id, slug);
+        if (!w) throw new AuthError(404, "No such repository.");
+        if (visibility !== "org" && visibility !== "restricted")
+          throw new AuthError(400, "Unknown visibility.");
+        this.db.prepare("UPDATE workspaces SET visibility = ? WHERE id = ?").run(visibility, w.id);
+        this.log(a, "access.visibility_changed", w.slug, { from: w.visibility, to: visibility });
+      }
+      // ── grants and effective access ──
+      grants(orgId) {
+        return this.db.prepare(
+          "SELECT g.*, w.slug FROM grants g JOIN workspaces w ON w.id = g.workspace_id WHERE g.org_id = ?"
+        ).all(orgId);
+      }
+      setGrant(a, slug, principalType, principalId, roleId) {
+        const orgId = a.p.user.org_id;
+        const w = this.workspace(orgId, slug);
+        if (!w) throw new AuthError(404, "No such repository.");
+        if (principalType !== "user" && principalType !== "role")
+          throw new AuthError(400, "Grant to a member or a role.");
+        const principal = principalType === "user" ? this.members(orgId).find((m) => m.id === principalId)?.email : this.role(orgId, principalId)?.name;
+        if (!principal) throw new AuthError(404, "No such member or role.");
+        const existing = this.db.prepare(
+          "SELECT role_id FROM grants WHERE workspace_id = ? AND principal_type = ? AND principal_id = ?"
+        ).get(w.id, principalType, principalId);
+        if (existing) {
+          const old = this.role(orgId, existing.role_id);
+          if (old && !canGrant(a.p.permissions, old.permissions))
+            throw new AuthError(403, "That grant has permissions you do not have.");
+        }
+        if (roleId === null) {
+          this.db.prepare(
+            "DELETE FROM grants WHERE workspace_id = ? AND principal_type = ? AND principal_id = ?"
+          ).run(w.id, principalType, principalId);
+          this.log(a, "access.revoked", w.slug, { principal, type: principalType });
+          return;
+        }
+        const role = this.assertCanAssign(a, roleId);
+        this.db.prepare(
+          "INSERT INTO grants (id, org_id, workspace_id, principal_type, principal_id, role_id, created_at, created_by) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(workspace_id, principal_type, principal_id) DO UPDATE SET role_id = excluded.role_id"
+        ).run(newId("grt"), orgId, w.id, principalType, principalId, roleId, now(), a.p.user.id);
+        this.log(a, "access.granted", w.slug, { principal, type: principalType, role: role.name });
+      }
+      /**
+       * What `user` may do in `w`, and why. Organisation-wide permissions are not included.
+       */
+      effective(user, orgPerms, w) {
+        const why = [];
+        const perms = /* @__PURE__ */ new Set();
+        const add = (ps, reason) => {
+          const scoped = ps.filter((p) => WS_PERMS.includes(p));
+          if (!scoped.length) return;
+          for (const p of scoped) perms.add(p);
+          why.push(reason);
+        };
+        const orgRole = this.role(w.org_id, user.role_id);
+        if (orgPerms.includes(ALL_REPOS))
+          add(orgPerms, `${orgRole?.name ?? "Your role"}: every repository`);
+        else if (w.visibility === "org")
+          add(orgPerms, `${orgRole?.name ?? "Your role"} (repository open to the organisation)`);
+        for (const g of this.grants(w.org_id).filter((x) => x.workspace_id === w.id)) {
+          if (g.principal_type === "user" && g.principal_id === user.id || g.principal_type === "role" && g.principal_id === user.role_id) {
+            const r = this.role(w.org_id, g.role_id);
+            if (r)
+              add(
+                r.permissions,
+                g.principal_type === "user" ? `Granted ${r.name} directly` : `Granted ${r.name} to everyone with the ${orgRole?.name ?? ""} role`
+              );
+          }
+        }
+        if (!perms.has("workspaces.view") && !perms.has("runs.view"))
+          return { permissions: [], why: [] };
+        perms.add("workspaces.view");
+        return { permissions: [...perms], why };
+      }
+      /** Repositories `p` can see, with what they may do in each. */
+      visible(p) {
+        return this.workspaces(p.user.org_id).map((w) => ({ w, e: this.effective(p.user, p.permissions, w) })).filter((x) => x.e.permissions.length > 0);
+      }
+    };
+  }
+});
+
 // src/dashboard/server.ts
 var server_exports = {};
 __export(server_exports, {
@@ -259638,16 +260066,16 @@ __export(server_exports, {
 });
 import { spawn as spawn5 } from "node:child_process";
 import { randomBytes as randomBytes3 } from "node:crypto";
-import { existsSync as existsSync10 } from "node:fs";
+import { existsSync as existsSync11 } from "node:fs";
 import { readdir as readdir6, readFile as readFile16, realpath as realpath2, rm as rm7, stat as stat3 } from "node:fs/promises";
 import http from "node:http";
 import { homedir } from "node:os";
-import { basename as basename2, dirname as dirname8, extname as extname2, join as join22, resolve as resolve4, sep as sep3 } from "node:path";
+import { basename as basename3, dirname as dirname8, extname as extname2, join as join23, resolve as resolve5, sep as sep3 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 function packageRoot2() {
   let dir = dirname8(fileURLToPath3(import.meta.url));
   for (let i = 0; i < 6; i++) {
-    if (existsSync10(join22(dir, "dashboard", "index.html"))) return dir;
+    if (existsSync11(join23(dir, "dashboard", "index.html"))) return dir;
     dir = dirname8(dir);
   }
   throw new Error("cannot locate the bumpsmith dashboard assets");
@@ -259721,10 +260149,10 @@ function summarise2(job, patch) {
   };
 }
 async function readRun(runsDir, id) {
-  const dir = join22(runsDir, id);
-  const job = JSON.parse(await readFile16(join22(dir, "job.json"), "utf8"));
-  const patch = await readFile16(join22(dir, "patch.diff"), "utf8").catch(() => "");
-  const evidence = await readFile16(join22(dir, "evidence.md"), "utf8").catch(() => "");
+  const dir = join23(runsDir, id);
+  const job = JSON.parse(await readFile16(join23(dir, "job.json"), "utf8"));
+  const patch = await readFile16(join23(dir, "patch.diff"), "utf8").catch(() => "");
+  const evidence = await readFile16(join23(dir, "evidence.md"), "utf8").catch(() => "");
   return { job, patch, evidence };
 }
 async function listRuns(runsDir) {
@@ -259734,20 +260162,32 @@ async function listRuns(runsDir) {
   } catch {
     return [];
   }
-  const out = [];
-  for (const id of ids) {
-    try {
-      const { job, patch } = await readRun(runsDir, id);
-      out.push(summarise2(job, patch));
-    } catch {
-    }
-  }
-  return out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const out = await Promise.all(
+    ids.map(async (id) => {
+      const dir = join23(runsDir, id);
+      try {
+        const [j, p] = await Promise.all([
+          stat3(join23(dir, "job.json")),
+          stat3(join23(dir, "patch.diff")).catch(() => null)
+        ]);
+        const key = `${j.mtimeMs}:${j.size}:${p?.mtimeMs ?? 0}:${p?.size ?? 0}`;
+        const hit = summaryCache.get(dir);
+        if (hit?.key === key) return hit.summary;
+        const { job, patch } = await readRun(runsDir, id);
+        const summary = summarise2(job, patch);
+        summaryCache.set(dir, { key, summary });
+        return summary;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return out.filter((x) => x !== null).sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 async function repoInfo(dir) {
   const status = await git2(dir, ["status", "--porcelain"]);
   return {
-    name: basename2(dir),
+    name: basename3(dir),
     path: dir,
     branch: await git2(dir, ["rev-parse", "--abbrev-ref", "HEAD"]),
     commit: await git2(dir, ["rev-parse", "--short", "HEAD"]) ?? null,
@@ -259757,17 +260197,33 @@ async function repoInfo(dir) {
   };
 }
 async function environment() {
-  const docker = await run("docker", ["info", "--format", "{{.ServerVersion}}"], {
-    timeoutMs: 5e3
-  }).catch(() => null);
+  const stale = Date.now() - envCache.at > 6e4;
+  if (stale && !envCache.pending)
+    envCache.pending = checkEnvironment().then((v) => {
+      envCache = { at: Date.now(), value: v, pending: null };
+      return v;
+    }).catch((e) => {
+      envCache.pending = null;
+      throw e;
+    });
+  return envCache.value ?? envCache.pending;
+}
+async function checkEnvironment() {
+  const [docker, claude, codex] = await Promise.all([
+    run("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 5e3 }).catch(
+      () => null
+    ),
+    onPath("claude"),
+    onPath("codex")
+  ]);
   const providers = [
     {
       id: "claude-code",
       label: "Claude Code",
       detail: "your subscription",
-      ok: await onPath("claude")
+      ok: claude
     },
-    { id: "codex", label: "Codex", detail: "your ChatGPT plan", ok: await onPath("codex") },
+    { id: "codex", label: "Codex", detail: "your ChatGPT plan", ok: codex },
     {
       id: "anthropic-api",
       label: "Anthropic API",
@@ -259805,11 +260261,11 @@ function stageOf(line) {
   return null;
 }
 async function clientBundle(root) {
-  const built = join22(root, "dist", "dashboard-app.js");
-  if (fileURLToPath3(import.meta.url).endsWith(".ts") || !existsSync10(built)) {
+  const built = join23(root, "dist", "dashboard-app.js");
+  if (fileURLToPath3(import.meta.url).endsWith(".ts") || !existsSync11(built)) {
     const { build: build2 } = await import("esbuild");
     const r = await build2({
-      entryPoints: [join22(root, "src", "dashboard", "client", "app.ts")],
+      entryPoints: [join23(root, "src", "dashboard", "client", "app.ts")],
       bundle: true,
       format: "esm",
       target: "es2022",
@@ -259823,17 +260279,25 @@ async function clientBundle(root) {
 }
 async function startDashboard(opts) {
   const root = packageRoot2();
-  const repoDir = resolve4(opts.repoDir);
-  const runsDir = resolve4(opts.runsDir ?? join22(repoDir, ".bumpsmith", "runs"));
-  const dataDir = resolve4(opts.dataDir ?? join22(homedir(), ".bumpsmith"));
+  const repoDir = resolve5(opts.repoDir);
+  const runsDir = resolve5(opts.runsDir ?? join23(repoDir, ".bumpsmith", "runs"));
+  const dataDir = resolve5(opts.dataDir ?? join23(homedir(), ".bumpsmith"));
   const db = openDb(dataDir);
-  const masterKey = await loadMasterKey(join22(dataDir, "master.key"));
+  const masterKey = await loadMasterKey(join23(dataDir, "master.key"));
   const auth2 = new Auth(db, DEFAULT_POLICY, masterKey);
+  const org = new Org(db);
+  const ensureLocalWorkspace = () => {
+    const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get();
+    if (o) org.ensureLocal(o.id, repoDir, runsDir, null);
+  };
+  ensureLocalWorkspace();
+  void environment().catch(() => {
+  });
   const secure = !!opts.secureCookies;
   const setupToken = auth2.needsSetup() ? auth2.issueSetupToken() : null;
   const live = /* @__PURE__ */ new Map();
   const appJs = await clientBundle(root);
-  const html = await readFile16(join22(root, "dashboard", "index.html"), "utf8");
+  const html = await readFile16(join23(root, "dashboard", "index.html"), "utf8");
   let port = opts.port ?? 4477;
   const send = (res, code, body2, type, extra = {}) => {
     const text = typeof body2 === "string" || Buffer.isBuffer(body2) ? body2 : JSON.stringify(body2);
@@ -259870,14 +260334,15 @@ async function startDashboard(opts) {
       }
     });
   });
-  const cli = (args) => spawn5(process.execPath, [...process.execArgv, opts.cliEntry, ...args], {
-    cwd: repoDir,
+  const cli = (args, cwd) => spawn5(process.execPath, [...process.execArgv, opts.cliEntry, ...args], {
+    cwd,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"]
   });
-  const startRun = (pkg, version2, provider2, budget) => {
+  const startRun = (w, pkg, version2, provider2, budget) => {
     const lr = {
       id: randomBytes3(6).toString("hex"),
+      ws: w.id,
       package: pkg,
       version: version2,
       provider: provider2,
@@ -259890,16 +260355,19 @@ async function startDashboard(opts) {
       listeners: /* @__PURE__ */ new Set()
     };
     live.set(lr.id, lr);
-    const child = cli([
-      "fix",
-      `${pkg}@${version2}`,
-      "--repo",
-      repoDir,
-      "--provider",
-      provider2,
-      "--budget",
-      String(budget)
-    ]);
+    const child = cli(
+      [
+        "fix",
+        `${pkg}@${version2}`,
+        "--repo",
+        w.path,
+        "--provider",
+        provider2,
+        "--budget",
+        String(budget)
+      ],
+      w.path
+    );
     const emit = (event, data) => {
       for (const l of lr.listeners) l.write(`event: ${event}
 data: ${JSON.stringify(data)}
@@ -259958,6 +260426,35 @@ data: ${JSON.stringify(data)}
     return send(c.res, 200, sessionPayload(p), void 0, { "set-cookie": cookieFor(s.token) });
   };
   const mfaFailures = /* @__PURE__ */ new Map();
+  const origin = (c) => `http${secure ? "s" : ""}://${c.req.headers.host ?? `127.0.0.1:${port}`}`;
+  const CATEGORIES = {
+    auth: "auth.%",
+    people: "member.%",
+    access: "access.%",
+    roles: "role.%",
+    runs: "run.%",
+    security: "security.%"
+  };
+  const auditRows = (orgId, q2, cat, before, limit3) => {
+    const where = ["(org_id = ? OR org_id IS NULL)"];
+    const args = [orgId];
+    if (before > 0) {
+      where.push("seq < ?");
+      args.push(before);
+    }
+    if (CATEGORIES[cat]) {
+      where.push("action LIKE ?");
+      args.push(CATEGORIES[cat]);
+    }
+    if (q2.trim()) {
+      where.push("(actor LIKE ? OR action LIKE ? OR target LIKE ? OR ip LIKE ?)");
+      const like = `%${q2.trim().slice(0, 80)}%`;
+      args.push(like, like, like, like);
+    }
+    return db.prepare(
+      `SELECT seq, at, actor, action, target, ip, detail, hash FROM audit WHERE ${where.join(" AND ")} ORDER BY seq DESC LIMIT ?`
+    ).all(...args, Math.max(1, limit3));
+  };
   const body = async (c) => readBody(c.req);
   const authErr = (c, e) => {
     if (e instanceof AuthError) return send(c.res, e.status, { error: e.message });
@@ -259995,6 +260492,7 @@ data: ${JSON.stringify(data)}
             password: String(b.password ?? ""),
             ip: c.ip
           });
+          ensureLocalWorkspace();
           return signIn(c, user);
         } catch (e) {
           return authErr(c, e);
@@ -260156,8 +260654,8 @@ data: ${JSON.stringify(data)}
         const p = c.p;
         if (p.user.mfa_enabled)
           return send(c.res, 409, { error: "Two-factor authentication is already on." });
-        const org = auth2.org(p.user.org_id);
-        const m = auth2.startMfa(p.user.id, p.user.email, `Bumpsmith (${org?.name ?? "Bumpsmith"})`);
+        const org2 = auth2.org(p.user.org_id);
+        const m = auth2.startMfa(p.user.id, p.user.email, `Bumpsmith (${org2?.name ?? "Bumpsmith"})`);
         const qr = await import_qrcode.default.toString(m.url, {
           type: "svg",
           margin: 0,
@@ -260314,45 +260812,378 @@ data: ${JSON.stringify(data)}
       perm: "audit.view",
       handler: (c) => send(c.res, 200, verifyAudit(db))
     },
+    // ── invitations (public: the link is the credential) ──
+    {
+      method: "GET",
+      path: /^\/auth\/invite$/,
+      perm: "public",
+      handler: (c) => {
+        const info = org.inviteInfo(c.url.searchParams.get("token") ?? "");
+        return info ? send(c.res, 200, { email: info.email, org: info.org }) : send(c.res, 404, {
+          error: "This invitation is invalid or has expired. Ask for a new one."
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/invite$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await body(c);
+        const info = org.inviteInfo(String(b.token ?? ""));
+        if (!info)
+          return send(c.res, 404, {
+            error: "This invitation is invalid or has expired. Ask for a new one."
+          });
+        try {
+          const user = await auth2.acceptInvite(
+            info.id,
+            String(b.name ?? ""),
+            String(b.password ?? ""),
+            c.ip
+          );
+          org.removeInvite(user.id);
+          return signIn(c, user);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    // ── repositories ──
+    {
+      method: "GET",
+      path: /^\/api\/workspaces$/,
+      perm: "session",
+      handler: async (c) => {
+        const p = c.p;
+        const list = org.visible(p);
+        return send(c.res, 200, {
+          workspaces: await Promise.all(
+            list.map(async ({ w, e }) => ({
+              slug: w.slug,
+              name: w.name,
+              kind: w.kind,
+              visibility: w.visibility,
+              path: p.permissions.includes("workspaces.manage") ? w.path : null,
+              branch: w.kind === "local" ? await git2(w.path, ["rev-parse", "--abbrev-ref", "HEAD"]) : null,
+              runs: (await readdir6(w.runs_dir).catch(() => [])).filter((d) => ID.test(d)).length,
+              permissions: e.permissions
+            }))
+          ),
+          canAdd: p.permissions.includes("workspaces.manage")
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/workspaces$/,
+      perm: "workspaces.manage",
+      stepUp: true,
+      handler: async (c) => {
+        try {
+          const w = org.addLocal(
+            { p: c.p, ip: c.ip },
+            String((await body(c)).path ?? "")
+          );
+          return send(c.res, 200, { slug: w.slug });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/workspaces\/([a-z0-9-]+)\/remove$/,
+      perm: "workspaces.manage",
+      stepUp: true,
+      handler: (c) => {
+        try {
+          org.removeWorkspace({ p: c.p, ip: c.ip }, c.m[1]);
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    // ── members, roles and access ──
+    {
+      method: "GET",
+      path: /^\/api\/members$/,
+      perm: "members.view",
+      handler: (c) => {
+        const p = c.p;
+        return send(c.res, 200, {
+          members: org.members(p.user.org_id),
+          roles: org.roles(p.user.org_id).map(({ id, name, permissions, builtin }) => ({ id, name, permissions, builtin })),
+          me: p.user.id
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/members\/invite$/,
+      perm: "members.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          const r = org.invite(
+            { p: c.p, ip: c.ip },
+            String(b.email ?? ""),
+            String(b.roleId ?? "")
+          );
+          return send(c.res, 200, { userId: r.userId, link: `${origin(c)}/#/invite/${r.token}` });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/members\/(usr_[\w-]+)\/(role|deactivate|reactivate|reset-mfa|sign-out|resend-invite)$/,
+      perm: "members.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const a = { p: c.p, ip: c.ip };
+        const id = c.m[1];
+        try {
+          switch (c.m[2]) {
+            case "role":
+              org.setRole(a, id, String((await body(c)).roleId ?? ""));
+              break;
+            case "deactivate":
+              org.setActive(a, id, false);
+              break;
+            case "reactivate":
+              org.setActive(a, id, true);
+              break;
+            case "reset-mfa":
+              org.resetMfa(a, id);
+              break;
+            case "sign-out":
+              org.signOutEverywhere(a, id);
+              break;
+            case "resend-invite":
+              return send(c.res, 200, { link: `${origin(c)}/#/invite/${org.resendInvite(a, id)}` });
+          }
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/roles$/,
+      perm: "members.view",
+      handler: (c) => send(c.res, 200, {
+        roles: org.roles(c.p?.user.org_id ?? ""),
+        catalogue: PERMISSIONS,
+        workspacePermissions: WS_PERMS,
+        mine: c.p?.permissions
+      })
+    },
+    {
+      method: "POST",
+      path: /^\/api\/roles$/,
+      perm: "roles.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          const id = org.createRole(
+            { p: c.p, ip: c.ip },
+            String(b.name ?? ""),
+            String(b.description ?? ""),
+            Array.isArray(b.permissions) ? b.permissions.map(String) : []
+          );
+          return send(c.res, 200, { id });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/roles\/([\w:-]+)\/(update|delete)$/,
+      perm: "roles.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const a = { p: c.p, ip: c.ip };
+        try {
+          if (c.m[2] === "delete") org.deleteRole(a, c.m[1]);
+          else {
+            const b = await body(c);
+            org.updateRole(
+              a,
+              c.m[1],
+              String(b.name ?? ""),
+              String(b.description ?? ""),
+              Array.isArray(b.permissions) ? b.permissions.map(String) : []
+            );
+          }
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/access$/,
+      perm: "access.manage",
+      handler: (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        return send(c.res, 200, {
+          workspaces: org.workspaces(orgId).map(({ slug, name, visibility }) => ({ slug, name, visibility })),
+          roles: org.roles(orgId).map(({ id, name, permissions, builtin }) => ({ id, name, permissions, builtin })),
+          members: org.members(orgId).filter((m) => m.status !== "disabled").map(({ id, name, email: email3, role_id, status }) => ({ id, name, email: email3, role_id, status })),
+          grants: org.grants(orgId).map(({ slug, principal_type, principal_id, role_id }) => ({
+            workspace: slug,
+            principalType: principal_type,
+            principalId: principal_id,
+            roleId: role_id
+          })),
+          mine: c.p?.permissions
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/access\/(grant|visibility)$/,
+      perm: "access.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const a = { p: c.p, ip: c.ip };
+        const b = await body(c);
+        try {
+          if (c.m[1] === "visibility")
+            org.setVisibility(a, String(b.workspace ?? ""), String(b.visibility ?? ""));
+          else
+            org.setGrant(
+              a,
+              String(b.workspace ?? ""),
+              String(b.principalType ?? ""),
+              String(b.principalId ?? ""),
+              b.roleId ? String(b.roleId) : null
+            );
+          return send(c.res, 200, { ok: true });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/access\/check$/,
+      perm: "access.manage",
+      handler: (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const target = org.members(orgId).find((m) => m.id === c.url.searchParams.get("user"));
+        if (!target) return send(c.res, 404, { error: "No such member." });
+        const role = org.role(orgId, target.role_id);
+        const perms = role?.permissions ?? [];
+        return send(c.res, 200, {
+          user: {
+            id: target.id,
+            name: target.name,
+            email: target.email,
+            role: role?.name,
+            status: target.status
+          },
+          organisation: perms.filter((x) => !WS_PERMS.includes(x)),
+          repositories: org.workspaces(orgId).map((w) => ({
+            workspace: w.slug,
+            name: w.name,
+            visibility: w.visibility,
+            ...org.effective(target, perms, w)
+          }))
+        });
+      }
+    },
+    // ── audit log ──
+    {
+      method: "GET",
+      path: /^\/api\/audit$/,
+      perm: "audit.view",
+      handler: (c) => {
+        const q2 = c.url.searchParams;
+        const rows = auditRows(
+          c.p?.user.org_id ?? "",
+          q2.get("q") ?? "",
+          q2.get("cat") ?? "",
+          Number(q2.get("before") ?? 0),
+          Math.min(200, Number(q2.get("limit") ?? 100))
+        );
+        return send(c.res, 200, { rows, chain: verifyAudit(db) });
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/audit\/export$/,
+      perm: "audit.view",
+      handler: (c) => {
+        const rows = auditRows(c.p?.user.org_id ?? "", "", "", 0, 1e5);
+        const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const csv = [
+          "seq,time,actor,action,target,ip,detail,hash",
+          ...rows.map(
+            (r) => [r.seq, r.at, r.actor, r.action, r.target, r.ip, r.detail, r.hash].map(cell).join(",")
+          )
+        ].join("\n");
+        act(c, "audit.exported", void 0, { rows: rows.length });
+        return send(c.res, 200, csv, "text/csv; charset=utf-8", {
+          "content-disposition": `attachment; filename="bumpsmith-audit-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv"`
+        });
+      }
+    },
     // ── the repository and its runs ──
     {
       method: "GET",
-      path: /^\/api\/state$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/state$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
-        const debtFile = join22(repoDir, ".bumpsmith", "debt.json");
-        let deps = {};
-        let ecosystem = null;
-        let packageManager = null;
-        try {
-          const inv = await inventory(repoDir);
-          deps = inv.dependencies;
-          ecosystem = inv.ecosystem;
-          packageManager = inv.packageManager;
-        } catch {
-        }
+        const W = c.w;
+        const debtFile = join23(W.path, ".bumpsmith", "debt.json");
+        const [inv, repo, env, runs] = await Promise.all([
+          inventory(W.path).catch(() => null),
+          // not a supported repository: still show runs
+          repoInfo(W.path),
+          environment(),
+          listRuns(W.runs_dir)
+        ]);
         return send(c.res, 200, {
-          repo: { ...await repoInfo(repoDir), ecosystem, packageManager, dependencies: deps },
-          env: await environment(),
-          runsDir,
-          runs: await listRuns(runsDir),
-          debt: existsSync10(debtFile) ? JSON.parse(await readFile16(debtFile, "utf8")) : null,
-          live: [...live.values()].map(({ listeners: _l, ...r }) => r)
+          repo: {
+            ...repo,
+            ecosystem: inv?.ecosystem ?? null,
+            packageManager: inv?.packageManager ?? null,
+            dependencies: inv?.dependencies ?? {}
+          },
+          env,
+          runsDir: W.runs_dir,
+          runs,
+          debt: existsSync11(debtFile) ? JSON.parse(await readFile16(debtFile, "utf8")) : null,
+          live: [...live.values()].filter((l) => l.ws === W.id).map(({ listeners: _l, ...r }) => r),
+          workspace: { slug: W.slug, name: W.name, kind: W.kind, visibility: W.visibility },
+          perms: c.wsPerms
         });
       }
     },
     {
       // One file from a run's before/ or after/ snapshot (diff "expand context").
       method: "GET",
-      path: /^\/api\/runs\/([\w.-]+)\/file$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)\/file$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
-        const id = c.m[1];
+        const W = c.w;
+        const id = c.m[2];
         if (!ID.test(id)) return send(c.res, 400, { error: "bad run id" });
         const side = c.url.searchParams.get("side") === "before" ? "before" : "after";
         const rel = c.url.searchParams.get("path") ?? "";
-        const base = join22(runsDir, id, side);
-        const file2 = resolve4(base, rel);
+        const base = join23(W.runs_dir, id, side);
+        const file2 = resolve5(base, rel);
         if (!rel || rel.includes("\0") || !file2.startsWith(base + sep3))
           return send(c.res, 400, { error: "bad path" });
         const real = await realpath2(file2).catch(() => null);
@@ -260368,33 +261199,37 @@ data: ${JSON.stringify(data)}
     },
     {
       method: "GET",
-      path: /^\/api\/runs\/([\w.-]+)$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
-        const dir = runDir(c.m[1]);
+        const W = c.w;
+        const dir = runDir(W, c.m[2]);
         if (!dir) return send(c.res, 404, { error: "no such run" });
-        const r = await readRun(runsDir, c.m[1]);
+        const r = await readRun(W.runs_dir, c.m[2]);
         return send(c.res, 200, { ...r, summary: summarise2(r.job, r.patch) });
       }
     },
     {
       method: "POST",
-      path: /^\/api\/runs\/([\w.-]+)\/apply$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)\/apply$/,
+      ws: true,
       perm: "runs.apply",
       stepUp: true,
       handler: async (c) => {
-        const dir = runDir(c.m[1]);
+        const W = c.w;
+        const dir = runDir(W, c.m[2]);
         if (!dir) return send(c.res, 404, { error: "no such run" });
-        const patchFile = join22(dir, "patch.diff");
+        const patchFile = join23(dir, "patch.diff");
         if (!(await stat3(patchFile).catch(() => null))?.size)
           return send(c.res, 400, { error: "this run has no patch" });
-        const check2 = await run("git", ["-C", repoDir, "apply", "--check", "--index", patchFile]);
+        const check2 = await run("git", ["-C", W.path, "apply", "--check", "--index", patchFile]);
         if (check2.exitCode !== 0)
           return send(c.res, 409, {
             error: `the patch does not apply to your working tree: ${(check2.stderr || check2.stdout).trim().slice(0, 400)}`
           });
-        await run("git", ["-C", repoDir, "apply", "--index", patchFile]);
-        act(c, "run.applied", c.m[1]);
+        await run("git", ["-C", W.path, "apply", "--index", patchFile]);
+        act(c, "run.applied", c.m[2]);
         return send(c.res, 200, {
           ok: true,
           message: "Applied and staged. Review with git diff --cached."
@@ -260403,21 +261238,25 @@ data: ${JSON.stringify(data)}
     },
     {
       method: "POST",
-      path: /^\/api\/runs\/([\w.-]+)\/delete$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs\/([\w.-]+)\/delete$/,
+      ws: true,
       perm: "runs.delete",
       handler: async (c) => {
-        const dir = runDir(c.m[1]);
+        const W = c.w;
+        const dir = runDir(W, c.m[2]);
         if (!dir) return send(c.res, 404, { error: "no such run" });
         await rm7(dir, { recursive: true, force: true });
-        act(c, "run.deleted", c.m[1]);
+        act(c, "run.deleted", c.m[2]);
         return send(c.res, 200, { ok: true });
       }
     },
     {
       method: "POST",
-      path: /^\/api\/runs$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/runs$/,
+      ws: true,
       perm: "runs.start",
       handler: async (c) => {
+        const W = c.w;
         const b = await readBody(c.req);
         const pkg = String(b.package ?? "").trim();
         const version2 = String(b.version ?? "").trim();
@@ -260426,18 +261265,20 @@ data: ${JSON.stringify(data)}
         if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(pkg) || !/^\d[\w.+-]*$/.test(version2))
           return send(c.res, 400, { error: "expected a package name and an exact version" });
         if (!/^[\w-]+$/.test(provider2)) return send(c.res, 400, { error: "bad provider" });
-        const lr = startRun(pkg, version2, provider2, budget);
+        const lr = startRun(W, pkg, version2, provider2, budget);
         act(c, "run.started", `${pkg}@${version2}`, { provider: provider2, budget });
         return send(c.res, 200, { id: lr.id });
       }
     },
     {
       method: "GET",
-      path: /^\/api\/live\/([a-f0-9]{12})$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/live\/([a-f0-9]{12})$/,
+      ws: true,
       perm: "runs.view",
       handler: (c) => {
-        const lr = live.get(c.m[1]);
-        if (!lr) return send(c.res, 404, { error: "no such live run" });
+        const W = c.w;
+        const lr = live.get(c.m[2]);
+        if (!lr || lr.ws !== W.id) return send(c.res, 404, { error: "no such live run" });
         c.res.writeHead(200, {
           "content-type": "text/event-stream",
           "cache-control": "no-store",
@@ -260466,15 +261307,17 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
     },
     {
       method: "POST",
-      path: /^\/api\/scan$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/scan$/,
+      ws: true,
       perm: "runs.start",
       handler: async (c) => {
-        const child = cli(["scan", "--repo", repoDir]);
+        const W = c.w;
+        const child = cli(["scan", "--repo", W.path], W.path);
         let err = "";
         child.stderr.on("data", (d) => err += d.toString());
         const code = await new Promise((r) => child.on("close", r));
-        const debtFile = join22(repoDir, ".bumpsmith", "debt.json");
-        if (code !== 0 || !existsSync10(debtFile))
+        const debtFile = join23(W.path, ".bumpsmith", "debt.json");
+        if (code !== 0 || !existsSync11(debtFile))
           return send(c.res, 500, {
             error: err.trim().split("\n").slice(-3).join(" ") || "scan failed"
           });
@@ -260484,9 +261327,11 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
     },
     {
       method: "GET",
-      path: /^\/api\/latest$/,
+      path: /^\/api\/w\/([a-z0-9-]+)\/latest$/,
+      ws: true,
       perm: "runs.view",
       handler: async (c) => {
+        const W = c.w;
         const name = c.url.searchParams.get("name") ?? "";
         const eco = c.url.searchParams.get("ecosystem") === "pypi" ? "pypi" : "npm";
         if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) return send(c.res, 400, { error: "bad name" });
@@ -260494,10 +261339,10 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       }
     }
   ];
-  const runDir = (id) => {
+  const runDir = (w, id) => {
     if (!ID.test(id)) return null;
-    const dir = join22(runsDir, id);
-    return dir.startsWith(runsDir + sep3) && existsSync10(join22(dir, "job.json")) ? dir : null;
+    const dir = join23(w.runs_dir, id);
+    return dir.startsWith(w.runs_dir + sep3) && existsSync11(join23(dir, "job.json")) ? dir : null;
   };
   const server2 = http.createServer(async (req, res) => {
     try {
@@ -260510,7 +261355,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
         return send(res, 200, html, MIME[".html"]);
       if (req.method === "GET" && path5 === "/app.js") return send(res, 200, appJs, MIME[".js"]);
       if (req.method === "GET" && /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg)$/.test(path5)) {
-        const file2 = join22(root, "dashboard", path5);
+        const file2 = join23(root, "dashboard", path5);
         const body2 = await readFile16(file2).catch(() => null);
         return body2 ? send(res, 200, body2, MIME[extname2(file2)]) : send(res, 404, { error: "not found" });
       }
@@ -260526,12 +261371,14 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       }
       if (!route || !m) return send(res, 404, { error: "not found" });
       const ip = req.socket.remoteAddress ?? "";
+      let ctxW;
+      let ctxPerms = [];
       const token = readCookie(req.headers.cookie, cookieName(secure));
       const bearer = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
       const p = bearer ? auth2.principalFromToken(bearer) : auth2.principal(token, route.perm === "pending");
       if (req.method !== "GET") {
-        const origin = req.headers.origin;
-        if (origin !== void 0 && origin !== `http${secure ? "s" : ""}://${host}`)
+        const origin2 = req.headers.origin;
+        if (origin2 !== void 0 && origin2 !== `http${secure ? "s" : ""}://${host}`)
           return send(res, 403, { error: "cross-origin request refused" });
         if ((route.perm === "public" || route.perm === "pending") && auth2.rateLimited(ip))
           return send(res, 429, { error: "Too many attempts. Wait a few minutes." });
@@ -260552,12 +261399,21 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
             error: "Your organisation requires two-factor authentication. Set it up to continue.",
             mfaEnrollmentRequired: true
           });
-        if (route.perm !== "session" && !can(p.permissions, route.perm))
+        if (route.ws) {
+          const w = org.workspace(p.user.org_id, m[1] ?? "");
+          const e = w ? org.effective(p.user, p.permissions, w) : null;
+          if (!w || !e?.permissions.length) return send(res, 404, { error: "No such repository." });
+          const scoped = p.apiToken ? e.permissions.filter((x) => p.permissions.includes(x)) : e.permissions;
+          if (route.perm !== "session" && !scoped.includes(route.perm))
+            return send(res, 403, { error: "Your access to this repository does not allow this." });
+          ctxW = w;
+          ctxPerms = scoped;
+        } else if (route.perm !== "session" && !can(p.permissions, route.perm))
           return send(res, 403, { error: "Your role does not allow this." });
         if (route.stepUp && !auth2.fresh(p))
           return send(res, 403, { error: "Confirm it's you to continue.", reauth: true });
       }
-      await route.handler({ req, res, url: url3, m, p, ip, token });
+      await route.handler({ req, res, url: url3, m, p, ip, token, w: ctxW, wsPerms: ctxPerms });
     } catch (err) {
       if (!res.headersSent)
         return send(res, 500, { error: String(err.message ?? err).slice(0, 300) });
@@ -260597,7 +261453,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
     )
   };
 }
-var import_qrcode, ID, ANSI2, git2, onPath, MIME;
+var import_qrcode, ID, ANSI2, summaryCache, git2, onPath, envCache, MIME;
 var init_server = __esm({
   "src/dashboard/server.ts"() {
     "use strict";
@@ -260608,15 +261464,22 @@ var init_server = __esm({
     init_auth();
     init_crypto();
     init_db();
+    init_org();
     init_rbac();
     init_proc();
     ID = /^[\w.-]{1,80}$/;
     ANSI2 = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+    summaryCache = /* @__PURE__ */ new Map();
     git2 = async (dir, args) => {
       const r = await run("git", ["-C", dir, ...args], { timeoutMs: 1e4 }).catch(() => null);
       return r && r.exitCode === 0 ? r.stdout.trim() : null;
     };
     onPath = async (cmd) => (await run("sh", ["-c", `command -v ${cmd}`], { timeoutMs: 3e3 }).catch(() => null))?.exitCode === 0;
+    envCache = {
+      at: 0,
+      value: null,
+      pending: null
+    };
     MIME = {
       ".html": "text/html; charset=utf-8",
       ".js": "text/javascript; charset=utf-8",
@@ -260631,7 +261494,7 @@ var init_server = __esm({
 var import_semver9 = __toESM(require_semver2(), 1);
 import { mkdir as mkdir14, mkdtemp as mkdtemp5, readFile as readFile17, rm as rm8, writeFile as writeFile9 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
-import { basename as basename3, join as join23, resolve as resolve5 } from "node:path";
+import { basename as basename4, join as join24, resolve as resolve6 } from "node:path";
 import { parseArgs } from "node:util";
 
 // src/action.ts
@@ -265709,7 +266572,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve6) {
+function isRecursive(inst, stack, resolve7) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -265719,7 +266582,7 @@ function isRecursive(inst, stack, resolve6) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve6);
+      const answer = isRecursive(child, stack, resolve7);
       if (answer > result)
         result = answer;
     }
@@ -265730,7 +266593,7 @@ function isRecursive(inst, stack, resolve6) {
       const desc = Object.getOwnPropertyDescriptor(sh2, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve6) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve7) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -265794,7 +266657,7 @@ function isRecursive(inst, stack, resolve6) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve6 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve7 ? inst._zod.innerType : void 0);
       merge3(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -282488,7 +283351,7 @@ init_proc();
 async function snapshot(src, dest) {
   await rm2(dest, { recursive: true, force: true });
   await mkdir3(dest, { recursive: true });
-  await new Promise((resolve6, reject) => {
+  await new Promise((resolve7, reject) => {
     const pack = spawn2("tar", hostTarCreateArgs(src), {
       env: { ...process.env, COPYFILE_DISABLE: "1" },
       stdio: ["ignore", "pipe", "pipe"]
@@ -282500,7 +283363,7 @@ async function snapshot(src, dest) {
     pack.stdout.pipe(unpack.stdin);
     unpack.on(
       "close",
-      (code) => code === 0 ? resolve6() : reject(new Error(`snapshot failed: ${errText}`))
+      (code) => code === 0 ? resolve7() : reject(new Error(`snapshot failed: ${errText}`))
     );
     pack.on("error", reject);
     unpack.on("error", reject);
@@ -284373,7 +285236,7 @@ var safeJSON2 = (text) => {
 };
 
 // node_modules/.pnpm/openai@7.57.0_zod@4.6.7/node_modules/openai/internal/utils/sleep.mjs
-var sleep2 = (ms, ...signals) => new Promise((resolve6, reject) => {
+var sleep2 = (ms, ...signals) => new Promise((resolve7, reject) => {
   const activeSignals = [...new Set(signals.filter((signal) => signal != null))];
   let timeout;
   let settled = false;
@@ -284405,7 +285268,7 @@ var sleep2 = (ms, ...signals) => new Promise((resolve6, reject) => {
     return;
   }
   timeout = setTimeout(() => {
-    settle2(resolve6);
+    settle2(resolve7);
   }, ms);
   for (const signal of activeSignals) {
     if (settled) {
@@ -285203,8 +286066,8 @@ function createAbortableSSESource(body, signal) {
   let interrupt;
   const waitForAbort = () => (
     // oxlint-disable-next-line promise/avoid-new -- AbortSignal callbacks need a portable Promise bridge.
-    new Promise((resolve6) => {
-      interrupt = resolve6;
+    new Promise((resolve7) => {
+      interrupt = resolve7;
     })
   );
   const cancel = () => {
@@ -286141,8 +287004,8 @@ function resolveDataResidency(options) {
 var _APIPromise_client2;
 var APIPromise2 = class _APIPromise extends Promise {
   constructor(client, responsePromise, parseResponse2 = defaultParseResponse2) {
-    super((resolve6) => {
-      resolve6(null);
+    super((resolve7) => {
+      resolve7(null);
     });
     this.responsePromise = responsePromise;
     this.parseResponse = parseResponse2;
@@ -289200,12 +290063,12 @@ var EventStream = class {
     _EventStream_aborted.set(this, false);
     _EventStream_catchingPromiseCreated.set(this, false);
     _EventStream_terminalFailure.set(this, void 0);
-    __classPrivateFieldSet2(this, _EventStream_connectedPromise, new Promise((resolve6, reject) => {
-      __classPrivateFieldSet2(this, _EventStream_resolveConnectedPromise, resolve6, "f");
+    __classPrivateFieldSet2(this, _EventStream_connectedPromise, new Promise((resolve7, reject) => {
+      __classPrivateFieldSet2(this, _EventStream_resolveConnectedPromise, resolve7, "f");
       __classPrivateFieldSet2(this, _EventStream_rejectConnectedPromise, reject, "f");
     }), "f");
-    __classPrivateFieldSet2(this, _EventStream_endPromise, new Promise((resolve6, reject) => {
-      __classPrivateFieldSet2(this, _EventStream_resolveEndPromise, resolve6, "f");
+    __classPrivateFieldSet2(this, _EventStream_endPromise, new Promise((resolve7, reject) => {
+      __classPrivateFieldSet2(this, _EventStream_resolveEndPromise, resolve7, "f");
       __classPrivateFieldSet2(this, _EventStream_rejectEndPromise, reject, "f");
     }), "f");
     __classPrivateFieldGet2(this, _EventStream_connectedPromise, "f").catch(() => void 0);
@@ -289343,7 +290206,7 @@ var EventStream = class {
    *   const message = await stream.emitted('message') // rejects if the stream errors
    */
   emitted(event) {
-    return new Promise((resolve6, reject) => {
+    return new Promise((resolve7, reject) => {
       __classPrivateFieldSet2(this, _EventStream_catchingPromiseCreated, true, "f");
       const onError = (error62) => {
         this.off(event, onEvent);
@@ -289353,7 +290216,7 @@ var EventStream = class {
         if (event !== "error") {
           this.off("error", onError);
         }
-        resolve6(values.length > 1 ? values : values[0]);
+        resolve7(values.length > 1 ? values : values[0]);
       };
       if (event !== "error") {
         __classPrivateFieldGet2(this, _EventStream_instances, "m", _EventStream_onceForEmitted).call(this, "error", onError);
@@ -289569,8 +290432,8 @@ var EventStream = class {
         if (ended) {
           return Promise.resolve(doneResult());
         }
-        return new Promise((resolve6, reject) => {
-          readQueue.enqueue({ resolve: resolve6, reject });
+        return new Promise((resolve7, reject) => {
+          readQueue.enqueue({ resolve: resolve7, reject });
         });
       },
       return: () => {
@@ -298319,8 +299182,8 @@ _AgentToolDispatcher_handlers = /* @__PURE__ */ new WeakMap(), _AgentToolDispatc
     try {
       await __classPrivateFieldGet2(this, _AgentToolDispatcher_instances, "m", _AgentToolDispatcher_wait).call(this, () => (
         // oxlint-disable-next-line promise/avoid-new -- Own the registration timer so cancellation clears it promptly.
-        new Promise((resolve6) => {
-          timer = setTimeout(resolve6, delay);
+        new Promise((resolve7) => {
+          timer = setTimeout(resolve7, delay);
         })
       ));
     } finally {
@@ -300104,7 +300967,7 @@ var Steps = class extends APIResource2 {
 
 // node_modules/.pnpm/openai@7.57.0_zod@4.6.7/node_modules/openai/lib/polling.mjs
 function sleepUntilAborted(milliseconds, signal) {
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     let timer;
     let registered;
     let settled = false;
@@ -300153,7 +301016,7 @@ function sleepUntilAborted(milliseconds, signal) {
       }
       settled = true;
       cleanup();
-      resolve6();
+      resolve7();
     }, milliseconds);
     registered = abort;
     try {
@@ -310480,11 +311343,11 @@ async function ensureImage(kind, buildArgs = []) {
   return tag;
 }
 async function ensureMirrorCerts(dir = CERT_DIR) {
-  const { existsSync: existsSync11, statSync } = await import("node:fs");
+  const { existsSync: existsSync12, statSync: statSync2 } = await import("node:fs");
   const { writeFile: writeFile10, rm: rm9 } = await import("node:fs/promises");
   const hostsFile = join11(dir, "hosts.txt");
   const wanted = REGISTRY_HOSTS.join(",");
-  const current = async () => existsSync11(join11(dir, "mirror.crt")) && existsSync11(join11(dir, "ca.crt")) && existsSync11(hostsFile) && (await readFile8(hostsFile, "utf8")).trim() === wanted;
+  const current = async () => existsSync12(join11(dir, "mirror.crt")) && existsSync12(join11(dir, "ca.crt")) && existsSync12(hostsFile) && (await readFile8(hostsFile, "utf8")).trim() === wanted;
   if (await current()) return dir;
   await mkdir7(dirname3(dir), { recursive: true });
   const lock = `${dir}.lock`;
@@ -310494,7 +311357,7 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
       break;
     } catch {
       try {
-        if (Date.now() - statSync(lock).mtimeMs > 12e4)
+        if (Date.now() - statSync2(lock).mtimeMs > 12e4)
           await rm9(lock, { recursive: true, force: true });
       } catch {
       }
@@ -310889,7 +311752,7 @@ var DockerSandbox = class _DockerSandbox {
   /** Copy a host directory into /workspace (excluding .git and dependency folders). */
   async copyIn(hostDir, dest = "/workspace") {
     if (dest !== "/workspace") await this.exec(["mkdir", "-p", "--", dest], { timeoutSec: 30 });
-    await new Promise((resolve6, reject) => {
+    await new Promise((resolve7, reject) => {
       const tar = spawn4("tar", hostTarCreateArgs(hostDir), {
         env: { ...process.env, COPYFILE_DISABLE: "1" },
         stdio: ["ignore", "pipe", "pipe"]
@@ -310917,7 +311780,7 @@ var DockerSandbox = class _DockerSandbox {
       tar.stdout.pipe(dock.stdin);
       dock.on(
         "close",
-        (code) => code === 0 ? resolve6() : reject(new Error(`copyIn failed (${code}): ${errText.slice(-1e3)}`))
+        (code) => code === 0 ? resolve7() : reject(new Error(`copyIn failed (${code}): ${errText.slice(-1e3)}`))
       );
       tar.on("error", reject);
       dock.on("error", reject);
@@ -310927,7 +311790,7 @@ var DockerSandbox = class _DockerSandbox {
   async copyOut(hostDir) {
     await mkdir7(hostDir, { recursive: true });
     const excludes = EXPORT_EXCLUDES.flatMap((e) => [`--exclude=./${e}`, `--exclude=*/${e}`]);
-    await new Promise((resolve6, reject) => {
+    await new Promise((resolve7, reject) => {
       const dock = spawn4(
         "docker",
         [
@@ -310952,7 +311815,7 @@ var DockerSandbox = class _DockerSandbox {
       dock.stdout.pipe(tar.stdin);
       tar.on(
         "close",
-        (code) => code === 0 ? resolve6() : reject(new Error(`copyOut failed (${code}): ${errText.slice(-1e3)}`))
+        (code) => code === 0 ? resolve7() : reject(new Error(`copyOut failed (${code}): ${errText.slice(-1e3)}`))
       );
       tar.on("error", reject);
       dock.on("error", reject);
@@ -317509,14 +318372,14 @@ function inputRequiredRoundsExceededMessage(method, maxRounds) {
   return `Multi-round-trip request '${method}' still required input after ${maxRounds} rounds (inputRequired.maxRounds)`;
 }
 function sleep3(ms, signal) {
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     if (signal?.aborted) {
       reject(signal.reason instanceof SdkError ? signal.reason : new SdkError(SdkErrorCode.RequestTimeout, String(signal.reason)));
       return;
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
-      resolve6();
+      resolve7();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -318312,7 +319175,7 @@ var Protocol = class {
     const flowStartedAt = Date.now();
     let onAbort;
     let cleanupMessageId;
-    return new Promise((resolve6, reject) => {
+    return new Promise((resolve7, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -318381,7 +319244,7 @@ var Protocol = class {
         }
         if (decoded.kind === "invalid") return reject(decoded.error);
         if (decoded.kind === "input_required") {
-          if (options?.allowInputRequired === true) return resolve6(manualInputRequiredValue(decoded));
+          if (options?.allowInputRequired === true) return resolve7(manualInputRequiredValue(decoded));
           const flow = {
             codec: codec2,
             request: request2,
@@ -318393,11 +319256,11 @@ var Protocol = class {
               params
             }, resultSchema, legOptions)
           };
-          return resolve6(this._resolveNonCompleteResult(decoded, flow));
+          return resolve7(this._resolveNonCompleteResult(decoded, flow));
         }
         const result = decoded.result;
         validateStandardSchema(resultSchema, result).then((parseResult) => {
-          if (parseResult.success) resolve6(parseResult.data);
+          if (parseResult.success) resolve7(parseResult.data);
           else reject(new SdkError(SdkErrorCode.InvalidResult, `Invalid result for ${request2.method}: ${parseResult.error}`));
         }, reject);
       });
@@ -321289,7 +322152,7 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports) => {
     ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
     const schOrFunc = root.refs[ref];
     if (schOrFunc) return schOrFunc;
-    let _sch = resolve6.call(this, root, ref);
+    let _sch = resolve7.call(this, root, ref);
     if (_sch === void 0) {
       const schema = (_a8 = root.localRefs) === null || _a8 === void 0 ? void 0 : _a8[ref];
       const { schemaId } = this.opts;
@@ -321315,7 +322178,7 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports) => {
   function sameSchemaEnv(s1, s2) {
     return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
   }
-  function resolve6(root, ref) {
+  function resolve7(root, ref) {
     let sch;
     while (typeof (sch = this.refs[ref]) == "string") ref = sch;
     return sch || this.schemas[ref] || resolveSchema.call(this, root, ref);
@@ -322010,7 +322873,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     else if (typeof uri === "object") uri = parse6(serialize2(uri, options), options);
     return uri;
   }
-  function resolve6(baseURI, relativeURI, options) {
+  function resolve7(baseURI, relativeURI, options) {
     const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
     const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed, malformedPercentEncoding: baseMalformedPercentEncoding, malformedSchemeSpecific: baseMalformedSchemeSpecific, malformedHost: baseMalformedHost, malformedScheme: baseMalformedScheme } = parseWithStatus(baseURI, schemelessOptions);
     const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed, malformedPercentEncoding: relativeMalformedPercentEncoding, malformedSchemeSpecific: relativeMalformedSchemeSpecific, malformedHost: relativeMalformedHost, malformedScheme: relativeMalformedScheme } = parseWithStatus(relativeURI, schemelessOptions);
@@ -322292,7 +323155,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
   const fastUri = {
     SCHEMES,
     normalize: normalize2,
-    resolve: resolve6,
+    resolve: resolve7,
     resolveComponent,
     equal,
     serialize: serialize2,
@@ -326160,15 +327023,15 @@ var PerRequestHTTPServerTransport = class {
     };
     if (isJSONRPCRequest(message)) {
       this._requestId = message.id;
-      let resolve6;
+      let resolve7;
       let reject;
       const promise2 = new Promise((promiseResolve, promiseReject) => {
-        resolve6 = promiseResolve;
+        resolve7 = promiseResolve;
         reject = promiseReject;
       });
       this._deferredResponse = {
         promise: promise2,
-        resolve: resolve6,
+        resolve: resolve7,
         reject,
         settled: false
       };
@@ -326379,9 +327242,9 @@ function validateScopeChallenge(challenge) {
   if (challenge.errorDescription !== void 0 && !/^[\u0020-\u0021\u0023-\u005B\u005D-\u007E]+$/.test(challenge.errorDescription)) throw new TypeError("scope challenge errorDescription must satisfy the RFC 6750 error-description grammar");
   return challenge;
 }
-async function findScopeChallenge(requests, authInfo, resolve6) {
+async function findScopeChallenge(requests, authInfo, resolve7) {
   for (const request2 of requests) {
-    const challenge = await resolve6({
+    const challenge = await resolve7({
       request: request2,
       ...authInfo !== void 0 && { authInfo }
     });
@@ -328291,9 +329154,9 @@ data:
       const streamId = crypto.randomUUID();
       const initRequest = messages.find((m) => isInitializeRequest(m));
       const clientProtocolVersion = initRequest ? initRequest.params.protocolVersion : req.headers.get("mcp-protocol-version") ?? DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
-      if (this._enableJsonResponse) return new Promise((resolve6) => {
+      if (this._enableJsonResponse) return new Promise((resolve7) => {
         this._streamMapping.set(streamId, {
-          resolveJson: resolve6,
+          resolveJson: resolve7,
           cleanup: () => {
             this._streamMapping.delete(streamId);
           }
@@ -329023,7 +329886,7 @@ var readBodyDirect = (request2) => {
     request2[bodyBufferKey] = buffered;
     return Promise.resolve(buffered);
   }
-  const promise2 = new Promise((resolve6, reject) => {
+  const promise2 = new Promise((resolve7, reject) => {
     const chunks = [];
     let settled = false;
     const finish = (callback) => {
@@ -329041,7 +329904,7 @@ var readBodyDirect = (request2) => {
         else if (recovered === void 0) reject(error62 ?? normalizeAbortError(request2, incoming));
         else {
           request2[bodyBufferKey] = recovered;
-          resolve6(recovered);
+          resolve7(recovered);
         }
       });
       return true;
@@ -329053,7 +329916,7 @@ var readBodyDirect = (request2) => {
       finish(() => {
         const buffer = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
         request2[bodyBufferKey] = buffer;
-        resolve6(buffer);
+        resolve7(buffer);
       });
     };
     const onError = (error62) => {
@@ -329608,7 +330471,7 @@ var responseViaResponseObject = async (res, outgoing, options = {}) => {
         const chunk = await readWithoutBlocking(currentReadPromise);
         if (!chunk) {
           if (i === 1) {
-            await new Promise((resolve6) => setTimeout(resolve6));
+            await new Promise((resolve7) => setTimeout(resolve7));
             maxReadCount = 3;
             continue;
           }
@@ -329992,7 +330855,7 @@ async function startToolServer(tools) {
     await mcp.connect(transport);
     await transport.handleRequest(req, res);
   });
-  await new Promise((resolve6) => server2.listen(0, "127.0.0.1", resolve6));
+  await new Promise((resolve7) => server2.listen(0, "127.0.0.1", resolve7));
   const { port } = server2.address();
   return { url: `http://127.0.0.1:${port}/mcp`, token, server: server2 };
 }
@@ -330402,7 +331265,7 @@ function parseSpec(spec) {
 async function repoConfig(dir) {
   for (const f of CONFIG_PATHS) {
     try {
-      const r = parseConfig(await readFile17(join23(dir, f), "utf8"));
+      const r = parseConfig(await readFile17(join24(dir, f), "utf8"));
       for (const p of r.problems)
         process.stderr.write(`${f}:${p.line ?? "?"} ${p.path} ${p.message}
 `);
@@ -330472,7 +331335,7 @@ async function githubRun(target, mode, prov, budget, log2) {
     throw new Error("--github expects owner/repo");
   const token = await githubToken();
   const gh2 = tokenClient(token, { userAgent: "bumpsmith-cli", log: log2 });
-  const work = await mkdtemp5(join23(tmpdir4(), "bumpsmith-gh-"));
+  const work = await mkdtemp5(join24(tmpdir4(), "bumpsmith-gh-"));
   try {
     const rows = await runAction({
       gh: gh2,
@@ -330547,14 +331410,14 @@ async function main() {
   const prov = () => provider(values.provider ?? defaultProvider(), values.model, values["base-url"]);
   switch (cmd) {
     case "init": {
-      const dir = resolve5(values.repo ?? ".");
-      const wfDir = join23(dir, ".github", "workflows");
+      const dir = resolve6(values.repo ?? ".");
+      const wfDir = join24(dir, ".github", "workflows");
       let ciName = "CI";
       try {
         const { readdir: readdir7 } = await import("node:fs/promises");
         for (const f of await readdir7(wfDir)) {
           if (!/\.ya?ml$/.test(f) || /bumpsmith/.test(f)) continue;
-          const text = await readFile17(join23(wfDir, f), "utf8");
+          const text = await readFile17(join24(wfDir, f), "utf8");
           if (/pull_request/.test(text)) {
             ciName = /^name:\s*["']?([^"'\n]+)/m.exec(text)?.[1]?.trim() ?? f.replace(/\.ya?ml$/, "");
             break;
@@ -330562,12 +331425,12 @@ async function main() {
         }
       } catch {
       }
-      const wfPath = join23(wfDir, "bumpsmith.yml");
-      const cfgPath = join23(dir, ".bumpsmith.yml");
-      const { existsSync: existsSync11 } = await import("node:fs");
+      const wfPath = join24(wfDir, "bumpsmith.yml");
+      const cfgPath = join24(dir, ".bumpsmith.yml");
+      const { existsSync: existsSync12 } = await import("node:fs");
       await mkdir14(wfDir, { recursive: true });
-      if (!existsSync11(wfPath)) await writeFile9(wfPath, initWorkflow(ciName));
-      if (!existsSync11(cfgPath)) await writeFile9(cfgPath, INIT_CONFIG);
+      if (!existsSync12(wfPath)) await writeFile9(wfPath, initWorkflow(ciName));
+      if (!existsSync12(cfgPath)) await writeFile9(cfgPath, INIT_CONFIG);
       log2(
         `wrote ${wfPath} (runs after your "${ciName}" workflow fails on a Dependabot/Renovate PR)`
       );
@@ -330603,8 +331466,8 @@ async function main() {
         );
         return;
       }
-      const dir = resolve5(values.repo ?? ".");
-      const runsDir = join23(dir, ".bumpsmith", "runs");
+      const dir = resolve6(values.repo ?? ".");
+      const runsDir = join24(dir, ".bumpsmith", "runs");
       const job = await runJob(
         { repo: dir, packageName: name, to: version2, from: values.from, dir: values.dir },
         {
@@ -330615,13 +331478,13 @@ async function main() {
           log: log2
         }
       );
-      const out = join23(runsDir, job.id);
+      const out = join24(runsDir, job.id);
       log2(
         `
 ${job.state.toUpperCase()} (confidence ${job.confidence ?? "n/a"}, $${(job.cost_usd ?? 0).toFixed(2)})`
       );
-      log2(`evidence: ${join23(out, "evidence.md")}`);
-      const patchFile = join23(out, "patch.diff");
+      log2(`evidence: ${join24(out, "evidence.md")}`);
+      const patchFile = join24(out, "patch.diff");
       const patch = await readFile17(patchFile, "utf8").catch(() => "");
       if (patch.trim()) {
         log2(`patch:    ${patchFile}`);
@@ -330639,7 +331502,7 @@ ${job.state.toUpperCase()} (confidence ${job.confidence ?? "n/a"}, $${(job.cost_
     }
     case "explain": {
       const { name, version: version2 } = parseSpec(args[0]);
-      const dir = resolve5(values.repo ?? ".");
+      const dir = resolve6(values.repo ?? ".");
       const inv = await inventory(dir);
       const eco = inv.ecosystem;
       const from = import_semver9.default.minVersion(inv.dependencies[name] ?? "")?.version;
@@ -330670,7 +331533,7 @@ cost: $${ledger.totalUsd.toFixed(3)}`);
       return;
     }
     case "scan": {
-      const dir = resolve5(values.repo ?? ".");
+      const dir = resolve6(values.repo ?? ".");
       const inv = await inventory(dir);
       const { components, complete } = await collectComponents(inv);
       const resolved = new Map(components.filter((c) => c.direct).map((c) => [c.name, c.version]));
@@ -330683,17 +331546,17 @@ cost: $${ledger.totalUsd.toFixed(3)}`);
         unsupported: [],
         minReleaseAgeDays: cfg.release_age_days
       });
-      const outDir = join23(dir, ".bumpsmith");
+      const outDir = join24(dir, ".bumpsmith");
       await mkdir14(outDir, { recursive: true });
       await writeFile9(
-        join23(outDir, "sbom.cdx.json"),
+        join24(outDir, "sbom.cdx.json"),
         JSON.stringify(
-          cycloneDx({ repoFullName: basename3(dir), commit: "working-tree", components, complete }),
+          cycloneDx({ repoFullName: basename4(dir), commit: "working-tree", components, complete }),
           null,
           2
         )
       );
-      await writeFile9(join23(outDir, "debt.json"), JSON.stringify(report, null, 2));
+      await writeFile9(join24(outDir, "debt.json"), JSON.stringify(report, null, 2));
       console.log(
         `${inv.ecosystem} (${inv.packageManager}), ${report.directDependencies} direct dependencies, ${report.behind.length} a major version or more behind:
 `
@@ -330865,15 +331728,15 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
         console.warn(`${w.name}: ${w.message}`);
       });
       const { startDashboard: startDashboard2 } = await Promise.resolve().then(() => (init_server(), server_exports));
-      const dir = resolve5(values.repo ?? ".");
+      const dir = resolve6(values.repo ?? ".");
       const { url: url2, setupUrl, dataDir } = await startDashboard2({
         repoDir: dir,
-        runsDir: values.runs ? resolve5(values.runs) : void 0,
+        runsDir: values.runs ? resolve6(values.runs) : void 0,
         port: values.port ? Number(values.port) : void 0,
-        dataDir: values.data ? resolve5(values.data) : void 0,
+        dataDir: values.data ? resolve6(values.data) : void 0,
         cliEntry: process.argv[1] ?? ""
       });
-      log2(`Bumpsmith dashboard for ${basename3(dir)}: ${url2}`);
+      log2(`Bumpsmith dashboard for ${basename4(dir)}: ${url2}`);
       log2(`Accounts and audit log: ${dataDir}. Bound to 127.0.0.1. Ctrl+C to stop.`);
       if (setupUrl) {
         log2("");

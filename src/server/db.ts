@@ -94,6 +94,42 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX api_tokens_user ON api_tokens(user_id);
   `,
+  `
+  CREATE TABLE workspaces (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    path TEXT NOT NULL,
+    runs_dir TEXT NOT NULL,
+    repo TEXT,
+    visibility TEXT NOT NULL DEFAULT 'org',
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    UNIQUE (org_id, slug)
+  );
+  CREATE TABLE grants (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    principal_type TEXT NOT NULL,
+    principal_id TEXT NOT NULL,
+    role_id TEXT NOT NULL REFERENCES roles(id),
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    UNIQUE (workspace_id, principal_type, principal_id)
+  );
+  CREATE TABLE invites (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_by TEXT
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

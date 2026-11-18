@@ -9,7 +9,7 @@ import {
   setup as setupAccount,
 } from "./account.ts";
 import { can, fetchSession, reauthDialog, session, showAuth, showEnroll, signOut } from "./auth.ts";
-import { confirmDialog } from "./dialog.ts";
+import { confirmDialog, openDialog } from "./dialog.ts";
 import {
   type FileDiff,
   type FileView,
@@ -22,6 +22,19 @@ import {
 import { buildSteps, jobLog, type LogStep, lineOf, logLines, logText, outputLines } from "./log.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { api, hooks } from "./net.ts";
+import {
+  accessPage,
+  auditPage,
+  loadOrgPage,
+  membersPage,
+  noAccessPage,
+  ORG_PAGE_PERM,
+  orgAction,
+  orgChange,
+  orgInput,
+  rolesPage,
+  setupOrg,
+} from "./org.ts";
 import {
   ago,
   agoLong,
@@ -93,12 +106,31 @@ interface State {
     packageManager: string;
   } | null;
   live: LiveRun[];
+  workspace: { slug: string; name: string; kind: string; visibility: string };
+  /** What you may do in this repository. */
+  perms: string[];
+}
+interface WsItem {
+  slug: string;
+  name: string;
+  kind: string;
+  visibility: string;
+  path: string | null;
+  branch: string | null;
+  runs: number;
+  permissions: string[];
 }
 // biome-ignore lint/suspicious/noExplicitAny: job.json is rendered defensively
 type Job = any;
 
 type Tab = "summary" | "changes" | "checks" | "breaking" | "log" | "report";
 const ui = {
+  /** The current repository (workspace) slug. */
+  ws: "",
+  workspaces: [] as WsItem[],
+  canAddWs: false,
+  switcher: false,
+  switchQ: "",
   data: null as State | null,
   route: "",
   filter: "all",
@@ -137,6 +169,12 @@ const ui = {
 const $app = document.getElementById("app") as HTMLElement;
 
 // ───────────── helpers ─────────────
+
+/** API path inside the current repository. */
+const wapi = (path: string) => `/api/w/${encodeURIComponent(ui.ws)}${path}`;
+/** May the signed-in user do this in the current repository? */
+const wcan = (p: string) => !!ui.data?.perms?.includes(p);
+const ORG_ROUTE = /^(account|org\/|invite\/|setup\/)/;
 
 const isGood = (r: Run) => r.state === "ready" || r.state === "safe";
 const verified = (r: Run) =>
@@ -200,11 +238,14 @@ function sidebar(d: State) {
     `<a href="#/org/${id}" class="${ui.route === `org/${id}` ? "on" : ""}">${icon(ic)}<span>${label}</span></a>`;
   return `<aside class="sidebar">
     <div class="brand">${BRAND_WORDMARK}<span class="brand-tag">local</span></div>
-    <div class="ctx" title="${esc(r.path)}">
-      <div class="ctx-av">${esc(r.name.slice(0, 2).toUpperCase())}</div>
-      <div style="min-width:0"><div class="ctx-name">${esc(r.name)}</div>
-        <div class="ctx-sub">${icon("branch")}${esc(r.branch ?? "no git")}${r.commit ? ` · ${esc(r.commit)}` : ""}</div></div>
-      ${icon("chevron")}
+    <div class="ws-wrap">
+      <button class="ctx ${ui.switcher ? "open" : ""}" data-act="ws-switch" aria-haspopup="listbox" aria-expanded="${ui.switcher}" title="Switch repository">
+        <div class="ctx-av">${esc(r.name.slice(0, 2).toUpperCase())}</div>
+        <div style="min-width:0;text-align:left"><div class="ctx-name">${esc(d.workspace?.name ?? r.name)}</div>
+          <div class="ctx-sub">${icon("branch")}${esc(r.branch ?? "no git")}${r.commit ? ` · ${esc(r.commit)}` : ""}</div></div>
+        ${icon("chevron")}
+      </button>
+      ${ui.switcher ? switcher() : ""}
     </div>
     <div class="sep"></div>
     <nav class="nav">
@@ -218,11 +259,18 @@ function sidebar(d: State) {
       ${link("safety", "Safety", "shield")}
       ${link("sandbox", "Sandbox & models", "cpu")}
     </nav>
-    ${
-      can("security.manage")
-        ? `<nav class="nav"><div class="nav-h">Organisation</div>${orgLink("security", "Security", "lock")}</nav>`
-        : ""
-    }
+    ${(() => {
+      const items = [
+        can("members.view") ? orgLink("members", "Members", "users") : "",
+        can("roles.manage") ? orgLink("roles", "Roles", "key") : "",
+        can("access.manage") ? orgLink("access", "Access", "shield") : "",
+        can("security.manage") ? orgLink("security", "Security", "lock") : "",
+        can("audit.view") ? orgLink("audit", "Audit log", "list") : "",
+      ].join("");
+      return items
+        ? `<div class="sep"></div><nav class="nav"><div class="nav-h">Organisation</div>${items}</nav>`
+        : "";
+    })()}
     <div class="side-foot">
       <div class="sep"></div>
       ${userRow()}
@@ -234,6 +282,30 @@ function sidebar(d: State) {
       </div>
     </div>
   </aside>`;
+}
+
+/** The repository switcher: search, every repository you can see, and "Add repository". */
+function switcher() {
+  const q = ui.switchQ.trim().toLowerCase();
+  const list = ui.workspaces.filter(
+    (w) => !q || w.name.toLowerCase().includes(q) || (w.path ?? "").toLowerCase().includes(q),
+  );
+  return `<div class="ws-pop" role="listbox" aria-label="Repositories">
+    ${ui.workspaces.length > 5 ? `<label class="ws-q">${icon("search")}<input id="ws-q" placeholder="Find a repository" value="${esc(ui.switchQ)}" autocomplete="off" spellcheck="false" /></label>` : `<div class="ws-ph">Repositories</div>`}
+    <div class="ws-list">${
+      list
+        .map(
+          (
+            w,
+          ) => `<button class="ws-i ${w.slug === ui.ws ? "on" : ""}" role="option" aria-selected="${w.slug === ui.ws}" data-act="ws-go" data-v="${esc(w.slug)}">
+        <span class="ctx-av sm">${esc(w.name.slice(0, 2).toUpperCase())}</span>
+        <span class="ws-t"><b>${esc(w.name)}</b><span>${esc(w.branch ?? (w.kind === "github" ? "GitHub" : "local"))}${w.runs ? ` · ${w.runs} run${w.runs === 1 ? "" : "s"}` : ""}${w.visibility === "restricted" ? " · restricted" : ""}</span></span>
+        ${w.slug === ui.ws ? icon("check") : ""}</button>`,
+        )
+        .join("") || `<div class="ws-empty">No repository matches.</div>`
+    }</div>
+    ${ui.canAddWs ? `<div class="ws-f"><button class="ws-i add" data-act="ws-add">${icon("plus")}<span class="ws-t"><b>Add repository</b></span></button></div>` : ""}
+  </div>`;
 }
 
 function userRow() {
@@ -256,7 +328,7 @@ function topbar(crumbs: string[]) {
     <div class="grow"></div>
     <div class="search" data-act="palette">${icon("search")}<span>Search upgrades and packages</span><kbd>⌘K</kbd></div>
     <button class="btn icon" data-act="theme" title="Switch theme">${icon(theme() === "dark" ? "sun" : "moon")}</button>
-    <button class="btn primary" data-act="new">${icon("plus")}<span class="hide-sm">New upgrade</span></button>
+    <button class="btn primary" data-act="new" data-need="runs.start">${icon("plus")}<span class="hide-sm">New upgrade</span></button>
   </header>`;
 }
 
@@ -285,7 +357,7 @@ function overview(d: State) {
     <div class="ph">
       <div><h1>Overview</h1>
         <p><span><span class="dot ok"></span>${ready.length} ready to apply</span><span><span class="dot warn"></span>${human.length} need a human</span><span><span class="dot bad"></span>${blocked.length} blocked</span>${last ? `<span class="faint">Last run ${agoLong(last.created_at)}</span>` : ""}</p></div>
-      <div class="act"><button class="btn" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan dependencies"}</button></div>
+      <div class="act"><button class="btn" data-act="scan" data-need="runs.start" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan dependencies"}</button></div>
     </div>
     ${liveRows(live)}
     <div class="grid g4">
@@ -334,7 +406,7 @@ function readyQueue(ready: Run[]) {
         <div style="min-width:0"><div class="queue-t"><span class="pkg"><b>${esc(r.package)}</b></span>${versions(r.from, r.to)}${ecoBadge(r.ecosystem)}</div>
           <div class="queue-s">${checkStrip(r.checks)}<span>${r.edited_by_agent ? `${plural(r.edited_by_agent, "file")} fixed by the agent` : "version bump only"}</span><span class="faint">${ago(r.created_at)} ago</span></div></div>
         ${confPill(r.confidence)}
-        <div class="queue-a"><a class="btn" href="#/runs/${esc(r.id)}">Review</a><button class="btn primary" data-act="apply" data-id="${esc(r.id)}">${icon("apply")}Apply</button></div>
+        <div class="queue-a"><a class="btn" href="#/runs/${esc(r.id)}">Review</a><button class="btn primary" data-act="apply" data-need="runs.apply" data-id="${esc(r.id)}">${icon("apply")}Apply</button></div>
       </div>`,
             )
             .join("")
@@ -438,8 +510,8 @@ function emptyOverview(d: State) {
       <h3>No upgrades yet</h3>
       <p>Pick a dependency. Bumpsmith upgrades it in a sandbox, fixes what breaks, and proves it with your own checks.</p>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn primary" data-act="new">${icon("plus")}New upgrade</button>
-        <button class="btn" data-act="scan">${icon("scan")}Scan dependencies</button>
+        <button class="btn primary" data-act="new" data-need="runs.start">${icon("plus")}New upgrade</button>
+        <button class="btn" data-act="scan" data-need="runs.start">${icon("scan")}Scan dependencies</button>
       </div>
       <div><pre>$ bumpsmith fix zod@4.1.0</pre></div>
     </div></div></div>`;
@@ -589,9 +661,9 @@ function detailPage(d: State) {
           <span>${dur(job.duration_ms ?? 0)}</span><span class="mono">${money(job.cost_usd ?? 0, 3)}</span><span>${agoLong(job.created_at)}</span></div>
       </div>
       <div class="act">
-        <button class="btn ghost danger icon" data-act="delete" data-id="${esc(det.id)}" title="Delete this run">${icon("trash")}</button>
+        <button class="btn ghost danger icon" data-act="delete" data-need="runs.delete" data-id="${esc(det.id)}" title="Delete this run">${icon("trash")}</button>
         <button class="btn" data-act="copy-patch" ${patch.trim() ? "" : "disabled"}>${icon("copy")}Copy patch</button>
-        <button class="btn ${canApply ? "primary" : ""}" data-act="apply" data-id="${esc(det.id)}" ${patch.trim() ? "" : "disabled"} title="${canApply ? "git apply --index, after git apply --check" : "Only verified results apply in one click; copy the patch to use it anyway"}">${icon("apply")}${ui.busy.has(`apply:${det.id}`) ? "Applying…" : "Apply patch"}</button>
+        <button class="btn ${canApply ? "primary" : ""}" data-act="apply" data-need="runs.apply" data-id="${esc(det.id)}" ${patch.trim() ? "" : "disabled"} title="${canApply ? "git apply --index, after git apply --check" : "Only verified results apply in one click; copy the patch to use it anyway"}">${icon("apply")}${ui.busy.has(`apply:${det.id}`) ? "Applying…" : "Apply patch"}</button>
       </div>
     </div>
     <div class="tabs">${tabs.map(([id, label, n]) => `<button class="tab ${ui.tab === id ? "on" : ""}" data-act="tab" data-v="${id}">${label}${n && n !== "0" ? `<span class="cnt">${n}</span>` : ""}</button>`).join("")}</div>
@@ -901,7 +973,7 @@ function depsPage(d: State) {
   if (!debt)
     return `<div class="page"><div class="ph"><div><h1>Dependencies</h1><p>${Object.keys(d.repo.dependencies).length} direct dependencies${d.repo.packageManager ? ` · ${esc(d.repo.packageManager)}` : ""}</p></div></div>
       <div class="panel"><div class="blank"><div class="blank-i">${icon("scan")}</div><h3>Find your upgrade debt</h3><p>A scan looks up the latest version of each direct dependency on the public registry. Only package names leave your machine.</p>
-      <button class="btn primary" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan now"}</button></div></div></div>`;
+      <button class="btn primary" data-act="scan" data-need="runs.start" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan now"}</button></div></div></div>`;
   const behind = [...debt.behind].sort(
     (a, b) => b.majorsBehind - a.majorsBehind || a.package.localeCompare(b.package),
   );
@@ -909,7 +981,7 @@ function depsPage(d: State) {
   const maxM = Math.max(...behind.map((b) => b.majorsBehind), 1);
   return `<div class="page">
     <div class="ph"><div><h1>Dependencies</h1><p><span>${esc(debt.packageManager)}</span><span class="faint">Scanned ${agoLong(debt.generatedAt)}</span></p></div>
-      <div class="act"><button class="btn" data-act="scan" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan again"}</button></div></div>
+      <div class="act"><button class="btn" data-act="scan" data-need="runs.start" ${ui.busy.has("scan") ? "disabled" : ""}>${icon("scan")}${ui.busy.has("scan") ? "Scanning…" : "Scan again"}</button></div></div>
     <div class="grid g4">
       ${stat("package", "Direct dependencies", String(debt.directDependencies), "", "", "Declared in your manifests")}
       ${stat("alertCircle", "Behind a major", String(majors.length), `of ${debt.directDependencies}`, ticks(majors.length, Math.max(debt.directDependencies, 1), "accent"), `${majors.reduce((n, b) => n + b.majorsBehind, 0)} majors in total`)}
@@ -1069,7 +1141,7 @@ function drawer(d: State) {
 }
 
 async function followLive(id: string) {
-  const r = await fetch(`/api/live/${id}`);
+  const r = await fetch(wapi(`/live/${id}`));
   if (!r.body) return;
   const reader = r.body.getReader();
   const dec = new TextDecoder();
@@ -1166,7 +1238,7 @@ function palette(d: State) {
 // ───────────── routing, rendering, events ─────────────
 
 function go(path: string) {
-  location.hash = `#/${path}`;
+  location.hash = ORG_ROUTE.test(path) ? `#/${path}` : `#/w/${ui.ws}/${path}`;
 }
 function toggleTheme() {
   const next = theme() === "dark" ? "light" : "dark";
@@ -1205,7 +1277,7 @@ async function fetchLatest(pkg: string) {
   ui.latest[pkg] = null;
   try {
     const r = await api<{ version: string | null }>(
-      `/api/latest?name=${encodeURIComponent(pkg)}&ecosystem=${ui.data?.repo.ecosystem ?? "npm"}`,
+      wapi(`/latest?name=${encodeURIComponent(pkg)}&ecosystem=${ui.data?.repo.ecosystem ?? "npm"}`),
     );
     ui.latest[pkg] = r.version;
     if (ui.drawer?.pkg === pkg) {
@@ -1224,7 +1296,7 @@ async function scan() {
   ui.busy.add("scan");
   render();
   try {
-    await api("/api/scan", { method: "POST" });
+    await api(wapi("/scan"), { method: "POST" });
     await refresh();
     toast("Dependencies scanned");
     go("deps");
@@ -1236,7 +1308,7 @@ async function scan() {
   }
 }
 async function refresh() {
-  const d = await api<State>("/api/state");
+  const d = await api<State>(wapi("/state"));
   for (const l of d.live) if (!ui.live.has(l.id)) ui.live.set(l.id, l);
   ui.data = d;
 }
@@ -1252,7 +1324,7 @@ async function loadDetail(id: string) {
   ui.logQuery = "";
   try {
     const r = await api<{ job: Job; patch: string; evidence: string }>(
-      `/api/runs/${encodeURIComponent(id)}`,
+      wapi(`/runs/${encodeURIComponent(id)}`),
     );
     ui.detail = { id, ...r };
     ui.files = parsePatch(r.patch);
@@ -1276,7 +1348,9 @@ async function expandGap(fi: number, g: number, rerender = true) {
   if (!vw.full) {
     try {
       const r = await api<{ text: string }>(
-        `/api/runs/${encodeURIComponent(det.id)}/file?side=${f.status === "deleted" ? "before" : "after"}&path=${encodeURIComponent(f.path)}`,
+        wapi(
+          `/runs/${encodeURIComponent(det.id)}/file?side=${f.status === "deleted" ? "before" : "after"}&path=${encodeURIComponent(f.path)}`,
+        ),
       );
       vw.full = r.text.split("\n");
     } catch (e) {
@@ -1300,7 +1374,7 @@ async function apply(id: string) {
   ui.busy.add(`apply:${id}`);
   render();
   try {
-    const r = await api<{ message: string }>(`/api/runs/${encodeURIComponent(id)}/apply`, {
+    const r = await api<{ message: string }>(wapi(`/runs/${encodeURIComponent(id)}/apply`), {
       method: "POST",
     });
     toast(r.message);
@@ -1347,6 +1421,18 @@ function render() {
   } else if (route === "org" && arg === "security") {
     crumbs.push("Security");
     body = securityPage();
+  } else if (route === "org" && arg === "members") {
+    crumbs.push("Members");
+    body = membersPage();
+  } else if (route === "org" && arg === "roles") {
+    crumbs.push("Roles");
+    body = rolesPage();
+  } else if (route === "org" && arg === "access") {
+    crumbs.push("Access");
+    body = accessPage();
+  } else if (route === "org" && arg === "audit") {
+    crumbs.push("Audit log");
+    body = auditPage();
   } else {
     crumbs.push("Overview");
     body = overview(d);
@@ -1361,7 +1447,19 @@ function render() {
   if (!ui.drawer) opened.drawer = 0;
   if (ui.palette && !opened.palette) opened.palette = Date.now();
   if (!ui.palette) opened.palette = 0;
-  $app.innerHTML = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
+  // Organisation pages belong to the organisation, not the current repository.
+  if (route === "org" || route === "account")
+    crumbs[0] = session.info?.org?.name ?? crumbs[0] ?? "";
+  if (route === "org" && arg && ORG_PAGE_PERM[arg] && !can(ORG_PAGE_PERM[arg] as string))
+    body = noAccessPage(crumbs[crumbs.length - 1] ?? "this page");
+  const html = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
+  // Repository links in templates are written as "#/runs/…"; point them at this repository.
+  $app.innerHTML = html.replace(
+    /href="#\/(?!w\/|account|org\/|invite\/|setup\/)/g,
+    `href="#/w/${ui.ws}/`,
+  );
+  for (const el of $app.querySelectorAll<HTMLElement>("[data-need]"))
+    if (!wcan(el.dataset.need ?? "")) el.remove();
   if (focusId) {
     const el = document.getElementById(focusId) as HTMLInputElement | null;
     if (el) {
@@ -1383,15 +1481,61 @@ function render() {
 
 async function onRoute() {
   if (!started) return;
-  const [r0, r1] = location.hash.replace(/^#\/?/, "").split("/");
-  if (r0 === "account") void loadMe().then(render, (e) => toast((e as Error).message, true));
-  if (r0 === "org" && r1 === "security")
-    void loadSecurity().then(render, (e) => toast((e as Error).message, true));
-  ui.route = location.hash.replace(/^#\/?/, "");
+  const raw = location.hash.replace(/^#\/?/, "");
+  const wm = /^w\/([a-z0-9-]+)\/?(.*)$/.exec(raw);
+  if (wm) {
+    const slug = wm[1] as string;
+    if (slug !== ui.ws) {
+      if (!ui.workspaces.some((w) => w.slug === slug)) {
+        location.replace(`#/w/${ui.ws}/`);
+        return;
+      }
+      await switchWorkspace(slug);
+    }
+    ui.route = wm[2] ?? "";
+  } else if (ORG_ROUTE.test(raw)) {
+    ui.route = raw;
+  } else {
+    // Links without a repository (old bookmarks, "#/runs") open in the current one.
+    location.replace(`#/w/${ui.ws}/${raw}`);
+    return;
+  }
+  ui.switcher = false;
   const [route, arg] = ui.route.split("/");
+  const fail = (e: unknown) => toast((e as Error).message, true);
+  if (route === "account") void loadMe().then(render, fail);
+  if (route === "org" && arg === "security" && can("security.manage"))
+    void loadSecurity().then(render, fail);
+  else if (route === "org" && arg && can(ORG_PAGE_PERM[arg] ?? ""))
+    void loadOrgPage(arg).then(render, fail);
   if (route === "runs" && arg) loadDetail(arg);
   render();
   window.scrollTo({ top: 0 });
+}
+
+/** Open another repository: its runs, live upgrades and dependency data. */
+async function switchWorkspace(slug: string) {
+  ui.ws = slug;
+  try {
+    localStorage.setItem("bumpsmith-ws", slug);
+  } catch {}
+  ui.data = null;
+  ui.detail = null;
+  ui.live = new Map();
+  ui.switcher = false;
+  render();
+  try {
+    await refresh();
+    for (const l of (ui.data as State | null)?.live ?? []) if (!l.done) followLive(l.id);
+  } catch (e) {
+    toast((e as Error).message, true);
+  }
+}
+
+async function loadWorkspaces() {
+  const r = await api<{ workspaces: WsItem[]; canAdd: boolean }>("/api/workspaces");
+  ui.workspaces = r.workspaces;
+  ui.canAddWs = r.canAdd;
 }
 
 document.addEventListener("click", async (e) => {
@@ -1402,6 +1546,50 @@ document.addEventListener("click", async (e) => {
   const d = ui.data;
   if (!d) return;
   if (act && (await accountAction(act, t))) return;
+  if (act && (await orgAction(act, t))) return;
+  if (act === "ws-switch") {
+    ui.switcher = !ui.switcher;
+    ui.switchQ = "";
+    render();
+    if (ui.switcher)
+      (
+        $app.querySelector<HTMLElement>("#ws-q") ?? $app.querySelector<HTMLElement>(".ws-i.on")
+      )?.focus();
+    return;
+  }
+  if (act === "ws-go") {
+    ui.switcher = false;
+    if (v !== ui.ws) location.hash = `#/w/${v}/`;
+    else render();
+    return;
+  }
+  if (act === "ws-add") {
+    ui.switcher = false;
+    render();
+    let slug = "";
+    await openDialog({
+      title: "Add a repository",
+      body: `<p class="dialog-p">Bumpsmith works on a git repository on this machine. Enter the full path of its folder.</p>
+        <div class="field"><label for="ws-path">Folder</label><input class="input mono" id="ws-path" placeholder="/Users/you/code/my-app" spellcheck="false" autocomplete="off" /></div>`,
+      primary: "Add repository",
+      onSubmit: async (el) => {
+        slug = (
+          await api<{ slug: string }>("/api/workspaces", {
+            method: "POST",
+            body: JSON.stringify({
+              path: (el.querySelector("#ws-path") as HTMLInputElement).value,
+            }),
+          })
+        ).slug;
+      },
+    });
+    if (slug) {
+      await loadWorkspaces();
+      location.hash = `#/w/${slug}/`;
+      toast("Repository added");
+    }
+    return;
+  }
   switch (act) {
     case "go":
       go(t.dataset.to ?? "");
@@ -1565,7 +1753,7 @@ document.addEventListener("click", async (e) => {
       const dr = ui.drawer;
       if (!dr) break;
       try {
-        const { id } = await api<{ id: string }>("/api/runs", {
+        const { id } = await api<{ id: string }>(wapi("/runs"), {
           method: "POST",
           body: JSON.stringify({
             package: dr.pkg,
@@ -1616,7 +1804,7 @@ document.addEventListener("click", async (e) => {
       )
         break;
       try {
-        await api(`/api/runs/${encodeURIComponent(id)}/delete`, { method: "POST" });
+        await api(wapi(`/runs/${encodeURIComponent(id)}/delete`), { method: "POST" });
         await refresh();
         ui.detail = null;
         toast("Run deleted");
@@ -1647,6 +1835,12 @@ document.addEventListener("click", async (e) => {
 
 document.addEventListener("input", (e) => {
   const el = e.target as HTMLInputElement;
+  if (orgInput(el.id, el.value)) return;
+  if (el.id === "ws-q") {
+    ui.switchQ = el.value;
+    render();
+    return;
+  }
   if (el.id === "q") {
     ui.query = el.value;
     render();
@@ -1686,7 +1880,40 @@ function lookupLatestSoon() {
     if (/^(@[\w.-]+\/)?[\w.-]{2,}$/.test(pkg)) fetchLatest(pkg);
   }, 450);
 }
+document.addEventListener("change", (e) => {
+  const el = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-act-change]");
+  if (el?.dataset.actChange) void orgChange(el.dataset.actChange, el);
+});
+// The switcher closes on a click anywhere else.
+document.addEventListener(
+  "mousedown",
+  (e) => {
+    if (ui.switcher && !(e.target as HTMLElement).closest(".ws-wrap")) {
+      ui.switcher = false;
+      render();
+    }
+  },
+  true,
+);
 document.addEventListener("keydown", (e) => {
+  if (ui.switcher) {
+    if (e.key === "Escape") {
+      ui.switcher = false;
+      render();
+      $app.querySelector<HTMLElement>("[data-act=ws-switch]")?.focus();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const items = [...$app.querySelectorAll<HTMLElement>(".ws-pop .ws-i")];
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      const next = items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+      return;
+    }
+  }
   const d = ui.data;
   if (!d) return;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -1741,7 +1968,7 @@ document.addEventListener("mousemove", (e) => {
 });
 window.addEventListener("hashchange", () => {
   // A setup link pasted into a tab already showing the sign-in screen.
-  if (!started && /^#\/setup\//.test(location.hash)) void gate();
+  if (!started && /^#\/(setup|invite)\//.test(location.hash)) void gate();
   else void onRoute();
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
@@ -1763,6 +1990,32 @@ function sessionEnded() {
 
 async function startApp() {
   started = true;
+  try {
+    await loadWorkspaces();
+  } catch (e) {
+    if (!session.info) return;
+    toast((e as Error).message, true);
+  }
+  const fromHash = /^#\/w\/([a-z0-9-]+)/.exec(location.hash)?.[1];
+  let last = "";
+  try {
+    last = localStorage.getItem("bumpsmith-ws") ?? "";
+  } catch {}
+  ui.ws =
+    [fromHash, last].find((x) => x && ui.workspaces.some((w) => w.slug === x)) ??
+    ui.workspaces[0]?.slug ??
+    "";
+  if (!ui.ws) {
+    $app.className = "shell auth-shell";
+    $app.innerHTML = `<main class="auth"><div class="auth-card"><div class="auth-brand">${BRAND_WORDMARK}</div><h1>No repositories yet</h1>
+      <p class="auth-sub">You don't have access to any repository in ${esc(session.info?.org?.name ?? "this organisation")} yet. Ask an admin to grant you access.</p>
+      <button class="btn block" data-act="logout">${icon("logout")}Sign out</button></div></main>`;
+    $app.querySelector("[data-act=logout]")?.addEventListener("click", async () => {
+      await signOut();
+      location.reload();
+    });
+    return;
+  }
   render();
   try {
     await refresh();
@@ -1784,11 +2037,15 @@ async function startApp() {
 /** Show the right sign-in or setup screen, then start the app once signed in. */
 async function gate(reason: "signin" | "expired" = "signin") {
   const setup = /^#\/setup\/([\w-]{20,})$/.exec(location.hash);
+  const invite = /^#\/invite\/([\w-]{20,})$/.exec(location.hash);
   const { info, setupRequired } = await fetchSession().catch(() => ({
     info: null,
     setupRequired: false,
   }));
-  if (!info) {
+  if (!info && invite?.[1]) {
+    await showAuth($app, "invite", invite[1]);
+    history.replaceState(null, "", "#/");
+  } else if (!info) {
     if (setupRequired) {
       if (!setup?.[1]) {
         await showAuth($app, "need-setup-link");
@@ -1800,7 +2057,7 @@ async function gate(reason: "signin" | "expired" = "signin") {
     } else {
       await showAuth($app, reason);
     }
-  } else if (setup) history.replaceState(null, "", "#/");
+  } else if (setup || invite) history.replaceState(null, "", "#/");
   if (session.info?.mustEnrollMfa) await showEnroll($app);
   document.title = "Bumpsmith";
   $app.className = "shell";
@@ -1815,6 +2072,7 @@ hooks.enroll = () => {
   void showEnroll($app).then(startApp);
 };
 setupAccount({ render: () => render(), toast });
+setupOrg({ render: () => render(), toast });
 
 hooks.unauthorized = sessionEnded;
 hooks.reauth = reauthDialog;
@@ -1824,5 +2082,6 @@ hooks.enroll = () => {
   void showEnroll($app).then(startApp);
 };
 setupAccount({ render: () => render(), toast });
+setupOrg({ render: () => render(), toast });
 
 void gate();

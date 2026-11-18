@@ -194,8 +194,11 @@ export class Auth {
     );
   }
 
-  /** True when this IP has made too many authentication attempts recently. */
-  rateLimited(ip: string, max = 20): boolean {
+  /**
+   * True when this IP has made too many authentication requests recently. Generous enough
+   * for an office behind one address; per-account lockout stops guessing at any one account.
+   */
+  rateLimited(ip: string, max = 60): boolean {
     const t = Date.now();
     const list = (this.attempts.get(ip) ?? []).filter((x) => t - x < 10 * 60 * 1000);
     list.push(t);
@@ -261,6 +264,29 @@ export class Auth {
       target: orgName,
       ip: input.ip,
     });
+    return this.user(userId) as User;
+  }
+
+  /** An invited person sets their name and password; the account becomes active. */
+  async acceptInvite(userId: string, nameRaw: string, password: string, ip: string): Promise<User> {
+    const u = this.user(userId);
+    if (!u || u.status !== "invited")
+      throw new AuthError(404, "This invitation is no longer valid.");
+    const name = nameRaw.trim();
+    if (!name || name.length > 80)
+      throw new AuthError(400, "Enter your name (up to 80 characters).");
+    const problem = passwordProblem(password, [
+      name,
+      u.email.split("@")[0] ?? "",
+      this.org(u.org_id)?.name ?? "",
+    ]);
+    if (problem) throw new AuthError(400, problem);
+    this.db
+      .prepare(
+        "UPDATE users SET name = ?, password_hash = ?, status = 'active', password_changed_at = ? WHERE id = ?",
+      )
+      .run(name, await hashPassword(password), now(), userId);
+    audit(this.db, { orgId: u.org_id, actorId: u.id, actor: u.email, action: "member.joined", ip });
     return this.user(userId) as User;
   }
 

@@ -51,7 +51,14 @@ export async function signOut() {
   session.info = null;
 }
 
-type Mode = "signin" | "expired" | "setup" | "need-setup-link" | "mfa";
+type Mode =
+  | "signin"
+  | "expired"
+  | "setup"
+  | "need-setup-link"
+  | "mfa"
+  | "invite"
+  | "invite-invalid";
 
 const pwField = (id: string, autocomplete: string) => `
   <div class="pw">
@@ -66,7 +73,30 @@ function card(inner: string, foot = true) {
   </div>${foot ? `<p class="auth-foot">${icon("lock")}<span>Sessions end after 30 minutes without activity. Every sign-in is recorded in the audit log.</span></p>` : ""}</main>`;
 }
 
-function page(mode: Mode): string {
+function page(mode: Mode, invite?: { email: string; org: string }): string {
+  if (mode === "invite-invalid")
+    return card(
+      `<h1>This invitation no longer works</h1>
+      <p class="auth-sub">Invitation links work once and expire after 72 hours. Ask the person who invited you for a new link.</p>
+      <a class="btn block" href="#/">Go to sign in</a>`,
+      false,
+    );
+  if (mode === "invite" && invite)
+    return card(`<h1>Join ${esc(invite.org)}</h1>
+      <p class="auth-sub">You were invited to ${esc(invite.org)} on Bumpsmith. Choose your name and a password to finish.</p>
+      <form class="auth-form" data-form="invite" novalidate>
+        <div class="field"><label>Work email</label><div class="ro mono">${esc(invite.email)}</div><input type="hidden" name="email" value="${esc(invite.email)}" /></div>
+        <div class="field"><label for="a-name">Your name</label><input class="input" id="a-name" name="name" autocomplete="name" required maxlength="80" /></div>
+        <div class="field"><label for="a-pw">Password</label>${pwField("a-pw", "new-password")}
+          <ul class="pw-rules" id="pw-rules">
+            <li data-rule="len">${icon("check")}At least 12 characters</li>
+            <li data-rule="own">${icon("check")}Not your name, email or organisation</li>
+            <li data-rule="seq">${icon("check")}No repeats or sequences like 123456</li>
+          </ul>
+        </div>
+        <div class="auth-err" role="alert" hidden></div>
+        <button class="btn primary block" type="submit">Join ${esc(invite.org)}</button>
+      </form>`);
   if (mode === "need-setup-link")
     return card(
       `<h1>Finish setting up Bumpsmith</h1>
@@ -132,9 +162,19 @@ function rules(form: HTMLFormElement) {
 }
 
 /** Render a sign-in or setup screen into `root`; resolves once the user is signed in. */
-export function showAuth(root: HTMLElement, mode: Mode, setupToken = ""): Promise<SessionInfo> {
+export async function showAuth(
+  root: HTMLElement,
+  mode: Mode,
+  setupToken = "",
+): Promise<SessionInfo> {
+  let invite: { email: string; org: string } | undefined;
+  if (mode === "invite") {
+    const r = await fetch(`/auth/invite?token=${encodeURIComponent(setupToken)}`);
+    if (r.ok) invite = (await r.json()) as { email: string; org: string };
+    else mode = "invite-invalid";
+  }
   root.className = "shell auth-shell";
-  root.innerHTML = page(mode);
+  root.innerHTML = page(mode, invite);
   document.title = mode === "setup" ? "Set up Bumpsmith" : "Sign in · Bumpsmith";
   const form = root.querySelector<HTMLFormElement>("form");
   (form?.querySelector<HTMLInputElement>("input") ?? null)?.focus();
@@ -147,7 +187,14 @@ export function showAuth(root: HTMLElement, mode: Mode, setupToken = ""): Promis
       b.innerHTML = icon(show ? "eyeOff" : "eye");
       b.setAttribute("aria-label", show ? "Hide password" : "Show password");
     });
-  if (form?.dataset.form === "setup") form.addEventListener("input", () => rules(form));
+  if (form?.dataset.form === "setup" || form?.dataset.form === "invite")
+    form.addEventListener("input", () => rules(form));
+  if (mode === "invite-invalid")
+    root.querySelector("a.btn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      history.replaceState(null, "", "#/");
+      void showAuth(root, "signin").then(() => location.reload());
+    });
   root.querySelector("[data-recovery]")?.addEventListener("click", (e) => {
     const input = root.querySelector<HTMLInputElement>("#a-code");
     if (!input) return;
@@ -173,11 +220,14 @@ export function showAuth(root: HTMLElement, mode: Mode, setupToken = ""): Promis
       const err = form.querySelector<HTMLElement>(".auth-err");
       const btn = form.querySelector<HTMLButtonElement>("button[type=submit]");
       const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
-      if (form.dataset.form === "setup") data.token = setupToken;
+      if (form.dataset.form === "setup" || form.dataset.form === "invite") data.token = setupToken;
       if (btn) {
         btn.disabled = true;
         btn.dataset.label = btn.textContent ?? "";
-        btn.textContent = form.dataset.form === "setup" ? "Creating account…" : "Signing in…";
+        btn.textContent =
+          form.dataset.form === "login" || form.dataset.form === "mfa"
+            ? "Signing in…"
+            : "Creating account…";
       }
       try {
         const endpoint =
