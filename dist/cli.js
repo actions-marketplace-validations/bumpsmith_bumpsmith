@@ -335230,7 +335230,7 @@ var init_local2 = __esm({
     init_server();
     init_proc();
     init_tools2();
-    ANSI3 = new RegExp(`${String.fromCharCode(27)}[[0-9;]*m`, "g");
+    ANSI3 = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
   }
 });
 
