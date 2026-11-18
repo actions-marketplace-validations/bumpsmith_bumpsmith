@@ -492,12 +492,15 @@ export function installSet(reqFiles: string[]): string[] {
   const base = (f: string) => f.split("/").pop() ?? f;
   const isMain = (f: string) =>
     f === "requirements.txt" || /^requirements\/(base|common|requirements|main)\.txt$/.test(f);
+  // "minimum"/"lowest" files pin the oldest supported versions, for a separate CI job.
+  const isMinimum = (f: string) => /(^|[-_])(min|minimum|lowest|oldest)([-_.]|$)/i.test(base(f));
+  const isDevTest = (f: string) =>
+    /^tests?\//.test(f) ||
+    /(^|[-_/])(dev|develop|test|tests|testing|local)([-_.]|$)/i.test(base(f));
   const main = reqFiles.filter(isMain);
-  const devTest = reqFiles.filter(
-    (f) => !isMain(f) && /(^|[-_/])(dev|develop|test|tests|testing|local)([-_.]|$)/i.test(base(f)),
-  );
+  const devTest = reqFiles.filter((f) => !isMain(f) && !isMinimum(f) && isDevTest(f));
   const chosen = [...main, ...devTest];
-  return chosen.length ? chosen : reqFiles;
+  return chosen.length ? chosen : reqFiles.filter((f) => !isMinimum(f));
 }
 
 /**
@@ -638,11 +641,14 @@ async function importablePackages(root: string, files: string[]): Promise<string
 
 async function inventoryPython(root: string): Promise<Inventory> {
   const files = await readdir(root);
-  const reqDir = files.includes("requirements")
-    ? (await readdir(join(root, "requirements")).catch(() => [] as string[]))
-        .filter((f) => /\.(txt|in)$/.test(f))
-        .map((f) => `requirements/${f}`)
-    : [];
+  const reqDir: string[] = [];
+  // requirements/ directories, and test dependencies kept next to the tests.
+  for (const d of ["requirements", "test", "tests"]) {
+    if (!files.includes(d)) continue;
+    for (const f of await readdir(join(root, d)).catch(() => [] as string[]))
+      if (d === "requirements" ? /\.(txt|in)$/.test(f) : /requirements[^/]*\.(txt|in)$/.test(f))
+        reqDir.push(`${d}/${f}`);
+  }
   const lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock"].filter((f) =>
     files.includes(f),
   );
@@ -792,7 +798,7 @@ async function inventoryPython(root: string): Promise<Inventory> {
       "setup.cfg",
       ...reqFiles,
       ...inFiles,
-    ].filter((f) => files.includes(f) || f.startsWith("requirements/")),
+    ].filter((f) => files.includes(f) || reqDir.includes(f)),
     lockfiles,
     dependencies: deps,
     checks,

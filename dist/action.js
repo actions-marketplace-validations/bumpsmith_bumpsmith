@@ -303249,12 +303249,12 @@ function pipInstall(opts) {
 function installSet(reqFiles) {
   const base = (f) => f.split("/").pop() ?? f;
   const isMain = (f) => f === "requirements.txt" || /^requirements\/(base|common|requirements|main)\.txt$/.test(f);
+  const isMinimum = (f) => /(^|[-_])(min|minimum|lowest|oldest)([-_.]|$)/i.test(base(f));
+  const isDevTest = (f) => /^tests?\//.test(f) || /(^|[-_/])(dev|develop|test|tests|testing|local)([-_.]|$)/i.test(base(f));
   const main2 = reqFiles.filter(isMain);
-  const devTest = reqFiles.filter(
-    (f) => !isMain(f) && /(^|[-_/])(dev|develop|test|tests|testing|local)([-_.]|$)/i.test(base(f))
-  );
+  const devTest = reqFiles.filter((f) => !isMain(f) && !isMinimum(f) && isDevTest(f));
   const chosen = [...main2, ...devTest];
-  return chosen.length ? chosen : reqFiles;
+  return chosen.length ? chosen : reqFiles.filter((f) => !isMinimum(f));
 }
 var UV_SYNC = sh(
   [
@@ -303359,7 +303359,13 @@ async function importablePackages(root, files) {
 }
 async function inventoryPython(root) {
   const files = await readdir4(root);
-  const reqDir = files.includes("requirements") ? (await readdir4(join9(root, "requirements")).catch(() => [])).filter((f) => /\.(txt|in)$/.test(f)).map((f) => `requirements/${f}`) : [];
+  const reqDir = [];
+  for (const d of ["requirements", "test", "tests"]) {
+    if (!files.includes(d)) continue;
+    for (const f of await readdir4(join9(root, d)).catch(() => []))
+      if (d === "requirements" ? /\.(txt|in)$/.test(f) : /requirements[^/]*\.(txt|in)$/.test(f))
+        reqDir.push(`${d}/${f}`);
+  }
   const lockfiles = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock"].filter(
     (f) => files.includes(f)
   );
@@ -303473,7 +303479,7 @@ async function inventoryPython(root) {
       "setup.cfg",
       ...reqFiles,
       ...inFiles
-    ].filter((f) => files.includes(f) || f.startsWith("requirements/")),
+    ].filter((f) => files.includes(f) || reqDir.includes(f)),
     lockfiles,
     dependencies: deps,
     checks,

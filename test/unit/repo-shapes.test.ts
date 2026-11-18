@@ -375,3 +375,28 @@ describe("Python projects without tests", () => {
     expect(build?.argv.join(" ")).not.toContain("import docs");
   });
 });
+
+describe("which requirement files install", () => {
+  it("app + dev/test files, test-folder files, never minimum-version pins", () => {
+    expect(
+      installSet([
+        "requirements.txt",
+        "requirements_test.txt",
+        "requirements_test_minimum_ha.txt",
+        "requirements-docs.txt",
+        "test/requirements.txt",
+      ]),
+    ).toEqual(["requirements.txt", "requirements_test.txt", "test/requirements.txt"]);
+  });
+
+  it("installs requirements kept in the test folder", async () => {
+    const dir = await repo({
+      "requirements.txt": "flask==3.0.0\n",
+      "test/requirements.txt": "pytest==8.0\nvmtest @ git+https://github.com/osbuild/images.git\n",
+      "test/test_x.py": "",
+    });
+    const inv = await inventory(dir, "pypi");
+    expect(inv.manifests).toContain("test/requirements.txt");
+    expect(inv.checks[0]?.argv.join(" ")).toContain("test/requirements.txt");
+  });
+});
