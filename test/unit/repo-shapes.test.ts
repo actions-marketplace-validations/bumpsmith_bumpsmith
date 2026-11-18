@@ -411,3 +411,26 @@ describe("Node version", async () => {
     expect(nodeMajorFor("v25")).toBe(26);
   });
 });
+
+describe("install failure reasons", async () => {
+  const { installFailureReason } = await import("../../src/pipeline.ts");
+  const fail = (out: string) => [
+    {
+      name: "install" as const,
+      command: "",
+      exit_code: 1,
+      passed: false,
+      duration_ms: 1,
+      timed_out: false,
+      output_tail: out,
+    },
+  ];
+  it("names the package that failed to build from source", () => {
+    expect(
+      installFailureReason(fail("ERROR: Failed to build 'grpcio' when getting requirements")),
+    ).toMatch(/grpcio has no prebuilt package/);
+    expect(
+      installFailureReason(fail("Wheels are available for `pyqt6` on the following platforms")),
+    ).toMatch(/CPU/);
+  });
+});

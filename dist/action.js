@@ -304827,6 +304827,11 @@ function installFailureReason(baseline) {
     return " (the dependencies are larger than the sandbox disk limit, e.g. GPU builds of torch)";
   if (/E401|E403|401 Unauthorized|403 Forbidden|authentication required/i.test(out))
     return " (a private registry needs credentials; configure registries in .bumpsmith.yml)";
+  const failedBuild = /Failed to build '?([\w.-]+)'?|Failed to build wheel for ([\w.-]+)|failed to build `?([\w.-]+)/i.exec(
+    out
+  );
+  if (failedBuild && !/fatal error: [\w/.-]+\.h: No such file/.test(out))
+    return ` (${failedBuild[1] ?? failedBuild[2] ?? failedBuild[3]} has no prebuilt package for this Python and platform, and building it from source failed; a newer version of it usually ships prebuilt packages)`;
   if (/fatal error: [\w/.-]+\.h: No such file/.test(out))
     return " (a package is built from source and needs a system library the sandbox does not have)";
   if (/no wheels with a matching platform tag|Wheels are available for .* on the following platforms|Unsupported platform|EBADPLATFORM/i.test(
@@ -305109,7 +305114,15 @@ async function runJob(input3, opts) {
     const why = checkFailureReason(job.baseline);
     if (why) job.notes.push(why);
     const timedOut = job.baseline.filter((c) => c.timed_out).map((c) => c.name);
-    const checks = inv.checks.filter((c) => !timedOut.includes(c.name));
+    const alreadyFailing = job.baseline.filter((c) => !c.passed && !c.timed_out && c.name !== "install" && c.name !== "test").map((c) => c.name);
+    const installOk = !!job.baseline.find((c) => c.name === "install")?.passed;
+    const checks = inv.checks.filter(
+      (c) => !timedOut.includes(c.name) && !(installOk && alreadyFailing.includes(c.name))
+    );
+    if (installOk && alreadyFailing.length)
+      job.notes.push(
+        `Not re-run after the upgrade, because they already failed before it and cannot show a difference: ${alreadyFailing.join(", ")}.`
+      );
     if (timedOut.length)
       job.notes.push(
         `Skipped checks that take longer than the ${CHECK_TIMEOUT_SEC / 60}-minute limit: ${timedOut.join(", ")}. Set a faster command (for example a subset of the tests) under checks: in .bumpsmith.yml.`
