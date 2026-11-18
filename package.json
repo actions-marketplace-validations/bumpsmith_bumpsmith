@@ -86,10 +86,13 @@
     "./*": "./src/*"
   },
   "files": [
-    "dist",
+    "dist/cli.js",
+    "dist/cli.js.LEGAL.txt",
+    "dist/dashboard-app.js",
     "sandbox",
     "dashboard",
-    "action.yml",
+    "skills",
+    "server.json",
     "README.md",
     "LICENSE",
     "NOTICE"
