@@ -135,9 +135,13 @@ describe("dashboard data", () => {
 describe("dashboard server", () => {
   let base = "";
   let port = 0;
-  let token = "";
   let close: () => Promise<void> = async () => {};
   let repo = "";
+  let setupUrl = "";
+  let routes: { method: string; path: string; perm: string }[] = [];
+  /** Headers of the signed-in owner: session cookie and CSRF token. */
+  let h: Record<string, string> = {};
+  const PASSWORD = "Tidal-Lantern-Quartz-42";
 
   beforeAll(async () => {
     repo = await mkdtemp(join(tmpdir(), "bumpsmith-dash-"));
@@ -155,14 +159,15 @@ describe("dashboard server", () => {
     await symlink(join(repo, "secret.txt"), join(runDir, "after", "escape.txt"));
     const d = await startDashboard({
       repoDir: repo,
+      dataDir: join(repo, ".data"),
       port: 4600 + Math.floor(Math.random() * 300),
       cliEntry: "",
     });
     base = d.url.replace(/\/$/, "");
     port = d.port;
     close = d.close;
-    const html = await (await fetch(`${base}/`)).text();
-    token = /name="bumpsmith-token" content="([a-f0-9]+)"/.exec(html)?.[1] ?? "";
+    setupUrl = d.setupUrl ?? "";
+    routes = d.routes;
   });
   afterAll(() => close());
 
@@ -174,9 +179,46 @@ describe("dashboard server", () => {
       });
       req.end();
     });
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+  const signedIn = async (r: Response) => {
+    const cookie = (r.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    const { csrf } = (await r.json()) as { csrf: string };
+    return { cookie, "x-csrf-token": csrf };
+  };
 
-  it("serves the page with a per-session token and bundled assets", async () => {
-    expect(token).toMatch(/^[a-f0-9]{48}$/);
+  it("sets up the owner only with the one-time setup link", async () => {
+    const token = /#\/setup\/(.+)$/.exec(setupUrl)?.[1] ?? "";
+    expect(token.length).toBeGreaterThanOrEqual(40);
+    const s = await (await fetch(`${base}/auth/session`)).json();
+    expect(s).toMatchObject({ setupRequired: true });
+    const owner = {
+      orgName: "Acme",
+      name: "Dana Reyes",
+      email: "dana@acme.dev",
+      password: PASSWORD,
+    };
+    expect((await post("/auth/setup", { ...owner, token: "x".repeat(43) })).status).toBe(403);
+    expect((await post("/auth/setup", { ...owner, token, password: "password1234" })).status).toBe(
+      400,
+    );
+    const ok = await post("/auth/setup", { ...owner, token });
+    expect(ok.status).toBe(200);
+    const cookie = ok.headers.get("set-cookie") ?? "";
+    expect(cookie).toMatch(/^bs_session=[\w-]{40,}; Path=\/; HttpOnly; SameSite=Strict/);
+    h = await signedIn(ok);
+    expect((await post("/auth/setup", { ...owner, token })).status).toBe(409);
+  });
+
+  it("serves the page and bundled assets without a session, with security headers", async () => {
+    const page = await fetch(`${base}/`);
+    expect(page.headers.get("content-security-policy")).toMatch(/frame-ancestors 'none'/);
+    expect(page.headers.get("x-frame-options")).toBe("DENY");
+    expect(await page.text()).not.toMatch(/token/i);
     expect((await fetch(`${base}/app.css`)).headers.get("content-type")).toMatch(/text\/css/);
     const font = await fetch(`${base}/fonts/geist.woff2`);
     expect(font.headers.get("content-type")).toBe("font/woff2");
@@ -190,16 +232,30 @@ describe("dashboard server", () => {
     expect(await raw("/brand/../package.json", { host: `127.0.0.1:${port}` })).toBe(404);
   });
 
-  it("refuses API calls without the token, and foreign Host headers (DNS rebinding)", async () => {
-    expect((await fetch(`${base}/api/state`)).status).toBe(403);
+  it("declares a permission on every API route", () => {
+    const api = routes.filter((r) => r.path.includes("api"));
+    expect(api.length).toBeGreaterThan(5);
+    for (const r of api) expect(r.perm, `${r.method} ${r.path}`).not.toBe("public");
     expect(
-      await raw("/api/state", { host: `evil.example:${port}`, "x-bumpsmith-token": token }),
-    ).toBe(421);
+      routes
+        .filter((r) => r.perm === "public")
+        .map((r) => r.path)
+        .sort(),
+    ).toEqual(["/^\\/auth\\/login$/", "/^\\/auth\\/session$/", "/^\\/auth\\/setup$/"].sort());
+  });
+
+  it("refuses API calls without a session, without CSRF, cross-origin, or with a foreign Host", async () => {
+    expect((await fetch(`${base}/api/state`)).status).toBe(401);
+    expect(await raw("/api/state", { host: `evil.example:${port}`, cookie: h.cookie ?? "" })).toBe(
+      421,
+    );
     expect(await raw("/", { host: "evil.example" })).toBe(421);
+    const apply = `/api/runs/20261118000000-abc123/apply`;
+    expect((await post(apply, {}, { cookie: h.cookie ?? "" })).status).toBe(403);
+    expect((await post(apply, {}, { ...h, origin: "https://evil.example" })).status).toBe(403);
   });
 
   it("lists runs and serves one, but never paths outside the runs directory", async () => {
-    const h = { "x-bumpsmith-token": token };
     const state = (await (await fetch(`${base}/api/state`, { headers: h })).json()) as {
       runs: { id: string; agent_lines: number }[];
       repo: { dependencies: Record<string, string> };
@@ -214,13 +270,12 @@ describe("dashboard server", () => {
   });
 
   it("serves a run's stored full file for context, and nothing outside it", async () => {
-    const h = { "x-bumpsmith-token": token };
     const file = (q: string, headers = h) =>
       fetch(`${base}/api/runs/20261118000000-abc123/file?${q}`, { headers });
     const ok = await file("side=after&path=src/a.ts");
     expect(ok.status).toBe(200);
     expect(((await ok.json()) as { text: string }).text).toBe("export const a = 1;\n");
-    expect((await file("side=after&path=src/a.ts", {} as typeof h)).status).toBe(403);
+    expect((await file("side=after&path=src/a.ts", {})).status).toBe(401);
     expect((await file("side=after&path=../job.json")).status).toBe(400);
     expect((await file("side=after&path=%2E%2E%2F%2E%2E%2Fsecret.txt")).status).toBe(400);
     expect((await file("side=after&path=")).status).toBe(400);
@@ -230,20 +285,48 @@ describe("dashboard server", () => {
   });
 
   it("explains a patch that does not apply instead of half-applying it", async () => {
-    const r = await fetch(`${base}/api/runs/20261118000000-abc123/apply`, {
-      method: "POST",
-      headers: { "x-bumpsmith-token": token },
-    });
+    const r = await post(`/api/runs/20261118000000-abc123/apply`, {}, h);
     expect(r.status).toBe(409);
     expect(((await r.json()) as { error: string }).error).toMatch(/does not apply/);
   });
 
   it("validates upgrade requests before starting anything", async () => {
-    const r = await fetch(`${base}/api/runs`, {
-      method: "POST",
-      headers: { "x-bumpsmith-token": token, "content-type": "application/json" },
-      body: JSON.stringify({ package: "zod; rm -rf /", version: "4.1.0" }),
-    });
+    const r = await post("/api/runs", { package: "zod; rm -rf /", version: "4.1.0" }, h);
     expect(r.status).toBe(400);
+  });
+
+  it("records actions in a verifiable audit log", async () => {
+    const v = (await (await fetch(`${base}/api/audit/verify`, { headers: h })).json()) as {
+      ok: boolean;
+      rows: number;
+    };
+    expect(v.ok).toBe(true);
+    expect(v.rows).toBeGreaterThanOrEqual(2); // org created, login
+  });
+
+  it("gives one generic error for bad sign-ins, then locks the account", async () => {
+    const bad = await post("/auth/login", {
+      email: "nobody@acme.dev",
+      password: "Whatever-Long-1",
+    });
+    const wrong = await post("/auth/login", {
+      email: "dana@acme.dev",
+      password: "Wrong-Password-1",
+    });
+    expect([bad.status, wrong.status]).toEqual([401, 401]);
+    expect(((await bad.json()) as { error: string }).error).toBe(
+      ((await wrong.json()) as { error: string }).error,
+    );
+    for (let i = 0; i < 4; i++)
+      await post("/auth/login", { email: "dana@acme.dev", password: "Wrong-Password-1" });
+    // locked: even the right password is refused for now
+    expect((await post("/auth/login", { email: "dana@acme.dev", password: PASSWORD })).status).toBe(
+      429,
+    );
+  });
+
+  it("ends the session on sign-out", async () => {
+    expect((await post("/auth/logout", {}, h)).status).toBe(200);
+    expect((await fetch(`${base}/api/state`, { headers: h })).status).toBe(401);
   });
 });

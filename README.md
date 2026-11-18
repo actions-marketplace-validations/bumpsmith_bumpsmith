@@ -90,11 +90,14 @@ Pull requests opened this way come from your account, so your CI runs on them. G
 commits "Verified" only when they are made by a GitHub App, so use the Action with an App
 token if you want signed commits.
 
-### Local dashboard
+### Dashboard
 
 ```sh
 npx bumpsmith dashboard                # opens http://127.0.0.1:4477
 ```
+
+The first start prints a one-time link that creates the owner account. After that, everyone
+signs in.
 
 A dashboard for everything Bumpsmith did in this repository:
 
@@ -104,7 +107,16 @@ A dashboard for everything Bumpsmith did in this repository:
 - **Dependencies:** your upgrade debt, with one-click upgrades.
 - **Search:** ⌘K across upgrades, dependencies and actions.
 
-It runs on 127.0.0.1 only and sends nothing anywhere: fonts are bundled, there's no analytics, and every action needs a per-session token.
+It runs on 127.0.0.1 and sends nothing anywhere: fonts are bundled and there's no analytics.
+
+**Access and audit:**
+
+- **Sign-in:** accounts with passwords checked against a breached-password list and lockout after repeated failures.
+- **Sessions:** server-side, ending after 30 minutes idle or 12 hours. Every change carries a CSRF token.
+- **Permissions:** every action is checked on the server against the user's role.
+- **Audit log:** sign-ins and actions go into a tamper-evident (hash-chained) log.
+
+Accounts, the audit log and the encryption key live in `~/.bumpsmith` (or `--data`), readable only by your user.
 
 ## How Bumpsmith stays safe
 

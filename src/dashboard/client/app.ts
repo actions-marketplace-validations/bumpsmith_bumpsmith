@@ -1,5 +1,6 @@
 // Bumpsmith Local dashboard. Design notes: dashboard/DESIGN.md.
 
+import { fetchSession, session, showAuth, signOut } from "./auth.ts";
 import {
   type FileDiff,
   type FileView,
@@ -86,18 +87,20 @@ interface State {
 // biome-ignore lint/suspicious/noExplicitAny: job.json is rendered defensively
 type Job = any;
 
-const TOKEN =
-  document.querySelector<HTMLMetaElement>('meta[name="bumpsmith-token"]')?.content ?? "";
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const r = await fetch(path, {
     ...init,
     headers: {
-      "x-bumpsmith-token": TOKEN,
+      "x-csrf-token": session.info?.csrf ?? "",
       "content-type": "application/json",
       ...(init.headers ?? {}),
     },
   });
   const body = (await r.json().catch(() => ({}))) as T & { error?: string };
+  if (r.status === 401) {
+    sessionEnded();
+    throw new Error("Your session has ended.");
+  }
   if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
   return body;
 }
@@ -223,6 +226,8 @@ function sidebar(d: State) {
     </nav>
     <div class="side-foot">
       <div class="sep"></div>
+      ${userRow()}
+      <div class="sep"></div>
       <div class="env">
         <div class="env-row"><span class="dot ${d.env.docker ? "ok" : "bad"}"></span><b>Sandbox</b>${d.env.docker ? `Docker ${esc(d.env.docker)}` : "Docker not running"}</div>
         <div class="env-row"><span class="dot ${prov?.ok ? "ok" : "warn"}"></span><b>Model</b>${esc(prov?.label ?? d.env.defaultProvider)}</div>
@@ -230,6 +235,19 @@ function sidebar(d: State) {
       </div>
     </div>
   </aside>`;
+}
+
+function userRow() {
+  const u = session.info?.user;
+  if (!u) return "";
+  const initials = u.name
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return `<div class="me"><span class="me-av">${esc(initials)}</span><span class="me-t"><b>${esc(u.name)}</b><span>${esc(session.info?.role.name ?? "")} · ${esc(session.info?.org?.name ?? "")}</span></span>
+    <button class="btn icon ghost" data-act="logout" title="Sign out" aria-label="Sign out">${icon("logout")}</button></div>`;
 }
 
 function topbar(crumbs: string[]) {
@@ -1052,7 +1070,7 @@ function drawer(d: State) {
 }
 
 async function followLive(id: string) {
-  const r = await fetch(`/api/live/${id}`, { headers: { "x-bumpsmith-token": TOKEN } });
+  const r = await fetch(`/api/live/${id}`);
   if (!r.body) return;
   const reader = r.body.getReader();
   const dec = new TextDecoder();
@@ -1352,6 +1370,7 @@ function render() {
 }
 
 async function onRoute() {
+  if (!started) return;
   ui.route = location.hash.replace(/^#\/?/, "");
   const [route, arg] = ui.route.split("/");
   if (route === "runs" && arg) loadDetail(arg);
@@ -1374,6 +1393,14 @@ document.addEventListener("click", async (e) => {
       e.preventDefault();
       openNew(t.dataset.pkg ?? "", t.dataset.ver ?? "");
       break;
+    case "logout": {
+      await signOut();
+      if (poller) clearInterval(poller);
+      started = false;
+      ui.data = null;
+      await gate();
+      return;
+    }
     case "theme":
       toggleTheme();
       break;
@@ -1687,23 +1714,71 @@ document.addEventListener("mousemove", (e) => {
   tipEl.style.top = `${e.clientY}px`;
   tipEl.classList.add("on");
 });
-window.addEventListener("hashchange", onRoute);
+window.addEventListener("hashchange", () => {
+  // A setup link pasted into a tab already showing the sign-in screen.
+  if (!started && /^#\/setup\//.test(location.hash)) void gate();
+  else void onRoute();
+});
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
 
-(async () => {
+let started = false;
+let poller: ReturnType<typeof setInterval> | undefined;
+
+/** The session expired or was revoked: drop everything and ask for a sign-in. */
+function sessionEnded() {
+  if (!session.info && !started) return;
+  session.info = null;
+  ui.data = null;
+  ui.drawer = null;
+  ui.palette = false;
+  if (poller) clearInterval(poller);
+  started = false;
+  void gate("expired");
+}
+
+async function startApp() {
+  started = true;
   render();
   try {
     await refresh();
   } catch (e) {
+    if (!session.info) return;
     $app.innerHTML = `<div class="page"><div class="panel"><div class="blank"><h3>Could not load</h3><p>${esc((e as Error).message)}</p></div></div></div>`;
     return;
   }
   for (const l of ui.data?.live ?? []) if (!l.done) followLive(l.id);
   await onRoute();
-  setInterval(async () => {
-    if (document.hidden || ui.drawer || ui.palette) return;
+  poller = setInterval(async () => {
+    if (document.hidden || ui.drawer || ui.palette || !session.info) return;
     const before = ui.data?.runs.map((r) => r.id).join();
     await refresh().catch(() => {});
     if (ui.data?.runs.map((r) => r.id).join() !== before) render();
   }, 15000);
-})();
+}
+
+/** Show the right sign-in or setup screen, then start the app once signed in. */
+async function gate(reason: "signin" | "expired" = "signin") {
+  const setup = /^#\/setup\/([\w-]{20,})$/.exec(location.hash);
+  const { info, setupRequired } = await fetchSession().catch(() => ({
+    info: null,
+    setupRequired: false,
+  }));
+  if (!info) {
+    if (setupRequired) {
+      if (!setup?.[1]) {
+        await showAuth($app, "need-setup-link");
+        return;
+      }
+      await showAuth($app, "setup", setup[1]);
+      // Drop the one-time token from the address bar and history.
+      history.replaceState(null, "", "#/");
+    } else {
+      await showAuth($app, reason);
+    }
+  } else if (setup) history.replaceState(null, "", "#/");
+  document.title = "Bumpsmith";
+  $app.className = "shell";
+  await startApp();
+}
+
+void gate();

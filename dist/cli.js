@@ -10009,20 +10009,20 @@ var require_light = __commonJS({
           var base;
           if (this.heartbeat == null && (this.storeOptions.reservoirRefreshInterval != null && this.storeOptions.reservoirRefreshAmount != null || this.storeOptions.reservoirIncreaseInterval != null && this.storeOptions.reservoirIncreaseAmount != null)) {
             return typeof (base = this.heartbeat = setInterval(() => {
-              var amount, incr, maximum, now, reservoir;
-              now = Date.now();
-              if (this.storeOptions.reservoirRefreshInterval != null && now >= this._lastReservoirRefresh + this.storeOptions.reservoirRefreshInterval) {
-                this._lastReservoirRefresh = now;
+              var amount, incr, maximum, now2, reservoir;
+              now2 = Date.now();
+              if (this.storeOptions.reservoirRefreshInterval != null && now2 >= this._lastReservoirRefresh + this.storeOptions.reservoirRefreshInterval) {
+                this._lastReservoirRefresh = now2;
                 this.storeOptions.reservoir = this.storeOptions.reservoirRefreshAmount;
                 this.instance._drainAll(this.computeCapacity());
               }
-              if (this.storeOptions.reservoirIncreaseInterval != null && now >= this._lastReservoirIncrease + this.storeOptions.reservoirIncreaseInterval) {
+              if (this.storeOptions.reservoirIncreaseInterval != null && now2 >= this._lastReservoirIncrease + this.storeOptions.reservoirIncreaseInterval) {
                 ({
                   reservoirIncreaseAmount: amount,
                   reservoirIncreaseMaximum: maximum,
                   reservoir
                 } = this.storeOptions);
-                this._lastReservoirIncrease = now;
+                this._lastReservoirIncrease = now2;
                 incr = maximum != null ? Math.min(amount, maximum - reservoir) : amount;
                 if (incr > 0) {
                   this.storeOptions.reservoir += incr;
@@ -10104,29 +10104,29 @@ var require_light = __commonJS({
           await this.yieldLoop();
           return this.storeOptions.reservoir;
         }
-        isBlocked(now) {
-          return this._unblockTime >= now;
+        isBlocked(now2) {
+          return this._unblockTime >= now2;
         }
-        check(weight, now) {
-          return this.conditionsCheck(weight) && this._nextRequest - now <= 0;
+        check(weight, now2) {
+          return this.conditionsCheck(weight) && this._nextRequest - now2 <= 0;
         }
         async __check__(weight) {
-          var now;
+          var now2;
           await this.yieldLoop();
-          now = Date.now();
-          return this.check(weight, now);
+          now2 = Date.now();
+          return this.check(weight, now2);
         }
         async __register__(index, weight, expiration) {
-          var now, wait;
+          var now2, wait;
           await this.yieldLoop();
-          now = Date.now();
+          now2 = Date.now();
           if (this.conditionsCheck(weight)) {
             this._running += weight;
             if (this.storeOptions.reservoir != null) {
               this.storeOptions.reservoir -= weight;
             }
-            wait = Math.max(this._nextRequest - now, 0);
-            this._nextRequest = now + wait + this.storeOptions.minTime;
+            wait = Math.max(this._nextRequest - now2, 0);
+            this._nextRequest = now2 + wait + this.storeOptions.minTime;
             return {
               success: true,
               wait,
@@ -10142,16 +10142,16 @@ var require_light = __commonJS({
           return this.storeOptions.strategy === 3;
         }
         async __submit__(queueLength, weight) {
-          var blocked, now, reachedHWM;
+          var blocked, now2, reachedHWM;
           await this.yieldLoop();
           if (this.storeOptions.maxConcurrent != null && weight > this.storeOptions.maxConcurrent) {
             throw new BottleneckError$2(`Impossible to add a job having a weight of ${weight} to a limiter having a maxConcurrent setting of ${this.storeOptions.maxConcurrent}`);
           }
-          now = Date.now();
-          reachedHWM = this.storeOptions.highWater != null && queueLength === this.storeOptions.highWater && !this.check(weight, now);
-          blocked = this.strategyIsBlock() && (reachedHWM || this.isBlocked(now));
+          now2 = Date.now();
+          reachedHWM = this.storeOptions.highWater != null && queueLength === this.storeOptions.highWater && !this.check(weight, now2);
+          blocked = this.strategyIsBlock() && (reachedHWM || this.isBlocked(now2));
           if (blocked) {
-            this._unblockTime = now + this.computePenalty();
+            this._unblockTime = now2 + this.computePenalty();
             this._nextRequest = this._unblockTime + this.storeOptions.minTime;
             this.instance._dropAllQueued();
           }
@@ -11123,9 +11123,9 @@ async function checkMalicious(ecosystem, name, version2) {
     throw err;
   }
 }
-function releaseGate(release, malicious, minAgeDays, now = /* @__PURE__ */ new Date()) {
+function releaseGate(release, malicious, minAgeDays, now2 = /* @__PURE__ */ new Date()) {
   const reasons = [];
-  const ageDays = release.publishedAt ? (now.getTime() - release.publishedAt.getTime()) / 864e5 : null;
+  const ageDays = release.publishedAt ? (now2.getTime() - release.publishedAt.getTime()) / 864e5 : null;
   if (ageDays === null) reasons.push("publish time unknown");
   else if (ageDays < minAgeDays)
     reasons.push(`published ${ageDays.toFixed(1)} days ago; minimum is ${minAgeDays}`);
@@ -16992,18 +16992,18 @@ var require_sha256 = __commonJS({
     (function(root, factory) {
       var exports2 = {};
       factory(exports2);
-      var sha256 = exports2["default"];
+      var sha2562 = exports2["default"];
       for (var k in exports2) {
-        sha256[k] = exports2[k];
+        sha2562[k] = exports2[k];
       }
       if (typeof module === "object" && typeof module.exports === "object") {
-        module.exports = sha256;
+        module.exports = sha2562;
       } else if (typeof define === "function" && define.amd) {
         define(function() {
-          return sha256;
+          return sha2562;
         });
       } else {
-        root.sha256 = sha256;
+        root.sha256 = sha2562;
       }
     })(exports, function(exports2) {
       "use strict";
@@ -17415,13 +17415,13 @@ var require_timing_safe_equal = __commonJS({
   "node_modules/.pnpm/standardwebhooks@1.1.1/node_modules/standardwebhooks/dist/timing_safe_equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.timingSafeEqual = timingSafeEqual;
+    exports.timingSafeEqual = timingSafeEqual2;
     function assert2(expr, msg = "") {
       if (!expr) {
         throw new Error(msg);
       }
     }
-    function timingSafeEqual(a, b) {
+    function timingSafeEqual2(a, b) {
       if (a.byteLength !== b.byteLength) {
         return false;
       }
@@ -17451,7 +17451,7 @@ var require_dist2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Webhook = exports.WebhookVerificationError = void 0;
     var base643 = require_base64();
-    var sha256 = require_sha256();
+    var sha2562 = require_sha256();
     var timing_safe_equal_1 = require_timing_safe_equal();
     var WEBHOOK_TOLERANCE_IN_SECONDS = 5 * 60;
     var ExtendableError = class _ExtendableError extends Error {
@@ -17538,19 +17538,19 @@ var require_dist2 = __commonJS({
         const encoder = new TextEncoder();
         const timestampNumber = Math.floor(timestamp.getTime() / 1e3);
         const toSign = encoder.encode(`${msgId}.${timestampNumber}.${payload}`);
-        const expectedSignature = base643.encode(sha256.hmac(this.key, toSign));
+        const expectedSignature = base643.encode(sha2562.hmac(this.key, toSign));
         return `v1,${expectedSignature}`;
       }
       verifyTimestamp(timestampHeader) {
-        const now = Math.floor(Date.now() / 1e3);
+        const now2 = Math.floor(Date.now() / 1e3);
         const timestamp = parseInt(timestampHeader, 10);
         if (Number.isNaN(timestamp)) {
           throw new WebhookVerificationError("Invalid Signature Headers");
         }
-        if (now - timestamp > WEBHOOK_TOLERANCE_IN_SECONDS) {
+        if (now2 - timestamp > WEBHOOK_TOLERANCE_IN_SECONDS) {
           throw new WebhookVerificationError("Message timestamp too old");
         }
-        if (timestamp > now + WEBHOOK_TOLERANCE_IN_SECONDS) {
+        if (timestamp > now2 + WEBHOOK_TOLERANCE_IN_SECONDS) {
           throw new WebhookVerificationError("Message timestamp too new");
         }
         return new Date(timestamp * 1e3);
@@ -18067,14 +18067,14 @@ var init_poller = __esm({
           __classPrivateFieldSet(this, _IdleLog_environmentId, environmentId, "f");
         }
         onEmptyPoll() {
-          const now = Date.now();
+          const now2 = Date.now();
           const fields = { component: "work-poller", environment_id: __classPrivateFieldGet(this, _IdleLog_environmentId, "f") };
           if (__classPrivateFieldGet(this, _IdleLog_idleSince, "f") === void 0) {
-            __classPrivateFieldSet(this, _IdleLog_idleSince, __classPrivateFieldSet(this, _IdleLog_lastReport, now, "f"), "f");
+            __classPrivateFieldSet(this, _IdleLog_idleSince, __classPrivateFieldSet(this, _IdleLog_lastReport, now2, "f"), "f");
             __classPrivateFieldGet(this, _IdleLog_log, "f").info("idle; polling for work", fields);
-          } else if (now - __classPrivateFieldGet(this, _IdleLog_lastReport, "f") >= IDLE_REPORT_INTERVAL_MS) {
-            __classPrivateFieldSet(this, _IdleLog_lastReport, now, "f");
-            __classPrivateFieldGet(this, _IdleLog_log, "f").info(`still polling; idle for ${Math.round((now - __classPrivateFieldGet(this, _IdleLog_idleSince, "f")) / 1e3)}s`, fields);
+          } else if (now2 - __classPrivateFieldGet(this, _IdleLog_lastReport, "f") >= IDLE_REPORT_INTERVAL_MS) {
+            __classPrivateFieldSet(this, _IdleLog_lastReport, now2, "f");
+            __classPrivateFieldGet(this, _IdleLog_log, "f").info(`still polling; idle for ${Math.round((now2 - __classPrivateFieldGet(this, _IdleLog_idleSince, "f")) / 1e3)}s`, fields);
           } else {
             __classPrivateFieldGet(this, _IdleLog_log, "f").debug("poll returned no work", fields);
           }
@@ -19203,10 +19203,10 @@ async function setupSkills(ctx) {
   for (const skill of session.agent.skills) {
     try {
       const version2 = await client.beta.skills.versions.retrieve(skill.version, { skill_id: skill.skill_id });
-      let dirname7 = path2.basename(version2.name.trim());
-      if (dirname7 === "" || dirname7 === "." || dirname7 === "..")
-        dirname7 = skill.skill_id;
-      const dest = path2.resolve(skillsRoot, dirname7);
+      let dirname9 = path2.basename(version2.name.trim());
+      if (dirname9 === "" || dirname9 === "." || dirname9 === "..")
+        dirname9 = skill.skill_id;
+      const dest = path2.resolve(skillsRoot, dirname9);
       if (dest !== skillsRoot && !dest.startsWith(skillsRoot + path2.sep)) {
         log2.warn("skill name escapes the skills dir; skipping", {
           component: "agent-tool-context",
@@ -44292,7 +44292,7 @@ var require_typescript = __commonJS({
         walkUpParenthesizedTypesAndGetParentAndChild: () => walkUpParenthesizedTypesAndGetParentAndChild,
         whitespaceOrMapCommentRegExp: () => whitespaceOrMapCommentRegExp,
         writeCommentRange: () => writeCommentRange,
-        writeFile: () => writeFile9,
+        writeFile: () => writeFile10,
         writeFileEnsuringDirectories: () => writeFileEnsuringDirectories,
         zipWith: () => zipWith
       });
@@ -50631,7 +50631,7 @@ ${lanes.join("\n")}
             writeOutputIsTTY() {
               return process.stdout.isTTY;
             },
-            readFile: readFile17,
+            readFile: readFile18,
             writeFile: writeFile22,
             watchFile: watchFile2,
             watchDirectory,
@@ -50837,7 +50837,7 @@ ${lanes.join("\n")}
               callback
             );
           }
-          function readFile17(fileName, _encoding) {
+          function readFile18(fileName, _encoding) {
             let buffer;
             try {
               buffer = _fs.readFileSync(fileName);
@@ -63012,7 +63012,7 @@ ${lanes.join("\n")}
         sourceFilePath = isSourceFileInCommonSourceDirectory ? sourceFilePath.substring(commonSourceDirectory.length) : sourceFilePath;
         return combinePaths(newDirPath, sourceFilePath);
       }
-      function writeFile9(host, diagnostics, fileName, text, writeByteOrderMark, sourceFiles, data) {
+      function writeFile10(host, diagnostics, fileName, text, writeByteOrderMark, sourceFiles, data) {
         host.writeFile(
           fileName,
           text,
@@ -87520,7 +87520,7 @@ ${lanes.join("\n")}
         const possibleOption = getSpellingSuggestion(unknownOption, diagnostics.optionDeclarations, getOptionName);
         return possibleOption ? createDiagnosticForNodeInSourceFileOrCompilerDiagnostic(sourceFile, node2, diagnostics.unknownDidYouMeanDiagnostic, unknownOptionErrorText || unknownOption, possibleOption.name) : createDiagnosticForNodeInSourceFileOrCompilerDiagnostic(sourceFile, node2, diagnostics.unknownOptionDiagnostic, unknownOptionErrorText || unknownOption);
       }
-      function parseCommandLineWorker(diagnostics, commandLine, readFile17) {
+      function parseCommandLineWorker(diagnostics, commandLine, readFile18) {
         const options = {};
         let watchOptions;
         const fileNames = [];
@@ -87568,7 +87568,7 @@ ${lanes.join("\n")}
           }
         }
         function parseResponseFile(fileName) {
-          const text = tryReadFile(fileName, readFile17 || ((fileName2) => sys.readFile(fileName2)));
+          const text = tryReadFile(fileName, readFile18 || ((fileName2) => sys.readFile(fileName2)));
           if (!isString(text)) {
             errors.push(text);
             return;
@@ -87671,8 +87671,8 @@ ${lanes.join("\n")}
         unknownDidYouMeanDiagnostic: Diagnostics.Unknown_compiler_option_0_Did_you_mean_1,
         optionTypeMismatchDiagnostic: Diagnostics.Compiler_option_0_expects_an_argument
       };
-      function parseCommandLine(commandLine, readFile17) {
-        return parseCommandLineWorker(compilerOptionsDidYouMeanDiagnostics, commandLine, readFile17);
+      function parseCommandLine(commandLine, readFile18) {
+        return parseCommandLineWorker(compilerOptionsDidYouMeanDiagnostics, commandLine, readFile18);
       }
       function getOptionFromName(optionName, allowShort) {
         return getOptionDeclarationFromName(getOptionsNameMap, optionName, allowShort);
@@ -87754,8 +87754,8 @@ ${lanes.join("\n")}
           watchOptionsToExtend
         );
       }
-      function readConfigFile(fileName, readFile17) {
-        const textOrDiagnostic = tryReadFile(fileName, readFile17);
+      function readConfigFile(fileName, readFile18) {
+        const textOrDiagnostic = tryReadFile(fileName, readFile18);
         return isString(textOrDiagnostic) ? parseConfigFileTextToJson(fileName, textOrDiagnostic) : { config: {}, error: textOrDiagnostic };
       }
       function parseConfigFileTextToJson(fileName, jsonText) {
@@ -87770,14 +87770,14 @@ ${lanes.join("\n")}
           error: jsonSourceFile.parseDiagnostics.length ? jsonSourceFile.parseDiagnostics[0] : void 0
         };
       }
-      function readJsonConfigFile(fileName, readFile17) {
-        const textOrDiagnostic = tryReadFile(fileName, readFile17);
+      function readJsonConfigFile(fileName, readFile18) {
+        const textOrDiagnostic = tryReadFile(fileName, readFile18);
         return isString(textOrDiagnostic) ? parseJsonText(fileName, textOrDiagnostic) : { fileName, parseDiagnostics: [textOrDiagnostic] };
       }
-      function tryReadFile(fileName, readFile17) {
+      function tryReadFile(fileName, readFile18) {
         let text;
         try {
-          text = readFile17(fileName);
+          text = readFile18(fileName);
         } catch (e) {
           return createCompilerDiagnostic(Diagnostics.Cannot_read_file_0_Colon_1, fileName, e.message);
         }
@@ -116855,13 +116855,13 @@ ${lanes.join("\n")}
             if (!headMessage2 && maybeSuppress) {
               const savedErrorState = captureErrorCalculationState();
               reportRelationError(headMessage2, source2, target2);
-              let canonical;
+              let canonical2;
               if (errorInfo && errorInfo !== savedErrorState.errorInfo) {
-                canonical = { code: errorInfo.code, messageText: errorInfo.messageText };
+                canonical2 = { code: errorInfo.code, messageText: errorInfo.messageText };
               }
               resetErrorInfo(savedErrorState);
-              if (canonical && errorInfo) {
-                errorInfo.canonicalHead = canonical;
+              if (canonical2 && errorInfo) {
+                errorInfo.canonicalHead = canonical2;
               }
               lastSkippedInfo = [source2, target2];
               return;
@@ -170857,7 +170857,7 @@ ${lanes.join("\n")}
               if (input3.expression.kind === 80) {
                 return input3;
               } else {
-                const newId = factory2.createUniqueName(
+                const newId2 = factory2.createUniqueName(
                   "_default",
                   16
                   /* Optimistic */
@@ -170869,7 +170869,7 @@ ${lanes.join("\n")}
                 errorFallbackNode = input3;
                 const type = ensureType(input3);
                 const varDecl = factory2.createVariableDeclaration(
-                  newId,
+                  newId2,
                   /*exclamationToken*/
                   void 0,
                   type,
@@ -170887,7 +170887,7 @@ ${lanes.join("\n")}
                 ));
                 preserveJsDoc(statement, input3);
                 removeAllComments(input3);
-                return [statement, factory2.updateExportAssignment(input3, input3.modifiers, newId)];
+                return [statement, factory2.updateExportAssignment(input3, input3.modifiers, newId2)];
               }
             }
           }
@@ -171230,7 +171230,7 @@ ${lanes.join("\n")}
               const extendsClause = getEffectiveBaseTypeNode(input3);
               if (extendsClause && !isEntityNameExpression(extendsClause.expression) && extendsClause.expression.kind !== 106) {
                 const oldId = input3.name ? unescapeLeadingUnderscores(input3.name.escapedText) : "default";
-                const newId = factory2.createUniqueName(
+                const newId2 = factory2.createUniqueName(
                   `${oldId}_base`,
                   16
                   /* Optimistic */
@@ -171241,7 +171241,7 @@ ${lanes.join("\n")}
                   typeName: input3.name
                 });
                 const varDecl = factory2.createVariableDeclaration(
-                  newId,
+                  newId2,
                   /*exclamationToken*/
                   void 0,
                   resolver.createTypeOfExpression(extendsClause.expression, input3, declarationEmitNodeBuilderFlags, declarationEmitInternalNodeBuilderFlags, symbolTracker),
@@ -171260,7 +171260,7 @@ ${lanes.join("\n")}
                   if (clause.token === 96) {
                     const oldDiag2 = getSymbolAccessibilityDiagnostic;
                     getSymbolAccessibilityDiagnostic = createGetSymbolAccessibilityDiagnosticForNode(clause.types[0]);
-                    const newClause = factory2.updateHeritageClause(clause, map2(clause.types, (t) => factory2.updateExpressionWithTypeArguments(t, newId, visitNodes2(t.typeArguments, visitDeclarationSubtree, isTypeNode))));
+                    const newClause = factory2.updateHeritageClause(clause, map2(clause.types, (t) => factory2.updateExpressionWithTypeArguments(t, newId2, visitNodes2(t.typeArguments, visitDeclarationSubtree, isTypeNode))));
                     getSymbolAccessibilityDiagnostic = oldDiag2;
                     return newClause;
                   }
@@ -172270,7 +172270,7 @@ ${lanes.join("\n")}
             return;
           }
           const buildInfo = host.getBuildInfo() || { version: version2 };
-          writeFile9(
+          writeFile10(
             host,
             emitterDiagnostics,
             buildInfoPath,
@@ -172482,7 +172482,7 @@ ${lanes.join("\n")}
             }
             if (sourceMapFilePath) {
               const sourceMap = sourceMapGenerator.toString();
-              writeFile9(
+              writeFile10(
                 host,
                 emitterDiagnostics,
                 sourceMapFilePath,
@@ -172497,7 +172497,7 @@ ${lanes.join("\n")}
           }
           const text = writer.getText();
           const data = { sourceMapUrlPos, diagnostics: transform22.diagnostics };
-          writeFile9(host, emitterDiagnostics, jsFilePath, text, !!compilerOptions.emitBOM, sourceFiles, data);
+          writeFile10(host, emitterDiagnostics, jsFilePath, text, !!compilerOptions.emitBOM, sourceFiles, data);
           writer.clear();
           return !data.skippedDtsWrite;
         }
@@ -177881,12 +177881,12 @@ ${lanes.join("\n")}
       function createCompilerHost(options, setParentNodes) {
         return createCompilerHostWorker(options, setParentNodes);
       }
-      function createGetSourceFile(readFile17, setParentNodes) {
+      function createGetSourceFile(readFile18, setParentNodes) {
         return (fileName, languageVersionOrOptions, onError) => {
           let text;
           try {
             mark3("beforeIORead");
-            text = readFile17(fileName);
+            text = readFile18(fileName);
             mark3("afterIORead");
             measure("I/O Read", "beforeIORead", "afterIORead");
           } catch (e) {
@@ -178790,7 +178790,7 @@ ${lanes.join("\n")}
           getRedirectFromOutput,
           forEachResolvedProjectReference: forEachResolvedProjectReference2
         });
-        const readFile17 = host.readFile.bind(host);
+        const readFile18 = host.readFile.bind(host);
         (_e = tracing) == null ? void 0 : _e.push(tracing.Phase.Program, "shouldProgramCreateNewSourceFiles", { hasOldProgram: !!oldProgram });
         const shouldCreateNewSourceFile = shouldProgramCreateNewSourceFiles(oldProgram, options);
         (_f = tracing) == null ? void 0 : _f.pop();
@@ -179011,7 +179011,7 @@ ${lanes.join("\n")}
           shouldTransformImportCall,
           emitBuildInfo,
           fileExists,
-          readFile: readFile17,
+          readFile: readFile18,
           directoryExists,
           getSymlinkCache,
           realpath: (_o = host.realpath) == null ? void 0 : _o.bind(host),
@@ -187233,7 +187233,7 @@ ${lanes.join("\n")}
           const options = program.getCompilerOptions();
           const isIncremental = isIncrementalCompilation(options);
           let outputTimeStampMap;
-          let now;
+          let now2;
           const { emitResult, diagnostics } = emitFilesAndReportErrors(
             program,
             (d) => host.reportDiagnostic(d),
@@ -187245,19 +187245,19 @@ ${lanes.join("\n")}
               const path5 = toPath2(state2, name);
               emittedOutputs.set(toPath2(state2, name), name);
               if (data == null ? void 0 : data.buildInfo) {
-                now || (now = getCurrentTime(state2.host));
+                now2 || (now2 = getCurrentTime(state2.host));
                 const isChangedSignature2 = (_a22 = program.hasChangedEmitSignature) == null ? void 0 : _a22.call(program);
                 const existing = getBuildInfoCacheEntry(state2, name, projectPath);
                 if (existing) {
                   existing.buildInfo = data.buildInfo;
-                  existing.modifiedTime = now;
-                  if (isChangedSignature2) existing.latestChangedDtsTime = now;
+                  existing.modifiedTime = now2;
+                  if (isChangedSignature2) existing.latestChangedDtsTime = now2;
                 } else {
                   state2.buildInfoCache.set(projectPath, {
                     path: toPath2(state2, name),
                     buildInfo: data.buildInfo,
-                    modifiedTime: now,
-                    latestChangedDtsTime: isChangedSignature2 ? now : void 0
+                    modifiedTime: now2,
+                    latestChangedDtsTime: isChangedSignature2 ? now2 : void 0
                   });
                 }
               }
@@ -187272,7 +187272,7 @@ ${lanes.join("\n")}
               );
               if (data == null ? void 0 : data.differsOnlyInMap) state2.host.setModifiedTime(name, modifiedTime);
               else if (!isIncremental && state2.watch) {
-                (outputTimeStampMap || (outputTimeStampMap = getOutputTimeStampMap(state2, projectPath))).set(path5, now || (now = getCurrentTime(state2.host)));
+                (outputTimeStampMap || (outputTimeStampMap = getOutputTimeStampMap(state2, projectPath))).set(path5, now2 || (now2 = getCurrentTime(state2.host)));
               }
             },
             cancellationToken,
@@ -187792,14 +187792,14 @@ ${lanes.join("\n")}
       }
       function updateOutputTimestampsWorker(state2, proj, projectPath, verboseMessage, skipOutputs) {
         if (proj.options.noEmit) return;
-        let now;
+        let now2;
         const buildInfoPath = getTsBuildInfoEmitOutputFilePath(proj.options);
         const isIncremental = isIncrementalCompilation(proj.options);
         if (buildInfoPath && isIncremental) {
           if (!(skipOutputs == null ? void 0 : skipOutputs.has(toPath2(state2, buildInfoPath)))) {
             if (!!state2.options.verbose) reportStatus(state2, verboseMessage, proj.options.configFilePath);
-            state2.host.setModifiedTime(buildInfoPath, now = getCurrentTime(state2.host));
-            getBuildInfoCacheEntry(state2, buildInfoPath, projectPath).modifiedTime = now;
+            state2.host.setModifiedTime(buildInfoPath, now2 = getCurrentTime(state2.host));
+            getBuildInfoCacheEntry(state2, buildInfoPath, projectPath).modifiedTime = now2;
           }
           state2.outputTimeStamps.delete(projectPath);
           return;
@@ -187817,10 +187817,10 @@ ${lanes.join("\n")}
               reportVerbose = false;
               reportStatus(state2, verboseMessage, proj.options.configFilePath);
             }
-            host.setModifiedTime(file2, now || (now = getCurrentTime(state2.host)));
-            if (file2 === buildInfoPath) getBuildInfoCacheEntry(state2, buildInfoPath, projectPath).modifiedTime = now;
+            host.setModifiedTime(file2, now2 || (now2 = getCurrentTime(state2.host)));
+            if (file2 === buildInfoPath) getBuildInfoCacheEntry(state2, buildInfoPath, projectPath).modifiedTime = now2;
             else if (outputTimeStampMap) {
-              outputTimeStampMap.set(path5, now);
+              outputTimeStampMap.set(path5, now2);
               modifiedOutputs.add(path5);
             }
           }
@@ -234508,17 +234508,17 @@ ${options.prefix}` : "\n" : options.prefix
             case 1:
               if (token === 32) {
                 lastScanAction = 1;
-                const newToken = scanner2.reScanGreaterToken();
-                Debug.assert(n.kind === newToken);
-                return newToken;
+                const newToken2 = scanner2.reScanGreaterToken();
+                Debug.assert(n.kind === newToken2);
+                return newToken2;
               }
               break;
             case 2:
               if (startsWithSlashToken(token)) {
                 lastScanAction = 2;
-                const newToken = scanner2.reScanSlashToken();
-                Debug.assert(n.kind === newToken);
-                return newToken;
+                const newToken2 = scanner2.reScanSlashToken();
+                Debug.assert(n.kind === newToken2);
+                return newToken2;
               }
               break;
             case 3:
@@ -240549,7 +240549,7 @@ ${options.prefix}` : "\n" : options.prefix
         walkUpParenthesizedTypesAndGetParentAndChild: () => walkUpParenthesizedTypesAndGetParentAndChild,
         whitespaceOrMapCommentRegExp: () => whitespaceOrMapCommentRegExp,
         writeCommentRange: () => writeCommentRange,
-        writeFile: () => writeFile9,
+        writeFile: () => writeFile10,
         writeFileEnsuringDirectories: () => writeFileEnsuringDirectories,
         zipWith: () => zipWith
       });
@@ -248674,7 +248674,7 @@ Dynamic files must always be opened with service's current directory or service 
         const text = flattenDiagnosticMessageText(diag22.messageText, "\n");
         const { code, source } = diag22;
         const category = diagnosticCategoryName(diag22);
-        const common = {
+        const common2 = {
           start,
           end,
           text,
@@ -248685,7 +248685,7 @@ Dynamic files must always be opened with service's current directory or service 
           source,
           relatedInformation: map2(diag22.relatedInformation, formatRelatedInformation)
         };
-        return includeFileName ? { ...common, fileName: diag22.file && diag22.file.fileName } : common;
+        return includeFileName ? { ...common2, fileName: diag22.file && diag22.file.fileName } : common2;
       }
       function allEditsBeforePos(edits, pos) {
         return edits.every((edit) => textSpanEnd(edit.span) < pos);
@@ -254156,6 +254156,610 @@ var init_inventory = __esm({
   }
 });
 
+// src/server/crypto.ts
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash as createHash5,
+  createHmac,
+  randomBytes as randomBytes2,
+  scrypt,
+  timingSafeEqual
+} from "node:crypto";
+import { existsSync as existsSync8 } from "node:fs";
+import { chmod, mkdir as mkdir13, readFile as readFile15, writeFile as writeFile8 } from "node:fs/promises";
+import { dirname as dirname6 } from "node:path";
+function safeEqual(a, b) {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  if (x.length !== y.length) {
+    timingSafeEqual(x, x);
+    return false;
+  }
+  return timingSafeEqual(x, y);
+}
+async function hashPassword(pw) {
+  const salt = randomBytes2(16);
+  const key = await scryptAsync(pw, salt, KDF);
+  return `scrypt$${KDF.N}$${KDF.r}$${KDF.p}$${salt.toString("base64")}$${key.toString("base64")}`;
+}
+async function verifyPassword(pw, stored) {
+  const [alg, n, r, p, salt, key] = (stored ?? DUMMY_HASH).split("$");
+  if (alg !== "scrypt" || !salt || !key) return false;
+  const want = Buffer.from(key, "base64");
+  const got = await scryptAsync(pw, Buffer.from(salt, "base64"), {
+    N: Number(n),
+    r: Number(r),
+    p: Number(p),
+    keylen: want.length
+  });
+  return timingSafeEqual(want, got) && stored !== null;
+}
+async function loadMasterKey(keyFile) {
+  const env = process.env.BUMPSMITH_MASTER_KEY;
+  if (env) {
+    const k2 = Buffer.from(env, "base64");
+    if (k2.length !== 32) throw new Error("BUMPSMITH_MASTER_KEY must be 32 bytes, base64-encoded");
+    return k2;
+  }
+  if (existsSync8(keyFile)) {
+    const k2 = Buffer.from((await readFile15(keyFile, "utf8")).trim(), "base64");
+    if (k2.length !== 32) throw new Error(`${keyFile} does not hold a 32-byte key`);
+    return k2;
+  }
+  const k = randomBytes2(32);
+  await mkdir13(dirname6(keyFile), { recursive: true, mode: 448 });
+  await writeFile8(keyFile, `${k.toString("base64")}
+`, { mode: 384 });
+  await chmod(keyFile, 384);
+  return k;
+}
+var newToken, newId, sha256, KDF, scryptAsync, DUMMY_HASH;
+var init_crypto = __esm({
+  "src/server/crypto.ts"() {
+    "use strict";
+    newToken = (bytes = 32) => randomBytes2(bytes).toString("base64url");
+    newId = (prefix) => `${prefix}_${randomBytes2(12).toString("base64url")}`;
+    sha256 = (s) => createHash5("sha256").update(s).digest("hex");
+    KDF = { N: 2 ** 17, r: 8, p: 1, keylen: 32 };
+    scryptAsync = (pw, salt, o) => new Promise(
+      (ok, fail) => scrypt(
+        pw.normalize("NFKC"),
+        salt,
+        o.keylen,
+        { N: o.N, r: o.r, p: o.p, maxmem: 256 * 1024 * 1024 },
+        (e, k) => e ? fail(e) : ok(k)
+      )
+    );
+    DUMMY_HASH = `scrypt$${KDF.N}$8$1$${Buffer.alloc(16).toString("base64")}$${Buffer.alloc(32).toString("base64")}`;
+  }
+});
+
+// src/server/db.ts
+import { chmodSync, existsSync as existsSync9, mkdirSync } from "node:fs";
+import { join as join20 } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+function openDb(dataDir) {
+  mkdirSync(dataDir, { recursive: true, mode: 448 });
+  const file2 = join20(dataDir, "bumpsmith.db");
+  const fresh = !existsSync9(file2);
+  const db = new DatabaseSync(file2);
+  if (fresh) chmodSync(file2, 384);
+  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+  db.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)");
+  const row = db.prepare("SELECT version FROM schema_version").get();
+  let version2 = row?.version ?? 0;
+  if (!row) db.prepare("INSERT INTO schema_version (version) VALUES (0)").run();
+  for (; version2 < MIGRATIONS.length; version2++) {
+    db.exec("BEGIN");
+    try {
+      db.exec(MIGRATIONS[version2]);
+      db.prepare("UPDATE schema_version SET version = ?").run(version2 + 1);
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+  return db;
+}
+function tx(db, fn) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const out = fn();
+    db.exec("COMMIT");
+    return out;
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+var MIGRATIONS, now;
+var init_db = __esm({
+  "src/server/db.ts"() {
+    "use strict";
+    MIGRATIONS = [
+      `
+  CREATE TABLE orgs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    settings TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE TABLE roles (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    permissions TEXT NOT NULL,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (org_id, name)
+  );
+  CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    email TEXT NOT NULL COLLATE NOCASE,
+    name TEXT NOT NULL,
+    password_hash TEXT,
+    role_id TEXT NOT NULL REFERENCES roles(id),
+    status TEXT NOT NULL DEFAULT 'active',
+    mfa_secret TEXT,
+    mfa_enabled INTEGER NOT NULL DEFAULT 0,
+    mfa_last_step INTEGER NOT NULL DEFAULT -1,
+    recovery TEXT NOT NULL DEFAULT '[]',
+    failed_logins INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT,
+    sso_subject TEXT,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT,
+    password_changed_at TEXT,
+    UNIQUE (org_id, email)
+  );
+  CREATE TABLE sessions (
+    id_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    org_id TEXT NOT NULL,
+    csrf TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    auth_at TEXT NOT NULL,
+    mfa_pending INTEGER NOT NULL DEFAULT 0,
+    ip TEXT,
+    user_agent TEXT
+  );
+  CREATE INDEX sessions_user ON sessions(user_id);
+  CREATE TABLE audit (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id TEXT,
+    at TEXT NOT NULL,
+    actor_id TEXT,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT,
+    ip TEXT,
+    detail TEXT NOT NULL DEFAULT '{}',
+    prev_hash TEXT NOT NULL,
+    hash TEXT NOT NULL
+  );
+  CREATE TABLE secrets (
+    org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    last4 TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT,
+    PRIMARY KEY (org_id, name)
+  );
+  `
+    ];
+    now = () => (/* @__PURE__ */ new Date()).toISOString();
+  }
+});
+
+// src/server/audit.ts
+function audit(db, e) {
+  const row = {
+    org_id: e.orgId,
+    at: now(),
+    actor_id: e.actorId,
+    actor: e.actor,
+    action: e.action,
+    target: e.target ?? null,
+    ip: e.ip ?? null,
+    detail: JSON.stringify(e.detail ?? {})
+  };
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const last = db.prepare("SELECT hash FROM audit ORDER BY seq DESC LIMIT 1").get();
+    const prev = last?.hash ?? GENESIS;
+    const hash2 = sha256(prev + canonical(row));
+    db.prepare(
+      "INSERT INTO audit (org_id, at, actor_id, actor, action, target, ip, detail, prev_hash, hash) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).run(
+      row.org_id,
+      row.at,
+      row.actor_id,
+      row.actor,
+      row.action,
+      row.target,
+      row.ip,
+      row.detail,
+      prev,
+      hash2
+    );
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+function verifyAudit(db) {
+  let prev = GENESIS;
+  let rows = 0;
+  for (const r of db.prepare("SELECT * FROM audit ORDER BY seq").all()) {
+    rows++;
+    if (r.prev_hash !== prev || sha256(prev + canonical(r)) !== r.hash)
+      return { ok: false, rows, brokenAt: r.seq };
+    prev = r.hash;
+  }
+  return { ok: true, rows, brokenAt: null };
+}
+var GENESIS, canonical;
+var init_audit = __esm({
+  "src/server/audit.ts"() {
+    "use strict";
+    init_crypto();
+    init_db();
+    GENESIS = "0".repeat(64);
+    canonical = (r) => JSON.stringify([r.org_id, r.at, r.actor_id, r.actor, r.action, r.target, r.ip, r.detail]);
+  }
+});
+
+// src/server/rbac.ts
+function can(perms, p) {
+  return perms.includes(p);
+}
+var PERMISSIONS, ALL2, BUILTIN_ROLES;
+var init_rbac = __esm({
+  "src/server/rbac.ts"() {
+    "use strict";
+    PERMISSIONS = [
+      { id: "runs.view", group: "Upgrades", label: "View upgrades, diffs and logs" },
+      { id: "runs.start", group: "Upgrades", label: "Start upgrades and scans" },
+      { id: "runs.apply", group: "Upgrades", label: "Apply patches and open pull requests" },
+      { id: "runs.delete", group: "Upgrades", label: "Delete runs" },
+      { id: "workspaces.view", group: "Repositories", label: "View repositories" },
+      {
+        id: "workspaces.manage",
+        group: "Repositories",
+        label: "Add, configure and remove repositories"
+      },
+      { id: "integrations.manage", group: "Repositories", label: "Manage GitHub and model keys" },
+      { id: "members.view", group: "People", label: "View members" },
+      { id: "members.manage", group: "People", label: "Invite, deactivate and reset members" },
+      { id: "roles.manage", group: "People", label: "Create and edit roles" },
+      { id: "access.manage", group: "People", label: "Grant access to repositories" },
+      { id: "security.manage", group: "Security", label: "Manage SSO, MFA and session policy" },
+      { id: "audit.view", group: "Security", label: "View and export the audit log" },
+      { id: "org.manage", group: "Organisation", label: "Rename or delete the organisation" }
+    ];
+    ALL2 = PERMISSIONS.map((p) => p.id);
+    BUILTIN_ROLES = [
+      {
+        key: "owner",
+        name: "Owner",
+        description: "Full control, including the organisation itself.",
+        permissions: ALL2
+      },
+      {
+        key: "admin",
+        name: "Admin",
+        description: "Manages people, access, security and integrations.",
+        permissions: ALL2.filter((p) => p !== "org.manage")
+      },
+      {
+        key: "maintainer",
+        name: "Maintainer",
+        description: "Runs upgrades and applies them.",
+        permissions: [
+          "runs.view",
+          "runs.start",
+          "runs.apply",
+          "runs.delete",
+          "workspaces.view",
+          "members.view"
+        ]
+      },
+      {
+        key: "reviewer",
+        name: "Reviewer",
+        description: "Reviews verified upgrades and applies them.",
+        permissions: ["runs.view", "runs.apply", "workspaces.view", "members.view"]
+      },
+      {
+        key: "viewer",
+        name: "Viewer",
+        description: "Read-only access to upgrades.",
+        permissions: ["runs.view", "workspaces.view"]
+      },
+      {
+        key: "auditor",
+        name: "Auditor",
+        description: "Read-only access plus the audit log.",
+        permissions: ["runs.view", "workspaces.view", "members.view", "audit.view"]
+      }
+    ];
+  }
+});
+
+// src/server/auth.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+import { dirname as dirname7, join as join21 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+function common() {
+  if (!COMMON) {
+    const here = dirname7(fileURLToPath2(import.meta.url));
+    const candidates = [
+      join21(here, "data", "common-passwords.txt"),
+      join21(here, "..", "src", "server", "data", "common-passwords.txt"),
+      join21(here, "..", "..", "src", "server", "data", "common-passwords.txt")
+    ];
+    let text = "";
+    for (const c of candidates) {
+      try {
+        text = readFileSync2(c, "utf8");
+        break;
+      } catch {
+      }
+    }
+    COMMON = new Set(text.split("\n").filter(Boolean));
+  }
+  return COMMON;
+}
+function passwordProblem(pw, context2 = []) {
+  const len = [...pw].length;
+  if (len < 12) return "Use at least 12 characters.";
+  if (len > 128) return "Use at most 128 characters.";
+  const lower = pw.toLowerCase();
+  if (common().has(lower)) return "This password appears in lists of breached passwords.";
+  if (/^(.)\1+$/.test(pw)) return "Avoid repeating one character.";
+  if ("abcdefghijklmnopqrstuvwxyz0123456789".includes(lower) || "0123456789876543210".includes(lower))
+    return "Avoid sequences like abcdef or 123456.";
+  for (const c of context2.map((x) => x.toLowerCase().trim()).filter((x) => x.length >= 4))
+    if (lower.includes(c)) return "Avoid using your name, email or the organisation name.";
+  return null;
+}
+function sessionCookie(token, secure, maxAgeSeconds) {
+  return `${cookieName(secure)}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure ? "; Secure" : ""}`;
+}
+function readCookie(header, name) {
+  for (const part of (header ?? "").split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return void 0;
+}
+var DEFAULT_POLICY, COMMON, Auth, AuthError, cookieName, clearCookie;
+var init_auth = __esm({
+  "src/server/auth.ts"() {
+    "use strict";
+    init_audit();
+    init_crypto();
+    init_db();
+    init_rbac();
+    DEFAULT_POLICY = { idleMinutes: 30, absoluteHours: 12 };
+    COMMON = null;
+    Auth = class {
+      constructor(db, policy = DEFAULT_POLICY) {
+        this.db = db;
+        this.policy = policy;
+      }
+      db;
+      policy;
+      setupHash = null;
+      setupExpires = 0;
+      /** Per-IP attempts on authentication endpoints (sliding 10-minute window). */
+      attempts = /* @__PURE__ */ new Map();
+      needsSetup() {
+        return !this.db.prepare("SELECT 1 FROM users LIMIT 1").get();
+      }
+      /** A one-time token, valid for one hour, that lets its holder create the owner account. */
+      issueSetupToken() {
+        const t = newToken();
+        this.setupHash = sha256(t);
+        this.setupExpires = Date.now() + 60 * 60 * 1e3;
+        return t;
+      }
+      checkSetupToken(t) {
+        return !!this.setupHash && Date.now() < this.setupExpires && safeEqual(sha256(t), this.setupHash);
+      }
+      /** True when this IP has made too many authentication attempts recently. */
+      rateLimited(ip, max = 20) {
+        const t = Date.now();
+        const list = (this.attempts.get(ip) ?? []).filter((x) => t - x < 10 * 60 * 1e3);
+        list.push(t);
+        this.attempts.set(ip, list);
+        if (this.attempts.size > 1e4) this.attempts.clear();
+        return list.length > max;
+      }
+      async setupOwner(input3) {
+        if (!this.needsSetup()) throw new AuthError(409, "This server is already set up.");
+        if (!this.checkSetupToken(input3.token))
+          throw new AuthError(
+            403,
+            "The setup link is invalid or has expired. Restart the server for a new one."
+          );
+        const orgName = input3.orgName.trim();
+        const name = input3.name.trim();
+        const email3 = input3.email.trim().toLowerCase();
+        if (!orgName || orgName.length > 80)
+          throw new AuthError(400, "Enter an organisation name (up to 80 characters).");
+        if (!name || name.length > 80)
+          throw new AuthError(400, "Enter your name (up to 80 characters).");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email3) || email3.length > 254)
+          throw new AuthError(400, "Enter a valid email address.");
+        const problem = passwordProblem(input3.password, [name, email3.split("@")[0] ?? "", orgName]);
+        if (problem) throw new AuthError(400, problem);
+        const hash2 = await hashPassword(input3.password);
+        const orgId = newId("org");
+        const userId = newId("usr");
+        tx(this.db, () => {
+          this.db.prepare("INSERT INTO orgs (id, name, created_at) VALUES (?,?,?)").run(orgId, orgName, now());
+          let ownerRole = "";
+          for (const r of BUILTIN_ROLES) {
+            const id = `${orgId}:${r.key}`;
+            if (r.key === "owner") ownerRole = id;
+            this.db.prepare(
+              "INSERT INTO roles (id, org_id, name, description, permissions, builtin) VALUES (?,?,?,?,?,1)"
+            ).run(id, orgId, r.name, r.description, JSON.stringify(r.permissions));
+          }
+          this.db.prepare(
+            "INSERT INTO users (id, org_id, email, name, password_hash, role_id, created_at, password_changed_at) VALUES (?,?,?,?,?,?,?,?)"
+          ).run(userId, orgId, email3, name, hash2, ownerRole, now(), now());
+        });
+        this.setupHash = null;
+        audit(this.db, {
+          orgId,
+          actorId: userId,
+          actor: email3,
+          action: "org.created",
+          target: orgName,
+          ip: input3.ip
+        });
+        return this.user(userId);
+      }
+      user(id) {
+        return this.db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+      }
+      /** Password login. Same error for an unknown email and a wrong password. */
+      async login(emailRaw, password, ip) {
+        const email3 = emailRaw.trim().toLowerCase();
+        const user = this.db.prepare("SELECT * FROM users WHERE email = ? AND status = 'active'").get(email3);
+        const fail = new AuthError(401, "That email and password do not match.");
+        if (user?.locked_until && Date.parse(user.locked_until) > Date.now()) {
+          await verifyPassword(password, null);
+          audit(this.db, {
+            orgId: user.org_id,
+            actorId: user.id,
+            actor: user.email,
+            action: "auth.login_locked",
+            ip
+          });
+          throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+        }
+        const ok = await verifyPassword(password, user?.password_hash ?? null);
+        if (!user || !ok) {
+          if (user) {
+            const n = user.failed_logins + 1;
+            const lock = n >= 5 ? new Date(Date.now() + Math.min(60, 2 ** (n - 5)) * 6e4).toISOString() : null;
+            this.db.prepare("UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?").run(n, lock, user.id);
+            audit(this.db, {
+              orgId: user.org_id,
+              actorId: user.id,
+              actor: user.email,
+              action: "auth.login_failed",
+              ip,
+              detail: { attempt: n }
+            });
+          } else {
+            audit(this.db, {
+              orgId: null,
+              actorId: null,
+              actor: email3.slice(0, 254),
+              action: "auth.login_failed",
+              ip,
+              detail: { unknown: true }
+            });
+          }
+          throw fail;
+        }
+        this.db.prepare(
+          "UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = ? WHERE id = ?"
+        ).run(now(), user.id);
+        return user;
+      }
+      /** A new session (rotated on every sign-in). Returns the raw token for the cookie. */
+      createSession(user, ip, userAgent2, mfaPending = false) {
+        const token = newToken();
+        const csrf = newToken();
+        const t = now();
+        const expires = new Date(Date.now() + this.policy.absoluteHours * 36e5).toISOString();
+        this.db.prepare(
+          "INSERT INTO sessions (id_hash, user_id, org_id, csrf, created_at, last_seen_at, expires_at, auth_at, mfa_pending, ip, user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        ).run(
+          sha256(token),
+          user.id,
+          user.org_id,
+          csrf,
+          t,
+          t,
+          expires,
+          t,
+          mfaPending ? 1 : 0,
+          ip,
+          userAgent2.slice(0, 300)
+        );
+        if (!mfaPending)
+          audit(this.db, {
+            orgId: user.org_id,
+            actorId: user.id,
+            actor: user.email,
+            action: "auth.login",
+            ip
+          });
+        return { token, csrf };
+      }
+      /** Resolve a session token; enforces idle and absolute expiry. */
+      principal(token) {
+        if (!token || token.length > 100) return null;
+        const s = this.db.prepare("SELECT * FROM sessions WHERE id_hash = ?").get(sha256(token));
+        if (!s) return null;
+        const t = Date.now();
+        if (Date.parse(s.expires_at) < t || t - Date.parse(s.last_seen_at) > this.policy.idleMinutes * 6e4) {
+          this.db.prepare("DELETE FROM sessions WHERE id_hash = ?").run(s.id_hash);
+          return null;
+        }
+        const u = this.db.prepare("SELECT * FROM users WHERE id = ?").get(s.user_id);
+        if (!u || u.status !== "active") return null;
+        if (t - Date.parse(s.last_seen_at) > 6e4)
+          this.db.prepare("UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?").run(now(), s.id_hash);
+        const role = this.db.prepare("SELECT id, name, permissions FROM roles WHERE id = ?").get(u.role_id);
+        const { password_hash: _p, ...user } = u;
+        return {
+          session: s,
+          user,
+          role: { id: role.id, name: role.name },
+          permissions: JSON.parse(role.permissions)
+        };
+      }
+      endSession(token, p, ip) {
+        this.db.prepare("DELETE FROM sessions WHERE id_hash = ?").run(sha256(token));
+        if (p)
+          audit(this.db, {
+            orgId: p.user.org_id,
+            actorId: p.user.id,
+            actor: p.user.email,
+            action: "auth.logout",
+            ip
+          });
+      }
+      org(id) {
+        return this.db.prepare("SELECT id, name, created_at FROM orgs WHERE id = ?").get(id);
+      }
+    };
+    AuthError = class extends Error {
+      constructor(status, message) {
+        super(message);
+        this.status = status;
+      }
+      status;
+    };
+    cookieName = (secure) => secure ? "__Host-bs_session" : "bs_session";
+    clearCookie = (secure) => `${cookieName(secure)}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
+  }
+});
+
 // src/dashboard/server.ts
 var server_exports = {};
 __export(server_exports, {
@@ -254165,17 +254769,18 @@ __export(server_exports, {
   summarise: () => summarise2
 });
 import { spawn as spawn5 } from "node:child_process";
-import { randomBytes as randomBytes2 } from "node:crypto";
-import { existsSync as existsSync8 } from "node:fs";
-import { readdir as readdir6, readFile as readFile15, realpath as realpath2, rm as rm7, stat as stat3 } from "node:fs/promises";
+import { randomBytes as randomBytes3 } from "node:crypto";
+import { existsSync as existsSync10 } from "node:fs";
+import { readdir as readdir6, readFile as readFile16, realpath as realpath2, rm as rm7, stat as stat3 } from "node:fs/promises";
 import http from "node:http";
-import { basename as basename2, dirname as dirname6, extname as extname2, join as join20, resolve as resolve4, sep as sep3 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { homedir } from "node:os";
+import { basename as basename2, dirname as dirname8, extname as extname2, join as join22, resolve as resolve4, sep as sep3 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 function packageRoot2() {
-  let dir = dirname6(fileURLToPath2(import.meta.url));
+  let dir = dirname8(fileURLToPath3(import.meta.url));
   for (let i = 0; i < 6; i++) {
-    if (existsSync8(join20(dir, "dashboard", "index.html"))) return dir;
-    dir = dirname6(dir);
+    if (existsSync10(join22(dir, "dashboard", "index.html"))) return dir;
+    dir = dirname8(dir);
   }
   throw new Error("cannot locate the bumpsmith dashboard assets");
 }
@@ -254248,10 +254853,10 @@ function summarise2(job, patch) {
   };
 }
 async function readRun(runsDir, id) {
-  const dir = join20(runsDir, id);
-  const job = JSON.parse(await readFile15(join20(dir, "job.json"), "utf8"));
-  const patch = await readFile15(join20(dir, "patch.diff"), "utf8").catch(() => "");
-  const evidence = await readFile15(join20(dir, "evidence.md"), "utf8").catch(() => "");
+  const dir = join22(runsDir, id);
+  const job = JSON.parse(await readFile16(join22(dir, "job.json"), "utf8"));
+  const patch = await readFile16(join22(dir, "patch.diff"), "utf8").catch(() => "");
+  const evidence = await readFile16(join22(dir, "evidence.md"), "utf8").catch(() => "");
   return { job, patch, evidence };
 }
 async function listRuns(runsDir) {
@@ -254332,11 +254937,11 @@ function stageOf(line) {
   return null;
 }
 async function clientBundle(root) {
-  const built = join20(root, "dist", "dashboard-app.js");
-  if (fileURLToPath2(import.meta.url).endsWith(".ts") || !existsSync8(built)) {
+  const built = join22(root, "dist", "dashboard-app.js");
+  if (fileURLToPath3(import.meta.url).endsWith(".ts") || !existsSync10(built)) {
     const { build: build2 } = await import("esbuild");
     const r = await build2({
-      entryPoints: [join20(root, "src", "dashboard", "client", "app.ts")],
+      entryPoints: [join22(root, "src", "dashboard", "client", "app.ts")],
       bundle: true,
       format: "esm",
       target: "es2022",
@@ -254346,28 +254951,36 @@ async function clientBundle(root) {
     });
     return r.outputFiles[0]?.text ?? "";
   }
-  return readFile15(built, "utf8");
+  return readFile16(built, "utf8");
 }
 async function startDashboard(opts) {
   const root = packageRoot2();
   const repoDir = resolve4(opts.repoDir);
-  const runsDir = resolve4(opts.runsDir ?? join20(repoDir, ".bumpsmith", "runs"));
-  const token = randomBytes2(24).toString("hex");
+  const runsDir = resolve4(opts.runsDir ?? join22(repoDir, ".bumpsmith", "runs"));
+  const dataDir = resolve4(opts.dataDir ?? join22(homedir(), ".bumpsmith"));
+  const db = openDb(dataDir);
+  await loadMasterKey(join22(dataDir, "master.key"));
+  const auth2 = new Auth(db);
+  const secure = !!opts.secureCookies;
+  const setupToken = auth2.needsSetup() ? auth2.issueSetupToken() : null;
   const live = /* @__PURE__ */ new Map();
   const appJs = await clientBundle(root);
-  const html = (await readFile15(join20(root, "dashboard", "index.html"), "utf8")).replace(
-    "%%TOKEN%%",
-    token
-  );
+  const html = await readFile16(join22(root, "dashboard", "index.html"), "utf8");
   let port = opts.port ?? 4477;
-  const send = (res, code, body, type) => {
+  const send = (res, code, body, type, extra = {}) => {
     const text = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
     res.writeHead(code, {
       "content-type": type ?? "application/json; charset=utf-8",
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
       "referrer-policy": "no-referrer",
-      "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'"
+      "cross-origin-opener-policy": "same-origin",
+      "cross-origin-resource-policy": "same-origin",
+      "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+      "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      ...secure ? { "strict-transport-security": "max-age=31536000; includeSubDomains" } : {},
+      ...extra
     });
     res.end(text);
   };
@@ -254396,7 +255009,7 @@ async function startDashboard(opts) {
   });
   const startRun = (pkg, version2, provider2, budget) => {
     const lr = {
-      id: randomBytes2(6).toString("hex"),
+      id: randomBytes3(6).toString("hex"),
       package: pkg,
       version: version2,
       provider: provider2,
@@ -254454,6 +255067,276 @@ data: ${JSON.stringify(data)}
     });
     return lr;
   };
+  const sessionPayload = (p) => ({
+    user: { id: p.user.id, name: p.user.name, email: p.user.email, mfa: !!p.user.mfa_enabled },
+    org: auth2.org(p.user.org_id),
+    role: p.role,
+    permissions: p.permissions,
+    csrf: p.session.csrf
+  });
+  const signIn = (c, user) => {
+    if (c.token) auth2.endSession(c.token, null, c.ip);
+    const s = auth2.createSession(user, c.ip, String(c.req.headers["user-agent"] ?? ""));
+    const p = auth2.principal(s.token);
+    return send(c.res, 200, sessionPayload(p), void 0, {
+      "set-cookie": sessionCookie(s.token, secure, 12 * 3600)
+    });
+  };
+  const authErr = (c, e) => {
+    if (e instanceof AuthError) return send(c.res, e.status, { error: e.message });
+    throw e;
+  };
+  const act = (c, action, target, detail) => c.p && audit(db, {
+    orgId: c.p.user.org_id,
+    actorId: c.p.user.id,
+    actor: c.p.user.email,
+    action,
+    target,
+    ip: c.ip,
+    detail
+  });
+  const routes = [
+    // ── authentication ──
+    {
+      method: "GET",
+      path: /^\/auth\/session$/,
+      perm: "public",
+      handler: (c) => c.p ? send(c.res, 200, sessionPayload(c.p)) : send(c.res, 401, { error: "signed out", setupRequired: auth2.needsSetup() })
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/setup$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await readBody(c.req);
+        try {
+          const user = await auth2.setupOwner({
+            token: String(b.token ?? ""),
+            orgName: String(b.orgName ?? ""),
+            name: String(b.name ?? ""),
+            email: String(b.email ?? ""),
+            password: String(b.password ?? ""),
+            ip: c.ip
+          });
+          return signIn(c, user);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/login$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await readBody(c.req);
+        try {
+          const user = await auth2.login(String(b.email ?? ""), String(b.password ?? ""), c.ip);
+          return signIn(c, user);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/logout$/,
+      perm: "session",
+      handler: (c) => {
+        if (c.token) auth2.endSession(c.token, c.p, c.ip);
+        return send(c.res, 200, { ok: true }, void 0, { "set-cookie": clearCookie(secure) });
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/audit\/verify$/,
+      perm: "audit.view",
+      handler: (c) => send(c.res, 200, verifyAudit(db))
+    },
+    // ── the repository and its runs ──
+    {
+      method: "GET",
+      path: /^\/api\/state$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const debtFile = join22(repoDir, ".bumpsmith", "debt.json");
+        let deps = {};
+        let ecosystem = null;
+        let packageManager = null;
+        try {
+          const inv = await inventory(repoDir);
+          deps = inv.dependencies;
+          ecosystem = inv.ecosystem;
+          packageManager = inv.packageManager;
+        } catch {
+        }
+        return send(c.res, 200, {
+          repo: { ...await repoInfo(repoDir), ecosystem, packageManager, dependencies: deps },
+          env: await environment(),
+          runsDir,
+          runs: await listRuns(runsDir),
+          debt: existsSync10(debtFile) ? JSON.parse(await readFile16(debtFile, "utf8")) : null,
+          live: [...live.values()].map(({ listeners: _l, ...r }) => r)
+        });
+      }
+    },
+    {
+      // One file from a run's before/ or after/ snapshot (diff "expand context").
+      method: "GET",
+      path: /^\/api\/runs\/([\w.-]+)\/file$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const id = c.m[1];
+        if (!ID.test(id)) return send(c.res, 400, { error: "bad run id" });
+        const side = c.url.searchParams.get("side") === "before" ? "before" : "after";
+        const rel = c.url.searchParams.get("path") ?? "";
+        const base = join22(runsDir, id, side);
+        const file2 = resolve4(base, rel);
+        if (!rel || rel.includes("\0") || !file2.startsWith(base + sep3))
+          return send(c.res, 400, { error: "bad path" });
+        const real = await realpath2(file2).catch(() => null);
+        const realBase = await realpath2(base).catch(() => null);
+        if (!real || !realBase || !real.startsWith(realBase + sep3))
+          return send(c.res, 404, { error: "the full file is not stored for this run" });
+        const st = await stat3(real).catch(() => null);
+        if (!st?.isFile())
+          return send(c.res, 404, { error: "the full file is not stored for this run" });
+        if (st.size > 2 * 1024 * 1024) return send(c.res, 413, { error: "file too large to show" });
+        return send(c.res, 200, { text: await readFile16(real, "utf8") });
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/runs\/([\w.-]+)$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const dir = runDir(c.m[1]);
+        if (!dir) return send(c.res, 404, { error: "no such run" });
+        const r = await readRun(runsDir, c.m[1]);
+        return send(c.res, 200, { ...r, summary: summarise2(r.job, r.patch) });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/runs\/([\w.-]+)\/apply$/,
+      perm: "runs.apply",
+      handler: async (c) => {
+        const dir = runDir(c.m[1]);
+        if (!dir) return send(c.res, 404, { error: "no such run" });
+        const patchFile = join22(dir, "patch.diff");
+        if (!(await stat3(patchFile).catch(() => null))?.size)
+          return send(c.res, 400, { error: "this run has no patch" });
+        const check2 = await run("git", ["-C", repoDir, "apply", "--check", "--index", patchFile]);
+        if (check2.exitCode !== 0)
+          return send(c.res, 409, {
+            error: `the patch does not apply to your working tree: ${(check2.stderr || check2.stdout).trim().slice(0, 400)}`
+          });
+        await run("git", ["-C", repoDir, "apply", "--index", patchFile]);
+        act(c, "run.applied", c.m[1]);
+        return send(c.res, 200, {
+          ok: true,
+          message: "Applied and staged. Review with git diff --cached."
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/runs\/([\w.-]+)\/delete$/,
+      perm: "runs.delete",
+      handler: async (c) => {
+        const dir = runDir(c.m[1]);
+        if (!dir) return send(c.res, 404, { error: "no such run" });
+        await rm7(dir, { recursive: true, force: true });
+        act(c, "run.deleted", c.m[1]);
+        return send(c.res, 200, { ok: true });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/runs$/,
+      perm: "runs.start",
+      handler: async (c) => {
+        const b = await readBody(c.req);
+        const pkg = String(b.package ?? "").trim();
+        const version2 = String(b.version ?? "").trim();
+        const provider2 = String(b.provider ?? "claude-code");
+        const budget = Math.min(50, Math.max(0.5, Number(b.budget ?? 8)));
+        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(pkg) || !/^\d[\w.+-]*$/.test(version2))
+          return send(c.res, 400, { error: "expected a package name and an exact version" });
+        if (!/^[\w-]+$/.test(provider2)) return send(c.res, 400, { error: "bad provider" });
+        const lr = startRun(pkg, version2, provider2, budget);
+        act(c, "run.started", `${pkg}@${version2}`, { provider: provider2, budget });
+        return send(c.res, 200, { id: lr.id });
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/live\/([a-f0-9]{12})$/,
+      perm: "runs.view",
+      handler: (c) => {
+        const lr = live.get(c.m[1]);
+        if (!lr) return send(c.res, 404, { error: "no such live run" });
+        c.res.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-store",
+          connection: "keep-alive"
+        });
+        for (const line of lr.lines)
+          c.res.write(
+            `event: line
+data: ${JSON.stringify({ line, stage: lr.stage, jobId: lr.jobId })}
+
+`
+          );
+        if (lr.done) {
+          c.res.write(
+            `event: done
+data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
+
+`
+          );
+          c.res.end();
+          return;
+        }
+        lr.listeners.add(c.res);
+        c.req.on("close", () => lr.listeners.delete(c.res));
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/scan$/,
+      perm: "runs.start",
+      handler: async (c) => {
+        const child = cli(["scan", "--repo", repoDir]);
+        let err = "";
+        child.stderr.on("data", (d) => err += d.toString());
+        const code = await new Promise((r) => child.on("close", r));
+        const debtFile = join22(repoDir, ".bumpsmith", "debt.json");
+        if (code !== 0 || !existsSync10(debtFile))
+          return send(c.res, 500, {
+            error: err.trim().split("\n").slice(-3).join(" ") || "scan failed"
+          });
+        act(c, "deps.scanned");
+        return send(c.res, 200, JSON.parse(await readFile16(debtFile, "utf8")));
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/latest$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const name = c.url.searchParams.get("name") ?? "";
+        const eco = c.url.searchParams.get("ecosystem") === "pypi" ? "pypi" : "npm";
+        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) return send(c.res, 400, { error: "bad name" });
+        return send(c.res, 200, await latestRelease(eco, name) ?? { version: null });
+      }
+    }
+  ];
+  const runDir = (id) => {
+    if (!ID.test(id)) return null;
+    const dir = join22(runsDir, id);
+    return dir.startsWith(runsDir + sep3) && existsSync10(join22(dir, "job.json")) ? dir : null;
+  };
   const server2 = http.createServer(async (req, res) => {
     try {
       const host = req.headers.host ?? "";
@@ -254465,143 +255348,45 @@ data: ${JSON.stringify(data)}
         return send(res, 200, html, MIME[".html"]);
       if (req.method === "GET" && path5 === "/app.js") return send(res, 200, appJs, MIME[".js"]);
       if (req.method === "GET" && /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg)$/.test(path5)) {
-        const file2 = join20(root, "dashboard", path5);
-        const body = await readFile15(file2).catch(() => null);
+        const file2 = join22(root, "dashboard", path5);
+        const body = await readFile16(file2).catch(() => null);
         return body ? send(res, 200, body, MIME[extname2(file2)]) : send(res, 404, { error: "not found" });
       }
-      if (!path5.startsWith("/api/")) return send(res, 404, { error: "not found" });
-      if (req.headers["x-bumpsmith-token"] !== token) return send(res, 403, { error: "token" });
-      if (req.method === "GET" && path5 === "/api/state") {
-        const debtFile = join20(repoDir, ".bumpsmith", "debt.json");
-        let deps = {};
-        let ecosystem = null;
-        let packageManager = null;
-        try {
-          const inv = await inventory(repoDir);
-          deps = inv.dependencies;
-          ecosystem = inv.ecosystem;
-          packageManager = inv.packageManager;
-        } catch {
-        }
-        return send(res, 200, {
-          repo: { ...await repoInfo(repoDir), ecosystem, packageManager, dependencies: deps },
-          env: await environment(),
-          runsDir,
-          runs: await listRuns(runsDir),
-          debt: existsSync8(debtFile) ? JSON.parse(await readFile15(debtFile, "utf8")) : null,
-          live: [...live.values()].map(({ listeners: _l, ...r }) => r)
-        });
-      }
-      const fileMatch = /^\/api\/runs\/([\w.-]+)\/file$/.exec(path5);
-      if (req.method === "GET" && fileMatch?.[1] && ID.test(fileMatch[1])) {
-        const side = url3.searchParams.get("side") === "before" ? "before" : "after";
-        const rel = url3.searchParams.get("path") ?? "";
-        const base = join20(runsDir, fileMatch[1], side);
-        const file2 = resolve4(base, rel);
-        if (!rel || rel.includes("\0") || !file2.startsWith(base + sep3))
-          return send(res, 400, { error: "bad path" });
-        const real = await realpath2(file2).catch(() => null);
-        const realBase = await realpath2(base).catch(() => null);
-        if (!real || !realBase || !real.startsWith(realBase + sep3))
-          return send(res, 404, { error: "the full file is not stored for this run" });
-        const st = await stat3(real).catch(() => null);
-        if (!st?.isFile())
-          return send(res, 404, { error: "the full file is not stored for this run" });
-        if (st.size > 2 * 1024 * 1024) return send(res, 413, { error: "file too large to show" });
-        return send(res, 200, { text: await readFile15(real, "utf8") });
-      }
-      const runMatch = /^\/api\/runs\/([\w.-]+)(\/apply|\/delete)?$/.exec(path5);
-      if (runMatch?.[1] && ID.test(runMatch[1])) {
-        const id = runMatch[1];
-        const dir = join20(runsDir, id);
-        if (!dir.startsWith(runsDir + sep3) || !existsSync8(join20(dir, "job.json")))
-          return send(res, 404, { error: "no such run" });
-        if (req.method === "GET" && !runMatch[2]) {
-          const r = await readRun(runsDir, id);
-          return send(res, 200, { ...r, summary: summarise2(r.job, r.patch) });
-        }
-        if (req.method === "POST" && runMatch[2] === "/apply") {
-          const patchFile = join20(dir, "patch.diff");
-          if (!(await stat3(patchFile).catch(() => null))?.size)
-            return send(res, 400, { error: "this run has no patch" });
-          const check2 = await run("git", ["-C", repoDir, "apply", "--check", "--index", patchFile]);
-          if (check2.exitCode !== 0)
-            return send(res, 409, {
-              error: `the patch does not apply to your working tree: ${(check2.stderr || check2.stdout).trim().slice(0, 400)}`
-            });
-          await run("git", ["-C", repoDir, "apply", "--index", patchFile]);
-          return send(res, 200, {
-            ok: true,
-            message: "Applied and staged. Review with git diff --cached."
-          });
-        }
-        if (req.method === "POST" && runMatch[2] === "/delete") {
-          await rm7(dir, { recursive: true, force: true });
-          return send(res, 200, { ok: true });
+      let route;
+      let m = null;
+      for (const r of routes) {
+        if (r.method !== req.method) continue;
+        m = r.path.exec(path5);
+        if (m) {
+          route = r;
+          break;
         }
       }
-      if (req.method === "POST" && path5 === "/api/runs") {
-        const b = await readBody(req);
-        const pkg = String(b.package ?? "").trim();
-        const version2 = String(b.version ?? "").trim();
-        const provider2 = String(b.provider ?? "claude-code");
-        const budget = Math.min(50, Math.max(0.5, Number(b.budget ?? 8)));
-        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(pkg) || !/^\d[\w.+-]*$/.test(version2))
-          return send(res, 400, { error: "expected a package name and an exact version" });
-        if (!/^[\w-]+$/.test(provider2)) return send(res, 400, { error: "bad provider" });
-        const lr = startRun(pkg, version2, provider2, budget);
-        return send(res, 200, { id: lr.id });
+      if (!route || !m) return send(res, 404, { error: "not found" });
+      const ip = req.socket.remoteAddress ?? "";
+      const token = readCookie(req.headers.cookie, cookieName(secure));
+      const p = auth2.principal(token);
+      if (req.method !== "GET") {
+        const origin = req.headers.origin;
+        if (origin !== void 0 && origin !== `http${secure ? "s" : ""}://${host}`)
+          return send(res, 403, { error: "cross-origin request refused" });
+        if (route.perm === "public" && auth2.rateLimited(ip))
+          return send(res, 429, { error: "Too many attempts. Wait a few minutes." });
       }
-      const liveMatch = /^\/api\/live\/([a-f0-9]{12})$/.exec(path5);
-      if (req.method === "GET" && liveMatch?.[1]) {
-        const lr = live.get(liveMatch[1]);
-        if (!lr) return send(res, 404, { error: "no such live run" });
-        res.writeHead(200, {
-          "content-type": "text/event-stream",
-          "cache-control": "no-store",
-          connection: "keep-alive"
-        });
-        for (const line of lr.lines)
-          res.write(
-            `event: line
-data: ${JSON.stringify({ line, stage: lr.stage, jobId: lr.jobId })}
-
-`
-          );
-        if (lr.done) {
-          res.write(
-            `event: done
-data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
-
-`
-          );
-          return res.end();
+      if (route.perm !== "public") {
+        if (!p) return send(res, 401, { error: "Your session has ended. Sign in again." });
+        if (req.method !== "GET") {
+          const csrf = String(req.headers["x-csrf-token"] ?? "");
+          if (!safeEqual(csrf, p.session.csrf))
+            return send(res, 403, { error: "missing or wrong CSRF token" });
         }
-        lr.listeners.add(res);
-        req.on("close", () => lr.listeners.delete(res));
-        return;
+        if (route.perm !== "session" && !can(p.permissions, route.perm))
+          return send(res, 403, { error: "Your role does not allow this." });
       }
-      if (req.method === "POST" && path5 === "/api/scan") {
-        const child = cli(["scan", "--repo", repoDir]);
-        let err = "";
-        child.stderr.on("data", (d) => err += d.toString());
-        const code = await new Promise((r) => child.on("close", r));
-        const debtFile = join20(repoDir, ".bumpsmith", "debt.json");
-        if (code !== 0 || !existsSync8(debtFile))
-          return send(res, 500, {
-            error: err.trim().split("\n").slice(-3).join(" ") || "scan failed"
-          });
-        return send(res, 200, JSON.parse(await readFile15(debtFile, "utf8")));
-      }
-      if (req.method === "GET" && path5 === "/api/latest") {
-        const name = url3.searchParams.get("name") ?? "";
-        const eco = url3.searchParams.get("ecosystem") === "pypi" ? "pypi" : "npm";
-        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) return send(res, 400, { error: "bad name" });
-        return send(res, 200, await latestRelease(eco, name) ?? { version: null });
-      }
-      return send(res, 404, { error: "not found" });
+      await route.handler({ req, res, url: url3, m, p, ip, token });
     } catch (err) {
-      return send(res, 500, { error: String(err.message ?? err).slice(0, 300) });
+      if (!res.headersSent)
+        return send(res, 500, { error: String(err.message ?? err).slice(0, 300) });
     }
   });
   await new Promise((ok, fail) => {
@@ -254618,7 +255403,20 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
     tryListen(port, 20);
   });
   const url2 = `http://127.0.0.1:${port}/`;
-  return { url: url2, port, close: () => new Promise((r) => server2.close(() => r())) };
+  return {
+    url: url2,
+    port,
+    dataDir,
+    /** Open once to create the owner account; null when the server is already set up. */
+    setupUrl: setupToken ? `${url2}#/setup/${setupToken}` : null,
+    routes: routes.map((r) => ({ method: r.method, path: String(r.path), perm: r.perm })),
+    close: () => new Promise(
+      (r) => server2.close(() => {
+        db.close();
+        r();
+      })
+    )
+  };
 }
 var ID, ANSI2, git2, onPath, MIME;
 var init_server = __esm({
@@ -254626,6 +255424,11 @@ var init_server = __esm({
     "use strict";
     init_inventory();
     init_registry();
+    init_audit();
+    init_auth();
+    init_crypto();
+    init_db();
+    init_rbac();
     init_proc();
     ID = /^[\w.-]{1,80}$/;
     ANSI2 = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
@@ -254646,9 +255449,9 @@ var init_server = __esm({
 
 // src/cli.ts
 var import_semver9 = __toESM(require_semver2(), 1);
-import { mkdir as mkdir13, mkdtemp as mkdtemp5, readFile as readFile16, rm as rm8, writeFile as writeFile8 } from "node:fs/promises";
+import { mkdir as mkdir14, mkdtemp as mkdtemp5, readFile as readFile17, rm as rm8, writeFile as writeFile9 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
-import { basename as basename3, join as join21, resolve as resolve5 } from "node:path";
+import { basename as basename3, join as join23, resolve as resolve5 } from "node:path";
 import { parseArgs } from "node:util";
 
 // src/action.ts
@@ -267986,14 +268789,14 @@ function generatePropertyCheck(doc, ctx, def, accessor) {
   generateCheck(doc, ctx, def.schema, propAccessor);
 }
 function generateOverwriteCheck(doc, ctx, check2, currentAccessor, newAccessor) {
-  const tx = check2._zod.def.tx;
-  if (!tx) {
+  const tx2 = check2._zod.def.tx;
+  if (!tx2) {
     throw new ZodCompileUnsupportedError("overwrite check without a transform function");
   }
-  if (isAsyncFunction(tx)) {
+  if (isAsyncFunction(tx2)) {
     throw new ZodCompileAsyncError("z.compile: async overwrite transforms are not supported");
   }
-  const txConst = addConstant(ctx, tx);
+  const txConst = addConstant(ctx, tx2);
   doc.write(`const ${newAccessor} = ${txConst}(${currentAccessor});`);
 }
 function throwAsync() {
@@ -269889,10 +270692,10 @@ function _mime(types, params) {
   });
 }
 // @__NO_SIDE_EFFECTS__
-function _overwrite(tx) {
+function _overwrite(tx2) {
   return new $ZodCheckOverwrite({
     check: "overwrite",
-    tx
+    tx: tx2
   });
 }
 // @__NO_SIDE_EFFECTS__
@@ -271976,8 +272779,8 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   and(arg) {
     return intersection(this, arg);
   },
-  transform(tx) {
-    return pipe(this, transform(tx));
+  transform(tx2) {
+    return pipe(this, transform(tx2));
   },
   default(d) {
     return _default2(this, d);
@@ -276123,34 +276926,34 @@ function routeMatcher(paths) {
 var regex = routeMatcher(triggers_notification_paths_default);
 var triggersNotification = regex.test.bind(regex);
 var groups = {};
-var createGroups = function(Bottleneck2, common) {
+var createGroups = function(Bottleneck2, common2) {
   groups.global = new Bottleneck2.Group({
     id: "octokit-global",
     maxConcurrent: 10,
-    ...common
+    ...common2
   });
   groups.auth = new Bottleneck2.Group({
     id: "octokit-auth",
     maxConcurrent: 1,
-    ...common
+    ...common2
   });
   groups.search = new Bottleneck2.Group({
     id: "octokit-search",
     maxConcurrent: 1,
     minTime: 2e3,
-    ...common
+    ...common2
   });
   groups.write = new Bottleneck2.Group({
     id: "octokit-write",
     maxConcurrent: 1,
     minTime: 1e3,
-    ...common
+    ...common2
   });
   groups.notifications = new Bottleneck2.Group({
     id: "octokit-notifications",
     maxConcurrent: 1,
     minTime: 3e3,
-    ...common
+    ...common2
   });
 };
 function throttling(octokit, octokitOptions) {
@@ -276165,9 +276968,9 @@ function throttling(octokit, octokitOptions) {
   if (!enabled) {
     return {};
   }
-  const common = { timeout };
+  const common2 = { timeout };
   if (typeof connection !== "undefined") {
-    common.connection = connection;
+    common2.connection = connection;
   }
   const state2 = Object.assign(
     {
@@ -276199,7 +277002,7 @@ function throttling(octokit, octokitOptions) {
     }
     initialized = true;
     if (groups.global == null) {
-      createGroups(Bottleneck2, common);
+      createGroups(Bottleneck2, common2);
     }
     state2.global = state2.global ?? groups.global;
     state2.auth = state2.auth ?? groups.auth;
@@ -280419,13 +281222,13 @@ function calculateExpiresAt(expiresIn, exchangeStartedAt) {
   if (typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn <= 0) {
     throw new OpenAIError("Token exchange response has invalid 'expires_in' field");
   }
-  const now = Date.now();
-  const fullLifetimeDeadline = now + expiresIn * 1e3;
-  if (!Number.isSafeInteger(fullLifetimeDeadline) || fullLifetimeDeadline <= now) {
+  const now2 = Date.now();
+  const fullLifetimeDeadline = now2 + expiresIn * 1e3;
+  if (!Number.isSafeInteger(fullLifetimeDeadline) || fullLifetimeDeadline <= now2) {
     throw new OpenAIError("Token exchange response has invalid 'expires_in' field");
   }
   const expiresAt = fullLifetimeDeadline - (performance.now() - exchangeStartedAt);
-  if (expiresAt <= now) {
+  if (expiresAt <= now2) {
     throw new OpenAIError("Workload identity token expired before its exchange completed.");
   }
   return expiresAt;
@@ -280806,8 +281609,8 @@ var userAbortError = (signal) => {
 };
 function assertSafeHeaders(headers2) {
   for (const name of Headers.prototype.keys.call(headers2)) {
-    const canonical = name.toLowerCase().split("_").join("-");
-    if (canonical !== "authorization" && isSensitiveHeader(canonical) || canonical === "host") {
+    const canonical2 = name.toLowerCase().split("_").join("-");
+    if (canonical2 !== "authorization" && isSensitiveHeader(canonical2) || canonical2 === "host") {
       throw new OpenAIError("X.509 workload identity cannot send conflicting authentication credentials.");
     }
   }
@@ -281454,11 +282257,11 @@ _a4 = X509WorkloadIdentityAuth, _X509WorkloadIdentityAuth_identityProviderId = /
     throw new OpenAIError("X.509 workload identity cannot omit its enrolled organization or project.");
   }
   for (const name of supplied.values.keys()) {
-    const canonical = name.toLowerCase().split("_").join("-");
-    if ((canonical === "openai-organization" || canonical === "openai-project") && (name !== canonical || headerValue2(supplied.values, name) !== (canonical === "openai-organization" ? context2.organization : context2.project))) {
+    const canonical2 = name.toLowerCase().split("_").join("-");
+    if ((canonical2 === "openai-organization" || canonical2 === "openai-project") && (name !== canonical2 || headerValue2(supplied.values, name) !== (canonical2 === "openai-organization" ? context2.organization : context2.project))) {
       throw new OpenAIError("X.509 workload identity cannot override its enrolled organization or project.");
     }
-    if (isSensitiveHeader(canonical) || canonical === "host") {
+    if (isSensitiveHeader(canonical2) || canonical2 === "host") {
       throw new OpenAIError("X.509 workload identity cannot use caller-supplied authentication credentials.");
     }
   }
@@ -281473,8 +282276,8 @@ _a4 = X509WorkloadIdentityAuth, _X509WorkloadIdentityAuth_identityProviderId = /
     throw new OpenAIError("X.509 workload identity cannot override its enrolled organization or project.");
   }
   for (const name of Headers.prototype.keys.call(headers2)) {
-    const canonical = name.toLowerCase().split("_").join("-");
-    if ((canonical === "openai-organization" || canonical === "openai-project") && name !== canonical) {
+    const canonical2 = name.toLowerCase().split("_").join("-");
+    if ((canonical2 === "openai-organization" || canonical2 === "openai-project") && name !== canonical2) {
       throw new OpenAIError("X.509 workload identity cannot override its enrolled organization or project.");
     }
   }
@@ -282501,14 +283304,14 @@ function getTrustedForeignIntrinsic(prototype) {
 function isTrustedIntrinsicPrototype(prototype) {
   return trustedIntrinsicPrototypes.has(prototype) || getTrustedForeignIntrinsic(prototype) !== void 0;
 }
-function isCanonicalIntrinsicFunction(value, canonical, functionPrototype) {
-  if (canonical === void 0) {
+function isCanonicalIntrinsicFunction(value, canonical2, functionPrototype) {
+  if (canonical2 === void 0) {
     return value === void 0;
   }
-  if (typeof value !== "function" || typeof canonical !== "function") {
+  if (typeof value !== "function" || typeof canonical2 !== "function") {
     return false;
   }
-  const source = functionToString.call(canonical);
+  const source = functionToString.call(canonical2);
   if (functionToString.call(value) !== source) {
     return false;
   }
@@ -282522,23 +283325,23 @@ function isCanonicalIntrinsicFunction(value, canonical, functionPrototype) {
   const intrinsic = getTrustedForeignIntrinsic(actualFunctionPrototype);
   return intrinsic !== void 0 && functionToString.call(intrinsic.constructor) === nativeFunctionConstructorSource;
 }
-function isCanonicalIntrinsicDescriptor(descriptor, canonical, functionPrototype) {
-  if (!canonical || descriptor.configurable !== canonical.configurable || descriptor.enumerable !== canonical.enumerable || "value" in descriptor !== "value" in canonical) {
+function isCanonicalIntrinsicDescriptor(descriptor, canonical2, functionPrototype) {
+  if (!canonical2 || descriptor.configurable !== canonical2.configurable || descriptor.enumerable !== canonical2.enumerable || "value" in descriptor !== "value" in canonical2) {
     return false;
   }
-  if ("value" in descriptor && "value" in canonical) {
-    if (descriptor.writable !== canonical.writable) {
+  if ("value" in descriptor && "value" in canonical2) {
+    if (descriptor.writable !== canonical2.writable) {
       return false;
     }
-    if (typeof canonical.value === "function") {
-      return isCanonicalIntrinsicFunction(descriptor.value, canonical.value, functionPrototype);
+    if (typeof canonical2.value === "function") {
+      return isCanonicalIntrinsicFunction(descriptor.value, canonical2.value, functionPrototype);
     }
-    if (canonical.value !== null && typeof canonical.value === "object") {
+    if (canonical2.value !== null && typeof canonical2.value === "object") {
       return false;
     }
-    return Object.is(descriptor.value, canonical.value);
+    return Object.is(descriptor.value, canonical2.value);
   }
-  return isCanonicalIntrinsicFunction(descriptor.get, canonical.get, functionPrototype) && isCanonicalIntrinsicFunction(descriptor.set, canonical.set, functionPrototype);
+  return isCanonicalIntrinsicFunction(descriptor.get, canonical2.get, functionPrototype) && isCanonicalIntrinsicFunction(descriptor.set, canonical2.set, functionPrototype);
 }
 function hasNativeErrorBrand(current) {
   if (nativeErrorBrand) {
@@ -282587,11 +283390,11 @@ function isTrustedNativeErrorStack(current, descriptor) {
   }
   let canonicalDescriptor = foreignErrorStackDescriptors.get(verified.prototype);
   if (!canonicalDescriptor) {
-    const canonical = Reflect.construct(verified.constructor, []);
-    if (typeof canonical !== "object" || canonical === null || !hasNativeErrorBrand(canonical) || Object.getPrototypeOf(canonical) !== verified.prototype) {
+    const canonical2 = Reflect.construct(verified.constructor, []);
+    if (typeof canonical2 !== "object" || canonical2 === null || !hasNativeErrorBrand(canonical2) || Object.getPrototypeOf(canonical2) !== verified.prototype) {
       return false;
     }
-    canonicalDescriptor = Object.getOwnPropertyDescriptor(canonical, "stack");
+    canonicalDescriptor = Object.getOwnPropertyDescriptor(canonical2, "stack");
     if (!canonicalDescriptor || "value" in canonicalDescriptor || typeof canonicalDescriptor.get !== "function" || typeof canonicalDescriptor.set !== "function") {
       return false;
     }
@@ -304497,11 +305300,11 @@ async function ensureImage(kind, buildArgs = []) {
   return tag;
 }
 async function ensureMirrorCerts(dir = CERT_DIR) {
-  const { existsSync: existsSync9, statSync } = await import("node:fs");
-  const { writeFile: writeFile9, rm: rm9 } = await import("node:fs/promises");
+  const { existsSync: existsSync11, statSync } = await import("node:fs");
+  const { writeFile: writeFile10, rm: rm9 } = await import("node:fs/promises");
   const hostsFile = join11(dir, "hosts.txt");
   const wanted = REGISTRY_HOSTS.join(",");
-  const current = async () => existsSync9(join11(dir, "mirror.crt")) && existsSync9(join11(dir, "ca.crt")) && existsSync9(hostsFile) && (await readFile8(hostsFile, "utf8")).trim() === wanted;
+  const current = async () => existsSync11(join11(dir, "mirror.crt")) && existsSync11(join11(dir, "ca.crt")) && existsSync11(hostsFile) && (await readFile8(hostsFile, "utf8")).trim() === wanted;
   if (await current()) return dir;
   await mkdir7(dirname3(dir), { recursive: true });
   const lock = `${dir}.lock`;
@@ -304521,20 +305324,20 @@ async function ensureMirrorCerts(dir = CERT_DIR) {
   }
   try {
     if (await current()) return dir;
-    await generateMirrorCerts(dir, wanted, hostsFile, writeFile9, rm9);
+    await generateMirrorCerts(dir, wanted, hostsFile, writeFile10, rm9);
     return dir;
   } finally {
     await rm9(lock, { recursive: true, force: true });
   }
 }
-async function generateMirrorCerts(dir, wanted, hostsFile, writeFile9, rm9) {
+async function generateMirrorCerts(dir, wanted, hostsFile, writeFile10, rm9) {
   await rm9(hostsFile, { force: true });
   for (const f of ["mirror.crt", "mirror.key", "ca.crt"]) await rm9(join11(dir, f), { force: true });
   await mkdir7(dir, { recursive: true, mode: 493 });
   const { chmod: chmodDir } = await import("node:fs/promises");
   await chmodDir(dir, 493);
   const cfg = join11(dir, "leaf.cnf");
-  await writeFile9(
+  await writeFile10(
     cfg,
     [
       "[req]",
@@ -304601,11 +305404,11 @@ async function generateMirrorCerts(dir, wanted, hostsFile, writeFile9, rm9) {
   ]);
   for (const f of ["ca.key", "mirror.csr", "ca.srl", "leaf.cnf"])
     await rm9(join11(dir, f), { force: true });
-  const { chmod } = await import("node:fs/promises");
-  await chmod(join11(dir, "mirror.key"), 420);
-  await chmod(join11(dir, "mirror.crt"), 420);
-  await chmod(join11(dir, "ca.crt"), 420);
-  await writeFile9(hostsFile, `${wanted}
+  const { chmod: chmod2 } = await import("node:fs/promises");
+  await chmod2(join11(dir, "mirror.key"), 420);
+  await chmod2(join11(dir, "mirror.crt"), 420);
+  await chmod2(join11(dir, "ca.crt"), 420);
+  await writeFile10(hostsFile, `${wanted}
 `);
 }
 var infraReady = null;
@@ -305210,14 +306013,14 @@ async function compareWithBaseline(sb, checks, baseline, after, deadline) {
     };
     if (c.name === "test" && b && a && !b.passed && !afterPassed && !b.timed_out && !a.timed_out) {
       const before = parseTestResults(b.output_tail);
-      const now = parseTestResults(a.output_tail);
-      if (before && now) {
-        const added = [...now.failing].filter((t) => !before.failing.has(t));
+      const now2 = parseTestResults(a.output_tail);
+      if (before && now2) {
+        const added = [...now2.failing].filter((t) => !before.failing.has(t));
         if (added.length) {
           cmp.newFailures = added.slice(0, 20);
           cmp.regression = true;
-        } else if (now.passed > 0 && now.passed >= before.passed)
-          cmp.sameFailures = { failing: [...now.failing].slice(0, 20), passed: now.passed };
+        } else if (now2.passed > 0 && now2.passed >= before.passed)
+          cmp.sameFailures = { failing: [...now2.failing].slice(0, 20), passed: now2.passed };
       }
     }
     comparisons.push(cmp);
@@ -305736,10 +306539,10 @@ async function runJob(input3, opts) {
         const c = await sb?.exec(["cat", "--", f], { cwd: cwd ?? "/workspace" });
         if (c?.exitCode === 0) texts.push(c.stdout);
       }
-      const now = lockedVersions(texts.join("\n"), input3.packageName);
-      const reached = now.some((v) => compareVersions(v, input3.to) >= 0);
+      const now2 = lockedVersions(texts.join("\n"), input3.packageName);
+      const reached = now2.some((v) => compareVersions(v, input3.to) >= 0);
       job.notes.push(
-        reached ? `Lockfile now resolves ${input3.packageName} to ${now.join(", ")}.` : `The lockfile could only move ${input3.packageName} to ${now.join(", ") || "an unknown version"}: a package that depends on it allows nothing newer. Upgrading that parent package is needed to reach ${input3.to}.`
+        reached ? `Lockfile now resolves ${input3.packageName} to ${now2.join(", ")}.` : `The lockfile could only move ${input3.packageName} to ${now2.join(", ") || "an unknown version"}: a package that depends on it allows nothing newer. Upgrading that parent package is needed to reach ${input3.to}.`
       );
     };
     log2(`job ${id}: applying the version bump`);
@@ -306998,13 +307801,13 @@ async function mapLimit(items, limit3, fn) {
   return out;
 }
 async function computeDebt(opts) {
-  const now = opts.now ?? /* @__PURE__ */ new Date();
+  const now2 = opts.now ?? /* @__PURE__ */ new Date();
   const eco = opts.inv.ecosystem;
   const names = Object.keys(opts.inv.dependencies).slice(0, 500);
   const items = await mapLimit(names, 8, async (name) => {
     const current = opts.resolved.get(name) ?? import_semver7.default.minVersion(opts.inv.dependencies[name]?.replace(/^==/, "") ?? "")?.version ?? null;
     const latest = await latestRelease(eco, name);
-    const age = latest?.publishedAt ? (now.getTime() - latest.publishedAt.getTime()) / 864e5 : null;
+    const age = latest?.publishedAt ? (now2.getTime() - latest.publishedAt.getTime()) / 864e5 : null;
     return {
       package: name,
       current,
@@ -307022,14 +307825,14 @@ async function computeDebt(opts) {
       bot: p.parsed?.bot ?? "unknown",
       package: p.parsed?.pkg ?? null,
       to: p.parsed?.to ?? null,
-      ageDays: Math.floor((now.getTime() - Date.parse(p.createdAt)) / 864e5),
+      ageDays: Math.floor((now2.getTime() - Date.parse(p.createdAt)) / 864e5),
       checks: p.checks,
       attemptable: reason === null && p.checks === "failing",
       reason
     };
   });
   return {
-    generatedAt: now.toISOString(),
+    generatedAt: now2.toISOString(),
     commit: opts.commit,
     ecosystem: eco,
     packageManager: opts.inv.packageManager,
@@ -324378,7 +325181,7 @@ Usage (run inside your repository):
   bumpsmith init                                add the GitHub Action workflow and a starter .bumpsmith.yml
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
-  bumpsmith dashboard                           local dashboard of your upgrades: review diffs, apply patches, start upgrades live
+  bumpsmith dashboard [--data dir]              the dashboard (sign-in required): review diffs, apply patches, start upgrades live
 
 Options: --repo <dir> (default .), --dir <sub-directory> (monorepos), --provider <name>, --model <id>, --base-url <url>, --budget <usd>
 
@@ -324419,7 +325222,7 @@ function parseSpec(spec) {
 async function repoConfig(dir) {
   for (const f of CONFIG_PATHS) {
     try {
-      const r = parseConfig(await readFile16(join21(dir, f), "utf8"));
+      const r = parseConfig(await readFile17(join23(dir, f), "utf8"));
       for (const p of r.problems)
         process.stderr.write(`${f}:${p.line ?? "?"} ${p.path} ${p.message}
 `);
@@ -324489,7 +325292,7 @@ async function githubRun(target, mode, prov, budget, log2) {
     throw new Error("--github expects owner/repo");
   const token = await githubToken();
   const gh2 = tokenClient(token, { userAgent: "bumpsmith-cli", log: log2 });
-  const work = await mkdtemp5(join21(tmpdir4(), "bumpsmith-gh-"));
+  const work = await mkdtemp5(join23(tmpdir4(), "bumpsmith-gh-"));
   try {
     const rows = await runAction({
       gh: gh2,
@@ -324553,6 +325356,7 @@ async function main() {
       only: { type: "string" },
       port: { type: "string" },
       runs: { type: "string" },
+      data: { type: "string" },
       "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h" }
     }
@@ -324564,13 +325368,13 @@ async function main() {
   switch (cmd) {
     case "init": {
       const dir = resolve5(values.repo ?? ".");
-      const wfDir = join21(dir, ".github", "workflows");
+      const wfDir = join23(dir, ".github", "workflows");
       let ciName = "CI";
       try {
         const { readdir: readdir7 } = await import("node:fs/promises");
         for (const f of await readdir7(wfDir)) {
           if (!/\.ya?ml$/.test(f) || /bumpsmith/.test(f)) continue;
-          const text = await readFile16(join21(wfDir, f), "utf8");
+          const text = await readFile17(join23(wfDir, f), "utf8");
           if (/pull_request/.test(text)) {
             ciName = /^name:\s*["']?([^"'\n]+)/m.exec(text)?.[1]?.trim() ?? f.replace(/\.ya?ml$/, "");
             break;
@@ -324578,12 +325382,12 @@ async function main() {
         }
       } catch {
       }
-      const wfPath = join21(wfDir, "bumpsmith.yml");
-      const cfgPath = join21(dir, ".bumpsmith.yml");
-      const { existsSync: existsSync9 } = await import("node:fs");
-      await mkdir13(wfDir, { recursive: true });
-      if (!existsSync9(wfPath)) await writeFile8(wfPath, initWorkflow(ciName));
-      if (!existsSync9(cfgPath)) await writeFile8(cfgPath, INIT_CONFIG);
+      const wfPath = join23(wfDir, "bumpsmith.yml");
+      const cfgPath = join23(dir, ".bumpsmith.yml");
+      const { existsSync: existsSync11 } = await import("node:fs");
+      await mkdir14(wfDir, { recursive: true });
+      if (!existsSync11(wfPath)) await writeFile9(wfPath, initWorkflow(ciName));
+      if (!existsSync11(cfgPath)) await writeFile9(cfgPath, INIT_CONFIG);
       log2(
         `wrote ${wfPath} (runs after your "${ciName}" workflow fails on a Dependabot/Renovate PR)`
       );
@@ -324620,7 +325424,7 @@ async function main() {
         return;
       }
       const dir = resolve5(values.repo ?? ".");
-      const runsDir = join21(dir, ".bumpsmith", "runs");
+      const runsDir = join23(dir, ".bumpsmith", "runs");
       const job = await runJob(
         { repo: dir, packageName: name, to: version2, from: values.from, dir: values.dir },
         {
@@ -324631,14 +325435,14 @@ async function main() {
           log: log2
         }
       );
-      const out = join21(runsDir, job.id);
+      const out = join23(runsDir, job.id);
       log2(
         `
 ${job.state.toUpperCase()} (confidence ${job.confidence ?? "n/a"}, $${(job.cost_usd ?? 0).toFixed(2)})`
       );
-      log2(`evidence: ${join21(out, "evidence.md")}`);
-      const patchFile = join21(out, "patch.diff");
-      const patch = await readFile16(patchFile, "utf8").catch(() => "");
+      log2(`evidence: ${join23(out, "evidence.md")}`);
+      const patchFile = join23(out, "patch.diff");
+      const patch = await readFile17(patchFile, "utf8").catch(() => "");
       if (patch.trim()) {
         log2(`patch:    ${patchFile}`);
         if (values.apply) {
@@ -324699,17 +325503,17 @@ cost: $${ledger.totalUsd.toFixed(3)}`);
         unsupported: [],
         minReleaseAgeDays: cfg.release_age_days
       });
-      const outDir = join21(dir, ".bumpsmith");
-      await mkdir13(outDir, { recursive: true });
-      await writeFile8(
-        join21(outDir, "sbom.cdx.json"),
+      const outDir = join23(dir, ".bumpsmith");
+      await mkdir14(outDir, { recursive: true });
+      await writeFile9(
+        join23(outDir, "sbom.cdx.json"),
         JSON.stringify(
           cycloneDx({ repoFullName: basename3(dir), commit: "working-tree", components, complete }),
           null,
           2
         )
       );
-      await writeFile8(join21(outDir, "debt.json"), JSON.stringify(report, null, 2));
+      await writeFile9(join23(outDir, "debt.json"), JSON.stringify(report, null, 2));
       console.log(
         `${inv.ecosystem} (${inv.packageManager}), ${report.directDependencies} direct dependencies, ${report.behind.length} a major version or more behind:
 `
@@ -324803,7 +325607,7 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       if (args[0] === "mine") {
         const eco = values.ecosystem === "pypi" ? "pypi" : "npm";
         const out = values.out ?? `bench/tasks-${eco}.json`;
-        const dev = values.heldout ? JSON.parse(await readFile16("bench/tasks-npm.json", "utf8")) : [];
+        const dev = values.heldout ? JSON.parse(await readFile17("bench/tasks-npm.json", "utf8")) : [];
         const tasks = await mine({
           ecosystem: eco,
           want: Number(values.want),
@@ -324824,7 +325628,7 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       }
       if (args[0] === "run") {
         let tasks = JSON.parse(
-          await readFile16(values.tasks ?? "bench/tasks.json", "utf8")
+          await readFile17(values.tasks ?? "bench/tasks.json", "utf8")
         );
         if (values.only) {
           const ids = new Set(values.only.split(","));
@@ -324856,7 +325660,7 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       }
       if (args[0] === "zoo") {
         let tasks = JSON.parse(
-          await readFile16(
+          await readFile17(
             values.tasks === "bench/tasks.json" ? "bench/zoo.json" : values.tasks ?? "bench/zoo.json",
             "utf8"
           )
@@ -324875,19 +325679,31 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
     case "dashboard": {
+      process.removeAllListeners("warning");
+      process.on("warning", (w) => {
+        if (w.name === "ExperimentalWarning" && /SQLite/.test(w.message)) return;
+        console.warn(`${w.name}: ${w.message}`);
+      });
       const { startDashboard: startDashboard2 } = await Promise.resolve().then(() => (init_server(), server_exports));
       const dir = resolve5(values.repo ?? ".");
-      const { url: url2 } = await startDashboard2({
+      const { url: url2, setupUrl, dataDir } = await startDashboard2({
         repoDir: dir,
         runsDir: values.runs ? resolve5(values.runs) : void 0,
         port: values.port ? Number(values.port) : void 0,
+        dataDir: values.data ? resolve5(values.data) : void 0,
         cliEntry: process.argv[1] ?? ""
       });
       log2(`Bumpsmith dashboard for ${basename3(dir)}: ${url2}`);
-      log2("Local only (127.0.0.1); nothing is sent anywhere. Ctrl+C to stop.");
+      log2(`Accounts and audit log: ${dataDir}. Bound to 127.0.0.1. Ctrl+C to stop.`);
+      if (setupUrl) {
+        log2("");
+        log2("First run: open this one-time link to create the owner account (valid for 1 hour):");
+        log2(`  ${setupUrl}`);
+        log2("");
+      }
       if (!values["no-open"]) {
         const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-        run(opener, [url2]).catch(() => {
+        run(opener, [setupUrl ?? url2]).catch(() => {
         });
       }
       await new Promise(() => {

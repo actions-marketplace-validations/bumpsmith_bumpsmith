@@ -3,21 +3,36 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import http from "node:http";
+import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inventory } from "../inventory/inventory.ts";
 import type { JobRecord } from "../pipeline.ts";
 import { latestRelease } from "../registry/registry.ts";
+import { audit, verifyAudit } from "../server/audit.ts";
+import {
+  Auth,
+  AuthError,
+  clearCookie,
+  cookieName,
+  type Principal,
+  readCookie,
+  sessionCookie,
+} from "../server/auth.ts";
+import { loadMasterKey, safeEqual } from "../server/crypto.ts";
+import { openDb } from "../server/db.ts";
+import { can, type Permission } from "../server/rbac.ts";
 import { run } from "../util/proc.ts";
 
 /**
- * `bumpsmith dashboard`: a local web app over the runs in <repo>/.bumpsmith/runs.
+ * `bumpsmith dashboard`: the web app over the runs in <repo>/.bumpsmith/runs.
  *
- * Local only and private: it binds 127.0.0.1, sends nothing anywhere (fonts are bundled),
- * rejects requests whose Host is not this server (DNS rebinding), and every API call needs
- * the per-session token embedded in the page (a page on another site cannot read it).
- * Actions: start an upgrade (the same `bumpsmith fix` the CLI runs, streamed live), apply a
- * verified patch to the working tree, delete a run, scan dependencies.
+ * Behind a login: accounts, roles and sessions live in a SQLite store in the data directory
+ * (see src/server/). The first visit needs a one-time setup link printed by the server to
+ * create the owner, so nobody else can claim a fresh install. Every API route declares the
+ * permission it needs and is denied otherwise; requests that change anything must come from
+ * this origin and carry the session's CSRF token. It also binds 127.0.0.1 by default, sends
+ * nothing anywhere (fonts are bundled) and rejects foreign Host headers (DNS rebinding).
  */
 
 function packageRoot(): string {
@@ -267,6 +282,10 @@ export interface DashboardOptions {
   repoDir: string;
   runsDir?: string;
   port?: number;
+  /** Where accounts, sessions, the audit log and keys are stored (default ~/.bumpsmith). */
+  dataDir?: string;
+  /** Mark cookies Secure (set when served over HTTPS). */
+  secureCookies?: boolean;
   /** The CLI entry (process.argv[1]) used to start upgrades and scans. */
   cliEntry: string;
   log?: (m: string) => void;
@@ -295,24 +314,38 @@ export async function startDashboard(opts: DashboardOptions) {
   const root = packageRoot();
   const repoDir = resolve(opts.repoDir);
   const runsDir = resolve(opts.runsDir ?? join(repoDir, ".bumpsmith", "runs"));
-  const token = randomBytes(24).toString("hex");
+  const dataDir = resolve(opts.dataDir ?? join(homedir(), ".bumpsmith"));
+  const db = openDb(dataDir);
+  await loadMasterKey(join(dataDir, "master.key"));
+  const auth = new Auth(db);
+  const secure = !!opts.secureCookies;
+  const setupToken = auth.needsSetup() ? auth.issueSetupToken() : null;
   const live = new Map<string, LiveRun>();
   const appJs = await clientBundle(root);
-  const html = (await readFile(join(root, "dashboard", "index.html"), "utf8")).replace(
-    "%%TOKEN%%",
-    token,
-  );
+  const html = await readFile(join(root, "dashboard", "index.html"), "utf8");
   let port = opts.port ?? 4477;
 
-  const send = (res: http.ServerResponse, code: number, body: unknown, type?: string) => {
+  const send = (
+    res: http.ServerResponse,
+    code: number,
+    body: unknown,
+    type?: string,
+    extra: Record<string, string> = {},
+  ) => {
     const text = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
     res.writeHead(code, {
       "content-type": type ?? "application/json; charset=utf-8",
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
       "referrer-policy": "no-referrer",
+      "cross-origin-opener-policy": "same-origin",
+      "cross-origin-resource-policy": "same-origin",
+      "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
       "content-security-policy":
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      ...(secure ? { "strict-transport-security": "max-age=31536000; includeSubDomains" } : {}),
+      ...extra,
     });
     res.end(text);
   };
@@ -402,6 +435,298 @@ export async function startDashboard(opts: DashboardOptions) {
     return lr;
   };
 
+  type Ctx = {
+    req: http.IncomingMessage;
+    res: http.ServerResponse;
+    url: URL;
+    m: RegExpExecArray;
+    p: Principal | null;
+    ip: string;
+    token: string | undefined;
+  };
+  interface Route {
+    method: "GET" | "POST";
+    path: RegExp;
+    /** "public" needs no session; "session" any signed-in user; otherwise a permission. */
+    perm: "public" | "session" | Permission;
+    handler: (c: Ctx) => Promise<void> | void;
+  }
+
+  const sessionPayload = (p: Principal) => ({
+    user: { id: p.user.id, name: p.user.name, email: p.user.email, mfa: !!p.user.mfa_enabled },
+    org: auth.org(p.user.org_id),
+    role: p.role,
+    permissions: p.permissions,
+    csrf: p.session.csrf,
+  });
+  const signIn = (c: Ctx, user: Parameters<Auth["createSession"]>[0]) => {
+    if (c.token) auth.endSession(c.token, null, c.ip); // rotate: never reuse a pre-login session
+    const s = auth.createSession(user, c.ip, String(c.req.headers["user-agent"] ?? ""));
+    const p = auth.principal(s.token) as Principal;
+    return send(c.res, 200, sessionPayload(p), undefined, {
+      "set-cookie": sessionCookie(s.token, secure, 12 * 3600),
+    });
+  };
+  const authErr = (c: Ctx, e: unknown) => {
+    if (e instanceof AuthError) return send(c.res, e.status, { error: e.message });
+    throw e;
+  };
+  const act = (c: Ctx, action: string, target?: string, detail?: Record<string, unknown>) =>
+    c.p &&
+    audit(db, {
+      orgId: c.p.user.org_id,
+      actorId: c.p.user.id,
+      actor: c.p.user.email,
+      action,
+      target,
+      ip: c.ip,
+      detail,
+    });
+
+  const routes: Route[] = [
+    // ── authentication ──
+    {
+      method: "GET",
+      path: /^\/auth\/session$/,
+      perm: "public",
+      handler: (c) =>
+        c.p
+          ? send(c.res, 200, sessionPayload(c.p))
+          : send(c.res, 401, { error: "signed out", setupRequired: auth.needsSetup() }),
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/setup$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await readBody(c.req);
+        try {
+          const user = await auth.setupOwner({
+            token: String(b.token ?? ""),
+            orgName: String(b.orgName ?? ""),
+            name: String(b.name ?? ""),
+            email: String(b.email ?? ""),
+            password: String(b.password ?? ""),
+            ip: c.ip,
+          });
+          return signIn(c, user);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/login$/,
+      perm: "public",
+      handler: async (c) => {
+        const b = await readBody(c.req);
+        try {
+          const user = await auth.login(String(b.email ?? ""), String(b.password ?? ""), c.ip);
+          return signIn(c, user);
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/auth\/logout$/,
+      perm: "session",
+      handler: (c) => {
+        if (c.token) auth.endSession(c.token, c.p, c.ip);
+        return send(c.res, 200, { ok: true }, undefined, { "set-cookie": clearCookie(secure) });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/audit\/verify$/,
+      perm: "audit.view",
+      handler: (c) => send(c.res, 200, verifyAudit(db)),
+    },
+
+    // ── the repository and its runs ──
+    {
+      method: "GET",
+      path: /^\/api\/state$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const debtFile = join(repoDir, ".bumpsmith", "debt.json");
+        let deps: Record<string, string> = {};
+        let ecosystem: string | null = null;
+        let packageManager: string | null = null;
+        try {
+          const inv = await inventory(repoDir);
+          deps = inv.dependencies;
+          ecosystem = inv.ecosystem;
+          packageManager = inv.packageManager;
+        } catch {
+          // not a supported repository: the dashboard still shows runs
+        }
+        return send(c.res, 200, {
+          repo: { ...(await repoInfo(repoDir)), ecosystem, packageManager, dependencies: deps },
+          env: await environment(),
+          runsDir,
+          runs: await listRuns(runsDir),
+          debt: existsSync(debtFile) ? JSON.parse(await readFile(debtFile, "utf8")) : null,
+          live: [...live.values()].map(({ listeners: _l, ...r }) => r),
+        });
+      },
+    },
+    {
+      // One file from a run's before/ or after/ snapshot (diff "expand context").
+      method: "GET",
+      path: /^\/api\/runs\/([\w.-]+)\/file$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const id = c.m[1] as string;
+        if (!ID.test(id)) return send(c.res, 400, { error: "bad run id" });
+        const side = c.url.searchParams.get("side") === "before" ? "before" : "after";
+        const rel = c.url.searchParams.get("path") ?? "";
+        const base = join(runsDir, id, side);
+        const file = resolve(base, rel);
+        if (!rel || rel.includes("\0") || !file.startsWith(base + sep))
+          return send(c.res, 400, { error: "bad path" });
+        // Symlinks in the repository must not lead outside the snapshot.
+        const real = await realpath(file).catch(() => null);
+        const realBase = await realpath(base).catch(() => null);
+        if (!real || !realBase || !real.startsWith(realBase + sep))
+          return send(c.res, 404, { error: "the full file is not stored for this run" });
+        const st = await stat(real).catch(() => null);
+        if (!st?.isFile())
+          return send(c.res, 404, { error: "the full file is not stored for this run" });
+        if (st.size > 2 * 1024 * 1024) return send(c.res, 413, { error: "file too large to show" });
+        return send(c.res, 200, { text: await readFile(real, "utf8") });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/runs\/([\w.-]+)$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const dir = runDir(c.m[1] as string);
+        if (!dir) return send(c.res, 404, { error: "no such run" });
+        const r = await readRun(runsDir, c.m[1] as string);
+        return send(c.res, 200, { ...r, summary: summarise(r.job, r.patch) });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/runs\/([\w.-]+)\/apply$/,
+      perm: "runs.apply",
+      handler: async (c) => {
+        const dir = runDir(c.m[1] as string);
+        if (!dir) return send(c.res, 404, { error: "no such run" });
+        const patchFile = join(dir, "patch.diff");
+        if (!(await stat(patchFile).catch(() => null))?.size)
+          return send(c.res, 400, { error: "this run has no patch" });
+        const check = await run("git", ["-C", repoDir, "apply", "--check", "--index", patchFile]);
+        if (check.exitCode !== 0)
+          return send(c.res, 409, {
+            error: `the patch does not apply to your working tree: ${(check.stderr || check.stdout).trim().slice(0, 400)}`,
+          });
+        await run("git", ["-C", repoDir, "apply", "--index", patchFile]);
+        act(c, "run.applied", c.m[1]);
+        return send(c.res, 200, {
+          ok: true,
+          message: "Applied and staged. Review with git diff --cached.",
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/runs\/([\w.-]+)\/delete$/,
+      perm: "runs.delete",
+      handler: async (c) => {
+        const dir = runDir(c.m[1] as string);
+        if (!dir) return send(c.res, 404, { error: "no such run" });
+        await rm(dir, { recursive: true, force: true });
+        act(c, "run.deleted", c.m[1]);
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/runs$/,
+      perm: "runs.start",
+      handler: async (c) => {
+        const b = await readBody(c.req);
+        const pkg = String(b.package ?? "").trim();
+        const version = String(b.version ?? "").trim();
+        const provider = String(b.provider ?? "claude-code");
+        const budget = Math.min(50, Math.max(0.5, Number(b.budget ?? 8)));
+        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(pkg) || !/^\d[\w.+-]*$/.test(version))
+          return send(c.res, 400, { error: "expected a package name and an exact version" });
+        if (!/^[\w-]+$/.test(provider)) return send(c.res, 400, { error: "bad provider" });
+        const lr = startRun(pkg, version, provider, budget);
+        act(c, "run.started", `${pkg}@${version}`, { provider, budget });
+        return send(c.res, 200, { id: lr.id });
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/live\/([a-f0-9]{12})$/,
+      perm: "runs.view",
+      handler: (c) => {
+        const lr = live.get(c.m[1] as string);
+        if (!lr) return send(c.res, 404, { error: "no such live run" });
+        c.res.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-store",
+          connection: "keep-alive",
+        });
+        for (const line of lr.lines)
+          c.res.write(
+            `event: line\ndata: ${JSON.stringify({ line, stage: lr.stage, jobId: lr.jobId })}\n\n`,
+          );
+        if (lr.done) {
+          c.res.write(
+            `event: done\ndata: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}\n\n`,
+          );
+          c.res.end();
+          return;
+        }
+        lr.listeners.add(c.res);
+        c.req.on("close", () => lr.listeners.delete(c.res));
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/scan$/,
+      perm: "runs.start",
+      handler: async (c) => {
+        const child = cli(["scan", "--repo", repoDir]);
+        let err = "";
+        child.stderr.on("data", (d: Buffer) => (err += d.toString()));
+        const code = await new Promise<number | null>((r) => child.on("close", r));
+        const debtFile = join(repoDir, ".bumpsmith", "debt.json");
+        if (code !== 0 || !existsSync(debtFile))
+          return send(c.res, 500, {
+            error: err.trim().split("\n").slice(-3).join(" ") || "scan failed",
+          });
+        act(c, "deps.scanned");
+        return send(c.res, 200, JSON.parse(await readFile(debtFile, "utf8")));
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/latest$/,
+      perm: "runs.view",
+      handler: async (c) => {
+        const name = c.url.searchParams.get("name") ?? "";
+        const eco = c.url.searchParams.get("ecosystem") === "pypi" ? "pypi" : "npm";
+        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) return send(c.res, 400, { error: "bad name" });
+        return send(c.res, 200, (await latestRelease(eco, name)) ?? { version: null });
+      },
+    },
+  ];
+
+  const runDir = (id: string) => {
+    if (!ID.test(id)) return null;
+    const dir = join(runsDir, id);
+    return dir.startsWith(runsDir + sep) && existsSync(join(dir, "job.json")) ? dir : null;
+  };
+
   const server = http.createServer(async (req, res) => {
     try {
       // DNS rebinding: only this server's own address may be the Host.
@@ -425,144 +750,45 @@ export async function startDashboard(opts: DashboardOptions) {
           : send(res, 404, { error: "not found" });
       }
 
-      if (!path.startsWith("/api/")) return send(res, 404, { error: "not found" });
-      if (req.headers["x-bumpsmith-token"] !== token) return send(res, 403, { error: "token" });
-
-      if (req.method === "GET" && path === "/api/state") {
-        const debtFile = join(repoDir, ".bumpsmith", "debt.json");
-        let deps: Record<string, string> = {};
-        let ecosystem: string | null = null;
-        let packageManager: string | null = null;
-        try {
-          const inv = await inventory(repoDir);
-          deps = inv.dependencies;
-          ecosystem = inv.ecosystem;
-          packageManager = inv.packageManager;
-        } catch {
-          // not a supported repository: the dashboard still shows runs
-        }
-        return send(res, 200, {
-          repo: { ...(await repoInfo(repoDir)), ecosystem, packageManager, dependencies: deps },
-          env: await environment(),
-          runsDir,
-          runs: await listRuns(runsDir),
-          debt: existsSync(debtFile) ? JSON.parse(await readFile(debtFile, "utf8")) : null,
-          live: [...live.values()].map(({ listeners: _l, ...r }) => r),
-        });
-      }
-
-      // One file from a run's before/ or after/ snapshot (diff "expand context").
-      const fileMatch = /^\/api\/runs\/([\w.-]+)\/file$/.exec(path);
-      if (req.method === "GET" && fileMatch?.[1] && ID.test(fileMatch[1])) {
-        const side = url.searchParams.get("side") === "before" ? "before" : "after";
-        const rel = url.searchParams.get("path") ?? "";
-        const base = join(runsDir, fileMatch[1], side);
-        const file = resolve(base, rel);
-        if (!rel || rel.includes("\0") || !file.startsWith(base + sep))
-          return send(res, 400, { error: "bad path" });
-        // Symlinks in the repository must not lead outside the snapshot.
-        const real = await realpath(file).catch(() => null);
-        const realBase = await realpath(base).catch(() => null);
-        if (!real || !realBase || !real.startsWith(realBase + sep))
-          return send(res, 404, { error: "the full file is not stored for this run" });
-        const st = await stat(real).catch(() => null);
-        if (!st?.isFile())
-          return send(res, 404, { error: "the full file is not stored for this run" });
-        if (st.size > 2 * 1024 * 1024) return send(res, 413, { error: "file too large to show" });
-        return send(res, 200, { text: await readFile(real, "utf8") });
-      }
-
-      const runMatch = /^\/api\/runs\/([\w.-]+)(\/apply|\/delete)?$/.exec(path);
-      if (runMatch?.[1] && ID.test(runMatch[1])) {
-        const id = runMatch[1];
-        const dir = join(runsDir, id);
-        if (!dir.startsWith(runsDir + sep) || !existsSync(join(dir, "job.json")))
-          return send(res, 404, { error: "no such run" });
-        if (req.method === "GET" && !runMatch[2]) {
-          const r = await readRun(runsDir, id);
-          return send(res, 200, { ...r, summary: summarise(r.job, r.patch) });
-        }
-        if (req.method === "POST" && runMatch[2] === "/apply") {
-          const patchFile = join(dir, "patch.diff");
-          if (!(await stat(patchFile).catch(() => null))?.size)
-            return send(res, 400, { error: "this run has no patch" });
-          const check = await run("git", ["-C", repoDir, "apply", "--check", "--index", patchFile]);
-          if (check.exitCode !== 0)
-            return send(res, 409, {
-              error: `the patch does not apply to your working tree: ${(check.stderr || check.stdout).trim().slice(0, 400)}`,
-            });
-          await run("git", ["-C", repoDir, "apply", "--index", patchFile]);
-          return send(res, 200, {
-            ok: true,
-            message: "Applied and staged. Review with git diff --cached.",
-          });
-        }
-        if (req.method === "POST" && runMatch[2] === "/delete") {
-          await rm(dir, { recursive: true, force: true });
-          return send(res, 200, { ok: true });
+      let route: Route | undefined;
+      let m: RegExpExecArray | null = null;
+      for (const r of routes) {
+        if (r.method !== req.method) continue;
+        m = r.path.exec(path);
+        if (m) {
+          route = r;
+          break;
         }
       }
+      if (!route || !m) return send(res, 404, { error: "not found" });
 
-      if (req.method === "POST" && path === "/api/runs") {
-        const b = await readBody(req);
-        const pkg = String(b.package ?? "").trim();
-        const version = String(b.version ?? "").trim();
-        const provider = String(b.provider ?? "claude-code");
-        const budget = Math.min(50, Math.max(0.5, Number(b.budget ?? 8)));
-        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(pkg) || !/^\d[\w.+-]*$/.test(version))
-          return send(res, 400, { error: "expected a package name and an exact version" });
-        if (!/^[\w-]+$/.test(provider)) return send(res, 400, { error: "bad provider" });
-        const lr = startRun(pkg, version, provider, budget);
-        return send(res, 200, { id: lr.id });
+      const ip = req.socket.remoteAddress ?? "";
+      const token = readCookie(req.headers.cookie, cookieName(secure));
+      const p = auth.principal(token);
+
+      // Anything that changes state must come from this origin (cross-site requests are
+      // also blocked by SameSite=Strict cookies; this is defence in depth).
+      if (req.method !== "GET") {
+        const origin = req.headers.origin;
+        if (origin !== undefined && origin !== `http${secure ? "s" : ""}://${host}`)
+          return send(res, 403, { error: "cross-origin request refused" });
+        if (route.perm === "public" && auth.rateLimited(ip))
+          return send(res, 429, { error: "Too many attempts. Wait a few minutes." });
       }
-
-      const liveMatch = /^\/api\/live\/([a-f0-9]{12})$/.exec(path);
-      if (req.method === "GET" && liveMatch?.[1]) {
-        const lr = live.get(liveMatch[1]);
-        if (!lr) return send(res, 404, { error: "no such live run" });
-        res.writeHead(200, {
-          "content-type": "text/event-stream",
-          "cache-control": "no-store",
-          connection: "keep-alive",
-        });
-        for (const line of lr.lines)
-          res.write(
-            `event: line\ndata: ${JSON.stringify({ line, stage: lr.stage, jobId: lr.jobId })}\n\n`,
-          );
-        if (lr.done) {
-          res.write(
-            `event: done\ndata: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}\n\n`,
-          );
-          return res.end();
+      if (route.perm !== "public") {
+        if (!p) return send(res, 401, { error: "Your session has ended. Sign in again." });
+        if (req.method !== "GET") {
+          const csrf = String(req.headers["x-csrf-token"] ?? "");
+          if (!safeEqual(csrf, p.session.csrf))
+            return send(res, 403, { error: "missing or wrong CSRF token" });
         }
-        lr.listeners.add(res);
-        req.on("close", () => lr.listeners.delete(res));
-        return;
+        if (route.perm !== "session" && !can(p.permissions, route.perm))
+          return send(res, 403, { error: "Your role does not allow this." });
       }
-
-      if (req.method === "POST" && path === "/api/scan") {
-        const child = cli(["scan", "--repo", repoDir]);
-        let err = "";
-        child.stderr.on("data", (d: Buffer) => (err += d.toString()));
-        const code = await new Promise<number | null>((r) => child.on("close", r));
-        const debtFile = join(repoDir, ".bumpsmith", "debt.json");
-        if (code !== 0 || !existsSync(debtFile))
-          return send(res, 500, {
-            error: err.trim().split("\n").slice(-3).join(" ") || "scan failed",
-          });
-        return send(res, 200, JSON.parse(await readFile(debtFile, "utf8")));
-      }
-
-      if (req.method === "GET" && path === "/api/latest") {
-        const name = url.searchParams.get("name") ?? "";
-        const eco = url.searchParams.get("ecosystem") === "pypi" ? "pypi" : "npm";
-        if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(name)) return send(res, 400, { error: "bad name" });
-        return send(res, 200, (await latestRelease(eco, name)) ?? { version: null });
-      }
-
-      return send(res, 404, { error: "not found" });
+      await route.handler({ req, res, url, m, p, ip, token });
     } catch (err) {
-      return send(res, 500, { error: String((err as Error).message ?? err).slice(0, 300) });
+      if (!res.headersSent)
+        return send(res, 500, { error: String((err as Error).message ?? err).slice(0, 300) });
     }
   });
 
@@ -580,5 +806,19 @@ export async function startDashboard(opts: DashboardOptions) {
     tryListen(port, 20);
   });
   const url = `http://127.0.0.1:${port}/`;
-  return { url, port, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return {
+    url,
+    port,
+    dataDir,
+    /** Open once to create the owner account; null when the server is already set up. */
+    setupUrl: setupToken ? `${url}#/setup/${setupToken}` : null,
+    routes: routes.map((r) => ({ method: r.method, path: String(r.path), perm: r.perm })),
+    close: () =>
+      new Promise<void>((r) =>
+        server.close(() => {
+          db.close();
+          r();
+        }),
+      ),
+  };
 }

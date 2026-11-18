@@ -277,6 +277,12 @@ a {
   background: var(--line);
   margin: 12px 4px;
 }
+/* Items never touch: an active item and a hovered neighbour keep a 4px gap. */
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .nav-h {
   font-size: 12px;
   line-height: 16px;
@@ -2817,4 +2823,212 @@ table.dt {
   .fd-h {
     flex-wrap: wrap;
   }
+}
+
+/* ─────────── sign-in and setup (same panel, field and button system as the app) ─────────── */
+.shell.auth-shell {
+  display: block;
+}
+.auth {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 16px;
+  background: var(--bg);
+}
+.auth-card {
+  width: min(400px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-panel);
+  padding: 32px;
+}
+.auth-brand {
+  margin-bottom: 32px;
+  color: var(--text);
+}
+.auth-brand .brand-wordmark {
+  height: 22px;
+}
+.auth h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.auth-sub {
+  margin: 8px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+.auth-sub.small {
+  font-size: 12px;
+  line-height: 16px;
+  margin: 16px 0 0;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.auth-code {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  font: 500 13px / 20px var(--mono);
+}
+.auth-err {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 20px;
+}
+.auth-err svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+}
+.auth-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  max-width: 400px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 16px;
+}
+.auth-foot svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.btn.block {
+  width: 100%;
+  height: 40px;
+  justify-content: center;
+}
+.pw {
+  position: relative;
+}
+.pw .input {
+  padding-right: 40px;
+}
+.pw-eye {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pw-eye:hover {
+  background: var(--neutral-soft);
+  color: var(--text);
+}
+.pw-eye svg {
+  width: 16px;
+  height: 16px;
+}
+.pw-rules {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.pw-rules li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--faint);
+  transition: color 120ms;
+}
+.pw-rules li svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.35;
+  transition:
+    opacity 120ms,
+    color 120ms;
+}
+.pw-rules li.ok {
+  color: var(--text-2);
+}
+.pw-rules li.ok svg {
+  opacity: 1;
+  color: var(--ok);
+}
+
+/* signed-in user, bottom of the sidebar */
+.me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 0 8px;
+}
+.me-av {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  font: 600 11px var(--mono);
+  color: var(--text-2);
+}
+.me-t {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.me-t b {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.me-t span {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.me .btn.icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.me .btn.icon svg {
+  width: 16px;
+  height: 16px;
 }

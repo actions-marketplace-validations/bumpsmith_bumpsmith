@@ -44,7 +44,7 @@ Usage (run inside your repository):
   bumpsmith init                                add the GitHub Action workflow and a starter .bumpsmith.yml
   bumpsmith explain <package>@<version>         what breaks upstream and where your code is affected
   bumpsmith scan                                inventory, SBOM and upgrade-debt report (no AI; only package names are looked up on the public registry)
-  bumpsmith dashboard                           local dashboard of your upgrades: review diffs, apply patches, start upgrades live
+  bumpsmith dashboard [--data dir]              the dashboard (sign-in required): review diffs, apply patches, start upgrades live
 
 Options: --repo <dir> (default .), --dir <sub-directory> (monorepos), --provider <name>, --model <id>, --base-url <url>, --budget <usd>
 
@@ -236,6 +236,7 @@ async function main() {
       only: { type: "string" },
       port: { type: "string" },
       runs: { type: "string" },
+      data: { type: "string" },
       "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h" },
     },
@@ -563,16 +564,30 @@ async function main() {
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
     case "dashboard": {
+      // node:sqlite is stable in practice but still flagged experimental on Node 22/24;
+      // keep the console clean of that one warning, and print every other warning.
+      process.removeAllListeners("warning");
+      process.on("warning", (w) => {
+        if (w.name === "ExperimentalWarning" && /SQLite/.test(w.message)) return;
+        console.warn(`${w.name}: ${w.message}`);
+      });
       const { startDashboard } = await import("./dashboard/server.ts");
       const dir = resolve(values.repo ?? ".");
-      const { url } = await startDashboard({
+      const { url, setupUrl, dataDir } = await startDashboard({
         repoDir: dir,
         runsDir: values.runs ? resolve(values.runs) : undefined,
         port: values.port ? Number(values.port) : undefined,
+        dataDir: values.data ? resolve(values.data) : undefined,
         cliEntry: process.argv[1] ?? "",
       });
       log(`Bumpsmith dashboard for ${basename(dir)}: ${url}`);
-      log("Local only (127.0.0.1); nothing is sent anywhere. Ctrl+C to stop.");
+      log(`Accounts and audit log: ${dataDir}. Bound to 127.0.0.1. Ctrl+C to stop.`);
+      if (setupUrl) {
+        log("");
+        log("First run: open this one-time link to create the owner account (valid for 1 hour):");
+        log(`  ${setupUrl}`);
+        log("");
+      }
       if (!values["no-open"]) {
         const opener =
           process.platform === "darwin"
@@ -580,7 +595,7 @@ async function main() {
             : process.platform === "win32"
               ? "start"
               : "xdg-open";
-        run(opener, [url]).catch(() => {});
+        run(opener, [setupUrl ?? url]).catch(() => {});
       }
       await new Promise(() => {});
       return;
