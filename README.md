@@ -25,7 +25,9 @@ A human always merges. Bumpsmith never pushes to your default branch.
 > Bumpsmith. On a **held-out** set of 24 upgrades (15 npm, 9 PyPI) from other repositories,
 > it produced a verified fix for 12 of the 22 it could run, refused one malicious release,
 > and sent the rest to a human with the reason. Details and caveats:
-> [bench/RESULTS.md](bench/RESULTS.md).
+> [bench/RESULTS.md](bench/RESULTS.md). On 42 real repositories of 13 shapes (npm, pnpm,
+> Yarn, Bun, workspaces, pip, Poetry, uv, Pipenv, setup.py), it sets up 38 and can verify 32
+> with no crashes; the rest say why: [bench/ZOO.md](bench/ZOO.md).
 
 ## Quick start: GitHub Action
 
