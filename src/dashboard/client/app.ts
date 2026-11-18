@@ -19,6 +19,15 @@ import {
   snippetDiff,
   whoOf,
 } from "./diff.ts";
+import {
+  addRepositoryDialog,
+  integrationsAction,
+  integrationsChange,
+  integrationsPage,
+  loadIntegrations,
+  onboardingPage,
+  setupIntegrations,
+} from "./integrations.ts";
 import { buildSteps, jobLog, type LogStep, lineOf, logLines, logText, outputLines } from "./log.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { api, hooks } from "./net.ts";
@@ -174,7 +183,7 @@ const $app = document.getElementById("app") as HTMLElement;
 const wapi = (path: string) => `/api/w/${encodeURIComponent(ui.ws)}${path}`;
 /** May the signed-in user do this in the current repository? */
 const wcan = (p: string) => !!ui.data?.perms?.includes(p);
-const ORG_ROUTE = /^(account|org\/|invite\/|setup\/)/;
+const ORG_ROUTE = /^(account|onboarding|org\/|invite\/|setup\/)/;
 
 const isGood = (r: Run) => r.state === "ready" || r.state === "safe";
 const verified = (r: Run) =>
@@ -264,6 +273,7 @@ function sidebar(d: State) {
         can("members.view") ? orgLink("members", "Members", "users") : "",
         can("roles.manage") ? orgLink("roles", "Roles", "key") : "",
         can("access.manage") ? orgLink("access", "Access", "shield") : "",
+        can("integrations.manage") ? orgLink("integrations", "Integrations", "cpu") : "",
         can("security.manage") ? orgLink("security", "Security", "lock") : "",
         can("audit.view") ? orgLink("audit", "Audit log", "list") : "",
       ].join("");
@@ -1421,6 +1431,12 @@ function render() {
   } else if (route === "org" && arg === "security") {
     crumbs.push("Security");
     body = securityPage();
+  } else if (route === "onboarding") {
+    crumbs.push("Setup guide");
+    body = onboardingPage();
+  } else if (route === "org" && arg === "integrations") {
+    crumbs.push("Integrations");
+    body = integrationsPage();
   } else if (route === "org" && arg === "members") {
     crumbs.push("Members");
     body = membersPage();
@@ -1448,14 +1464,14 @@ function render() {
   if (ui.palette && !opened.palette) opened.palette = Date.now();
   if (!ui.palette) opened.palette = 0;
   // Organisation pages belong to the organisation, not the current repository.
-  if (route === "org" || route === "account")
+  if (route === "org" || route === "account" || route === "onboarding")
     crumbs[0] = session.info?.org?.name ?? crumbs[0] ?? "";
   if (route === "org" && arg && ORG_PAGE_PERM[arg] && !can(ORG_PAGE_PERM[arg] as string))
     body = noAccessPage(crumbs[crumbs.length - 1] ?? "this page");
   const html = `${sidebar(d)}<main class="main">${topbar(crumbs)}${body}</main>${drawer(d)}${palette(d)}`;
   // Repository links in templates are written as "#/runs/…"; point them at this repository.
   $app.innerHTML = html.replace(
-    /href="#\/(?!w\/|account|org\/|invite\/|setup\/)/g,
+    /href="#\/(?!w\/|account|onboarding|org\/|invite\/|setup\/)/g,
     `href="#/w/${ui.ws}/`,
   );
   for (const el of $app.querySelectorAll<HTMLElement>("[data-need]"))
@@ -1504,9 +1520,11 @@ async function onRoute() {
   const [route, arg] = ui.route.split("/");
   const fail = (e: unknown) => toast((e as Error).message, true);
   if (route === "account") void loadMe().then(render, fail);
+  if (route === "onboarding" || (route === "org" && arg === "integrations"))
+    void loadIntegrations().then(render, fail);
   if (route === "org" && arg === "security" && can("security.manage"))
     void loadSecurity().then(render, fail);
-  else if (route === "org" && arg && can(ORG_PAGE_PERM[arg] ?? ""))
+  else if (route === "org" && arg && arg !== "integrations" && can(ORG_PAGE_PERM[arg] ?? ""))
     void loadOrgPage(arg).then(render, fail);
   if (route === "runs" && arg) loadDetail(arg);
   render();
@@ -1545,7 +1563,11 @@ document.addEventListener("click", async (e) => {
   const v = t.dataset.v ?? "";
   const d = ui.data;
   if (!d) return;
-  if (act && (await accountAction(act, t))) return;
+  if (act && (await accountAction(act, t))) {
+    if (ui.route.startsWith("onboarding")) await loadIntegrations().then(render, () => {});
+    return;
+  }
+  if (act && (await integrationsAction(act, t))) return;
   if (act && (await orgAction(act, t))) return;
   if (act === "ws-switch") {
     ui.switcher = !ui.switcher;
@@ -1566,26 +1588,13 @@ document.addEventListener("click", async (e) => {
   if (act === "ws-add") {
     ui.switcher = false;
     render();
-    let slug = "";
-    await openDialog({
-      title: "Add a repository",
-      body: `<p class="dialog-p">Bumpsmith works on a git repository on this machine. Enter the full path of its folder.</p>
-        <div class="field"><label for="ws-path">Folder</label><input class="input mono" id="ws-path" placeholder="/Users/you/code/my-app" spellcheck="false" autocomplete="off" /></div>`,
-      primary: "Add repository",
-      onSubmit: async (el) => {
-        slug = (
-          await api<{ slug: string }>("/api/workspaces", {
-            method: "POST",
-            body: JSON.stringify({
-              path: (el.querySelector("#ws-path") as HTMLInputElement).value,
-            }),
-          })
-        ).slug;
-      },
-    });
+    const slug = await addRepositoryDialog(ui.canAddWs);
     if (slug) {
       await loadWorkspaces();
-      location.hash = `#/w/${slug}/`;
+      if (ui.route.startsWith("onboarding")) {
+        await loadIntegrations().catch(() => {});
+        render();
+      } else location.hash = `#/w/${slug}/`;
       toast("Repository added");
     }
     return;
@@ -1882,7 +1891,10 @@ function lookupLatestSoon() {
 }
 document.addEventListener("change", (e) => {
   const el = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-act-change]");
-  if (el?.dataset.actChange) void orgChange(el.dataset.actChange, el);
+  if (el?.dataset.actChange)
+    void integrationsChange(el.dataset.actChange, el).then((handled) => {
+      if (!handled) void orgChange(el.dataset.actChange ?? "", el);
+    });
 });
 // The switcher closes on a click anywhere else.
 document.addEventListener(
@@ -2025,6 +2037,11 @@ async function startApp() {
     return;
   }
   for (const l of ui.data?.live ?? []) if (!l.done) followLive(l.id);
+  // Until the owner finishes or skips it, signing in opens the setup guide.
+  if (can("integrations.manage") && /^#?\/?$/.test(location.hash)) {
+    const o = await api<{ done: boolean }>("/api/onboarding").catch(() => ({ done: true }));
+    if (!o.done) location.replace("#/onboarding");
+  }
   await onRoute();
   poller = setInterval(async () => {
     if (document.hidden || ui.drawer || ui.palette || !session.info) return;
@@ -2073,6 +2090,15 @@ hooks.enroll = () => {
 };
 setupAccount({ render: () => render(), toast });
 setupOrg({ render: () => render(), toast });
+setupIntegrations({
+  render: () => render(),
+  toast,
+  openWorkspace: async (slug: string) => {
+    await loadWorkspaces();
+    location.hash = `#/w/${slug}/`;
+  },
+  workspaces: () => ui.workspaces,
+});
 
 hooks.unauthorized = sessionEnded;
 hooks.reauth = reauthDialog;

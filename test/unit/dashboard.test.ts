@@ -369,6 +369,8 @@ describe("dashboard server", { timeout: 30_000 }, () => {
         .sort(),
     ).toEqual(
       [
+        "/^\\/auth\\/github\\/app-created$/",
+        "/^\\/auth\\/github\\/installed$/",
         "/^\\/auth\\/invite$/",
         "/^\\/auth\\/invite$/",
         "/^\\/auth\\/login$/",
@@ -589,6 +591,33 @@ describe("dashboard server", { timeout: 30_000 }, () => {
     const csv = await fetch(`${base}/api/audit/export`, { headers: h });
     expect(csv.headers.get("content-type")).toMatch(/text\/csv/);
     expect(await csv.text()).toMatch(/^seq,time,actor,action/);
+  });
+
+  it("keeps integration secrets out of every response, and GitHub callbacks need their state", async () => {
+    const r = await fetch(`${base}/api/integrations`, { headers: h });
+    expect(r.status).toBe(200);
+    const body = (await r.json()) as {
+      models: { id: string; last4: string | null }[];
+      github: { app: unknown; token: unknown };
+    };
+    expect(body.models.map((m) => m.id)).toContain("anthropic-api");
+    expect(body.github).toMatchObject({ app: null, token: null });
+    expect((await post("/api/integrations/keys", { provider: "nope", key: "x" }, h)).status).toBe(
+      400,
+    );
+    expect((await post("/api/integrations/github/token", { token: "not-a-token" }, h)).status).toBe(
+      400,
+    );
+    // A forged or replayed callback never touches the organisation.
+    const forged = await fetch(`${base}/auth/github/app-created?code=abc123&state=forged`, {
+      redirect: "manual",
+    });
+    expect(forged.status).toBe(302);
+    expect(forged.headers.get("location")).toBe("/#/org/integrations?github=expired");
+    const onboarding = (await (await fetch(`${base}/api/onboarding`, { headers: h })).json()) as {
+      steps: Record<string, boolean>;
+    };
+    expect(onboarding.steps).toMatchObject({ account: true, mfa: true, repository: true });
   });
 
   it("ends the session on sign-out", async () => {

@@ -386,6 +386,50 @@ export class Org {
     return this.workspace(orgId, slug) as Workspace;
   }
 
+  /** A repository cloned from GitHub into the data directory. */
+  ensureGithub(
+    orgId: string,
+    fullName: string,
+    path: string,
+    runsDir: string,
+    createdBy: string,
+  ): Workspace {
+    const existing = this.db
+      .prepare("SELECT * FROM workspaces WHERE org_id = ? AND repo = ?")
+      .get(orgId, fullName) as unknown as Workspace | undefined;
+    if (existing) return existing;
+    const base = slugify(fullName.split("/")[1] ?? fullName);
+    let slug = base;
+    for (
+      let i = 2;
+      this.db.prepare("SELECT 1 FROM workspaces WHERE org_id = ? AND slug = ?").get(orgId, slug);
+      i++
+    )
+      slug = `${base}-${i}`;
+    this.db
+      .prepare(
+        "INSERT INTO workspaces (id, org_id, slug, name, kind, path, runs_dir, repo, created_at, created_by) VALUES (?,?,?,?, 'github', ?,?,?,?,?)",
+      )
+      .run(
+        newId("ws"),
+        orgId,
+        slug,
+        fullName.split("/")[1] ?? fullName,
+        path,
+        runsDir,
+        fullName,
+        now(),
+        createdBy,
+      );
+    return this.workspace(orgId, slug) as Workspace;
+  }
+
+  workspaceByRepo(orgId: string, fullName: string): Workspace | undefined {
+    return this.db
+      .prepare("SELECT * FROM workspaces WHERE org_id = ? AND repo = ?")
+      .get(orgId, fullName) as unknown as Workspace | undefined;
+  }
+
   addLocal(a: Actor, pathRaw: string): Workspace {
     const path = pathRaw.trim();
     if (!isAbsolute(path))

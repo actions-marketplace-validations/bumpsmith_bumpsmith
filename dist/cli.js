@@ -19203,10 +19203,10 @@ async function setupSkills(ctx) {
   for (const skill of session.agent.skills) {
     try {
       const version2 = await client.beta.skills.versions.retrieve(skill.version, { skill_id: skill.skill_id });
-      let dirname9 = path2.basename(version2.name.trim());
-      if (dirname9 === "" || dirname9 === "." || dirname9 === "..")
-        dirname9 = skill.skill_id;
-      const dest = path2.resolve(skillsRoot, dirname9);
+      let dirname10 = path2.basename(version2.name.trim());
+      if (dirname10 === "" || dirname10 === "." || dirname10 === "..")
+        dirname10 = skill.skill_id;
+      const dest = path2.resolve(skillsRoot, dirname10);
       if (dest !== skillsRoot && !dest.startsWith(skillsRoot + path2.sep)) {
         log2.warn("skill name escapes the skills dir; skipping", {
           component: "agent-tool-context",
@@ -259256,6 +259256,14 @@ var init_auth = __esm({
           ...raw
         };
       }
+      /** Other organisation settings (default model, onboarding), kept beside the policy. */
+      extra(orgId) {
+        const row = this.db.prepare("SELECT settings FROM orgs WHERE id = ?").get(orgId);
+        return row ? JSON.parse(row.settings) : {};
+      }
+      setExtra(orgId, patch) {
+        this.db.prepare("UPDATE orgs SET settings = ? WHERE id = ?").run(JSON.stringify({ ...this.extra(orgId), ...patch }), orgId);
+      }
       saveSettings(orgId, next) {
         const cur = this.settings(orgId);
         const merged = {
@@ -259269,7 +259277,7 @@ var init_auth = __esm({
             Math.max(1, Math.round(Number(next.absoluteHours ?? cur.absoluteHours)))
           )
         };
-        this.db.prepare("UPDATE orgs SET settings = ? WHERE id = ?").run(JSON.stringify(merged), orgId);
+        this.setExtra(orgId, merged);
         return merged;
       }
       needsSetup() {
@@ -259691,6 +259699,370 @@ var init_auth = __esm({
   }
 });
 
+// src/server/integrations.ts
+import { createSign } from "node:crypto";
+import { mkdir as mkdir14 } from "node:fs/promises";
+import { dirname as dirname8 } from "node:path";
+var KEY_PROVIDERS, SECRET_NAMES, GH, ghHeaders, Integrations;
+var init_integrations = __esm({
+  "src/server/integrations.ts"() {
+    "use strict";
+    init_proc();
+    init_auth();
+    init_crypto();
+    init_db();
+    KEY_PROVIDERS = [
+      {
+        id: "anthropic-api",
+        label: "Anthropic API",
+        env: "ANTHROPIC_API_KEY",
+        hint: "sk-ant-\u2026",
+        base: ""
+      },
+      {
+        id: "openai",
+        label: "OpenAI",
+        env: "OPENAI_API_KEY",
+        hint: "sk-\u2026",
+        base: "https://api.openai.com/v1"
+      },
+      {
+        id: "gemini",
+        label: "Google Gemini",
+        env: "GEMINI_API_KEY",
+        hint: "AIza\u2026",
+        base: "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        id: "openrouter",
+        label: "OpenRouter",
+        env: "OPENROUTER_API_KEY",
+        hint: "sk-or-\u2026",
+        base: "https://openrouter.ai/api/v1"
+      },
+      {
+        id: "groq",
+        label: "Groq",
+        env: "GROQ_API_KEY",
+        hint: "gsk_\u2026",
+        base: "https://api.groq.com/openai/v1"
+      },
+      {
+        id: "together",
+        label: "Together AI",
+        env: "TOGETHER_API_KEY",
+        hint: "",
+        base: "https://api.together.xyz/v1"
+      },
+      {
+        id: "deepseek",
+        label: "DeepSeek",
+        env: "DEEPSEEK_API_KEY",
+        hint: "sk-\u2026",
+        base: "https://api.deepseek.com/v1"
+      }
+    ];
+    SECRET_NAMES = /* @__PURE__ */ new Set([
+      ...KEY_PROVIDERS.map((p) => p.env),
+      "GITHUB_TOKEN",
+      "GITHUB_APP"
+    ]);
+    GH = "https://api.github.com";
+    ghHeaders = (auth2) => ({
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "bumpsmith-self-hosted",
+      authorization: auth2
+    });
+    Integrations = class {
+      constructor(db, key) {
+        this.db = db;
+        this.key = key;
+      }
+      db;
+      key;
+      /** One-time state values for the GitHub App flows, bound to the organisation. */
+      states = /* @__PURE__ */ new Map();
+      // ── encrypted secrets ──
+      set(orgId, name, value, by) {
+        if (!SECRET_NAMES.has(name)) throw new AuthError(400, "Unknown setting.");
+        const v = value.trim();
+        if (!v || v.length > 2e4) throw new AuthError(400, "Enter a value.");
+        this.db.prepare(
+          "INSERT INTO secrets (org_id, name, value, last4, updated_at, updated_by) VALUES (?,?,?,?,?,?) ON CONFLICT(org_id, name) DO UPDATE SET value = excluded.value, last4 = excluded.last4, updated_at = excluded.updated_at, updated_by = excluded.updated_by"
+        ).run(
+          orgId,
+          name,
+          encrypt(this.key, v, `secret:${orgId}:${name}`),
+          name === "GITHUB_APP" ? "" : v.slice(-4),
+          now(),
+          by
+        );
+      }
+      get(orgId, name) {
+        const r = this.db.prepare("SELECT value FROM secrets WHERE org_id = ? AND name = ?").get(orgId, name);
+        return r ? decrypt(this.key, r.value, `secret:${orgId}:${name}`) : null;
+      }
+      remove(orgId, name) {
+        return Number(
+          this.db.prepare("DELETE FROM secrets WHERE org_id = ? AND name = ?").run(orgId, name).changes
+        ) > 0;
+      }
+      /** What is configured, without the values: name, last four characters, when, by whom. */
+      list(orgId) {
+        return this.db.prepare("SELECT name, last4, updated_at, updated_by FROM secrets WHERE org_id = ?").all(orgId);
+      }
+      /** Environment for an upgrade run: the organisation's model keys (and nothing else). */
+      runEnv(orgId) {
+        const env = {};
+        for (const p of KEY_PROVIDERS) {
+          const v = this.get(orgId, p.env);
+          if (v) env[p.env] = v;
+        }
+        return env;
+      }
+      /** Check a model key against the provider before saving it. */
+      async verifyKey(providerId, key) {
+        const p = KEY_PROVIDERS.find((x) => x.id === providerId);
+        if (!p) return { ok: false, detail: "Unknown provider." };
+        try {
+          const r = p.id === "anthropic-api" ? await fetch("https://api.anthropic.com/v1/models?limit=1", {
+            headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+            signal: AbortSignal.timeout(1e4)
+          }) : await fetch(`${p.base}/models`, {
+            headers: { authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(1e4)
+          });
+          if (r.ok) return { ok: true, detail: "Key works." };
+          if (r.status === 401 || r.status === 403)
+            return { ok: false, detail: `${p.label} rejected this key.` };
+          return { ok: false, detail: `${p.label} answered ${r.status}. Try again in a moment.` };
+        } catch {
+          return {
+            ok: false,
+            detail: `Could not reach ${p.label}. Check this server's internet connection.`
+          };
+        }
+      }
+      // ── GitHub: personal access token ──
+      async verifyGithubToken(token) {
+        try {
+          const r = await fetch(`${GH}/user`, {
+            headers: ghHeaders(`Bearer ${token}`),
+            signal: AbortSignal.timeout(1e4)
+          });
+          if (r.status === 401) throw new AuthError(400, "GitHub rejected this token.");
+          if (!r.ok) throw new AuthError(400, `GitHub answered ${r.status}.`);
+          const u = await r.json();
+          return { login: u.login, scopes: r.headers.get("x-oauth-scopes") ?? "fine-grained" };
+        } catch (e) {
+          if (e instanceof AuthError) throw e;
+          throw new AuthError(502, "Could not reach GitHub. Check this server's internet connection.");
+        }
+      }
+      // ── GitHub: the organisation's own GitHub App (manifest flow) ──
+      newState(orgId, userId, kind) {
+        const s = newToken();
+        this.states.set(sha256(s), { orgId, userId, kind, expires: Date.now() + 15 * 6e4 });
+        for (const [k, v] of this.states) if (v.expires < Date.now()) this.states.delete(k);
+        return s;
+      }
+      /** Single use: the state is removed when it is checked. */
+      takeState(s, kind) {
+        const h = sha256(s);
+        const v = this.states.get(h);
+        this.states.delete(h);
+        return v && v.kind === kind && v.expires > Date.now() ? v : null;
+      }
+      /** The manifest GitHub uses to create the app, and where to post it. */
+      appManifest(orgId, userId, origin, name, owner) {
+        const clean = name.trim().slice(0, 34);
+        if (!clean) throw new AuthError(400, "Give the GitHub App a name.");
+        if (owner && !/^[A-Za-z0-9-]{1,39}$/.test(owner))
+          throw new AuthError(400, "That is not a GitHub organisation name.");
+        const state2 = this.newState(orgId, userId, "create");
+        const manifest = {
+          name: clean,
+          url: origin,
+          redirect_url: `${origin}/auth/github/app-created`,
+          setup_url: `${origin}/auth/github/installed`,
+          setup_on_update: true,
+          public: false,
+          hook_attributes: { url: `${origin}/hooks/github`, active: false },
+          // What Bumpsmith needs and nothing more (PRD GH-2/GH-3): no workflows, admin or secrets.
+          default_permissions: {
+            contents: "write",
+            pull_requests: "write",
+            metadata: "read",
+            checks: "read",
+            statuses: "read"
+          },
+          default_events: []
+        };
+        const action = owner ? `https://github.com/organizations/${owner}/settings/apps/new?state=${encodeURIComponent(state2)}` : `https://github.com/settings/apps/new?state=${encodeURIComponent(state2)}`;
+        return { action, manifest };
+      }
+      /** GitHub sent us back a one-time code: exchange it for the app's credentials. */
+      async completeApp(orgId, by, code) {
+        if (!/^[\w-]{4,80}$/.test(code)) throw new AuthError(400, "Bad code from GitHub.");
+        const r = await fetch(`${GH}/app-manifests/${code}/conversions`, {
+          method: "POST",
+          headers: ghHeaders(""),
+          signal: AbortSignal.timeout(15e3)
+        }).catch(() => null);
+        if (!r?.ok)
+          throw new AuthError(
+            502,
+            `GitHub did not confirm the app (${r?.status ?? "no answer"}). Try again.`
+          );
+        const a = await r.json();
+        const app = {
+          id: a.id,
+          slug: a.slug,
+          name: a.name,
+          pem: a.pem,
+          webhook_secret: a.webhook_secret,
+          client_id: a.client_id,
+          client_secret: a.client_secret,
+          html_url: a.html_url,
+          owner: a.owner?.login ?? ""
+        };
+        this.set(orgId, "GITHUB_APP", JSON.stringify(app), by);
+        return app;
+      }
+      app(orgId) {
+        const v = this.get(orgId, "GITHUB_APP");
+        return v ? JSON.parse(v) : null;
+      }
+      installUrl(orgId, userId) {
+        const app = this.app(orgId);
+        return app ? `https://github.com/apps/${app.slug}/installations/new?state=${encodeURIComponent(this.newState(orgId, userId, "install"))}` : null;
+      }
+      /** A short-lived JWT that authenticates as the app itself (RS256, 9 minutes). */
+      appJwt(app) {
+        const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+        const t = Math.floor(Date.now() / 1e3);
+        const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: t - 60, exp: t + 540, iss: String(app.id) })}`;
+        return `${body}.${createSign("RSA-SHA256").update(body).sign(app.pem).toString("base64url")}`;
+      }
+      async gh(path5, auth2, init = {}) {
+        const r = await fetch(`${GH}${path5}`, {
+          ...init,
+          headers: { ...ghHeaders(auth2), ...init.headers ?? {} },
+          signal: AbortSignal.timeout(15e3)
+        }).catch(() => null);
+        if (!r) throw new AuthError(502, "Could not reach GitHub.");
+        if (!r.ok)
+          throw new AuthError(
+            r.status === 401 ? 400 : 502,
+            `GitHub answered ${r.status} for ${path5.split("?")[0]}.`
+          );
+        return await r.json();
+      }
+      async installations(orgId) {
+        const app = this.app(orgId);
+        if (!app) return [];
+        return (await this.gh("/app/installations", `Bearer ${this.appJwt(app)}`)).map((i) => ({
+          id: i.id,
+          account: i.account.login,
+          type: i.account.type,
+          selection: i.repository_selection
+        }));
+      }
+      /**
+       * A token for one job: an installation token narrowed to one repository (one hour), or the
+       * personal token when that is how GitHub is connected.
+       */
+      async tokenFor(orgId, fullName) {
+        const app = this.app(orgId);
+        if (app) {
+          const [owner, repo] = fullName.split("/");
+          const inst = (await this.installations(orgId)).find(
+            (i) => i.account.toLowerCase() === (owner ?? "").toLowerCase()
+          );
+          if (inst) {
+            const t = await this.gh(
+              `/app/installations/${inst.id}/access_tokens`,
+              `Bearer ${this.appJwt(app)}`,
+              {
+                method: "POST",
+                body: JSON.stringify({ repositories: [repo] })
+              }
+            );
+            return t.token;
+          }
+        }
+        return this.get(orgId, "GITHUB_TOKEN");
+      }
+      /** Repositories Bumpsmith can reach: through the app's installations, or the token. */
+      async repos(orgId) {
+        const pick2 = (r) => ({
+          full_name: r.full_name,
+          private: r.private,
+          default_branch: r.default_branch,
+          description: r.description,
+          pushed_at: r.pushed_at
+        });
+        const app = this.app(orgId);
+        if (app) {
+          const out = [];
+          for (const inst of await this.installations(orgId)) {
+            const t = await this.gh(
+              `/app/installations/${inst.id}/access_tokens`,
+              `Bearer ${this.appJwt(app)}`,
+              { method: "POST" }
+            );
+            const list = await this.gh(
+              "/installation/repositories?per_page=100",
+              `Bearer ${t.token}`
+            );
+            out.push(...list.repositories.map(pick2));
+          }
+          return out;
+        }
+        const token = this.get(orgId, "GITHUB_TOKEN");
+        if (!token) return [];
+        return (await this.gh(
+          "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
+          `Bearer ${token}`
+        )).map(pick2);
+      }
+      /**
+       * Clone without writing the token anywhere: it goes in a one-off HTTP header, so the
+       * clone's .git/config holds only the plain https URL.
+       */
+      async clone(orgId, fullName, dest) {
+        if (!/^[\w.-]+\/[\w.-]+$/.test(fullName))
+          throw new AuthError(400, "Not a GitHub repository name.");
+        const token = await this.tokenFor(orgId, fullName);
+        if (!token) throw new AuthError(400, "Connect GitHub first.");
+        await mkdir14(dirname8(dest), { recursive: true, mode: 448 });
+        const header = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
+        const r = await run(
+          "git",
+          [
+            "-c",
+            `http.extraHeader=${header}`,
+            "clone",
+            "--filter=blob:none",
+            "--quiet",
+            `https://github.com/${fullName}.git`,
+            dest
+          ],
+          {
+            timeoutMs: 10 * 6e4
+          }
+        );
+        if (r.exitCode !== 0)
+          throw new AuthError(
+            502,
+            `git clone failed: ${(r.stderr || r.stdout).replace(/AUTHORIZATION:[^\n]*/gi, "[redacted]").trim().slice(0, 300)}`
+          );
+      }
+    };
+  }
+});
+
 // src/server/org.ts
 import { existsSync as existsSync10, statSync } from "node:fs";
 import { basename as basename2, isAbsolute as isAbsolute3, join as join22, resolve as resolve4 } from "node:path";
@@ -259950,6 +260322,32 @@ var init_org = __esm({
         ).run(id, orgId, slug, basename2(abs), abs, resolve4(runsDir), now(), createdBy);
         return this.workspace(orgId, slug);
       }
+      /** A repository cloned from GitHub into the data directory. */
+      ensureGithub(orgId, fullName, path5, runsDir, createdBy) {
+        const existing = this.db.prepare("SELECT * FROM workspaces WHERE org_id = ? AND repo = ?").get(orgId, fullName);
+        if (existing) return existing;
+        const base = slugify2(fullName.split("/")[1] ?? fullName);
+        let slug = base;
+        for (let i = 2; this.db.prepare("SELECT 1 FROM workspaces WHERE org_id = ? AND slug = ?").get(orgId, slug); i++)
+          slug = `${base}-${i}`;
+        this.db.prepare(
+          "INSERT INTO workspaces (id, org_id, slug, name, kind, path, runs_dir, repo, created_at, created_by) VALUES (?,?,?,?, 'github', ?,?,?,?,?)"
+        ).run(
+          newId("ws"),
+          orgId,
+          slug,
+          fullName.split("/")[1] ?? fullName,
+          path5,
+          runsDir,
+          fullName,
+          now(),
+          createdBy
+        );
+        return this.workspace(orgId, slug);
+      }
+      workspaceByRepo(orgId, fullName) {
+        return this.db.prepare("SELECT * FROM workspaces WHERE org_id = ? AND repo = ?").get(orgId, fullName);
+      }
       addLocal(a, pathRaw) {
         const path5 = pathRaw.trim();
         if (!isAbsolute3(path5))
@@ -260070,13 +260468,13 @@ import { existsSync as existsSync11 } from "node:fs";
 import { readdir as readdir6, readFile as readFile16, realpath as realpath2, rm as rm7, stat as stat3 } from "node:fs/promises";
 import http from "node:http";
 import { homedir } from "node:os";
-import { basename as basename3, dirname as dirname8, extname as extname2, join as join23, resolve as resolve5, sep as sep3 } from "node:path";
+import { basename as basename3, dirname as dirname9, extname as extname2, join as join23, resolve as resolve5, sep as sep3 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 function packageRoot2() {
-  let dir = dirname8(fileURLToPath3(import.meta.url));
+  let dir = dirname9(fileURLToPath3(import.meta.url));
   for (let i = 0; i < 6; i++) {
     if (existsSync11(join23(dir, "dashboard", "index.html"))) return dir;
-    dir = dirname8(dir);
+    dir = dirname9(dir);
   }
   throw new Error("cannot locate the bumpsmith dashboard assets");
 }
@@ -260286,6 +260684,7 @@ async function startDashboard(opts) {
   const masterKey = await loadMasterKey(join23(dataDir, "master.key"));
   const auth2 = new Auth(db, DEFAULT_POLICY, masterKey);
   const org = new Org(db);
+  const integrations = new Integrations(db, masterKey);
   const ensureLocalWorkspace = () => {
     const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get();
     if (o) org.ensureLocal(o.id, repoDir, runsDir, null);
@@ -260310,7 +260709,7 @@ async function startDashboard(opts) {
       "cross-origin-opener-policy": "same-origin",
       "cross-origin-resource-policy": "same-origin",
       "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-      "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://github.com",
       ...secure ? { "strict-transport-security": "max-age=31536000; includeSubDomains" } : {},
       ...extra
     });
@@ -260334,9 +260733,9 @@ async function startDashboard(opts) {
       }
     });
   });
-  const cli = (args, cwd) => spawn5(process.execPath, [...process.execArgv, opts.cliEntry, ...args], {
+  const cli = (args, cwd, orgId) => spawn5(process.execPath, [...process.execArgv, opts.cliEntry, ...args], {
     cwd,
-    env: process.env,
+    env: { ...process.env, ...orgId ? integrations.runEnv(orgId) : {} },
     stdio: ["ignore", "pipe", "pipe"]
   });
   const startRun = (w, pkg, version2, provider2, budget) => {
@@ -260366,7 +260765,8 @@ async function startDashboard(opts) {
         "--budget",
         String(budget)
       ],
-      w.path
+      w.path,
+      w.org_id
     );
     const emit = (event, data) => {
       for (const l of lr.listeners) l.write(`event: ${event}
@@ -260426,6 +260826,17 @@ data: ${JSON.stringify(data)}
     return send(c.res, 200, sessionPayload(p), void 0, { "set-cookie": cookieFor(s.token) });
   };
   const mfaFailures = /* @__PURE__ */ new Map();
+  const orgEnv = (orgId, env) => {
+    const stored = new Set(integrations.list(orgId).map((x) => x.name));
+    const providers = env.providers.map((p) => {
+      const k = KEY_PROVIDERS.find((x) => x.id === p.id);
+      return k && stored.has(k.env) ? { ...p, ok: true, detail: "key saved in Bumpsmith" } : p;
+    });
+    const want = auth2.extra(orgId).defaultProvider;
+    const def = providers.find((p) => p.id === want && p.ok)?.id ?? providers.find((p) => p.ok)?.id ?? env.defaultProvider;
+    return { ...env, providers, defaultProvider: def };
+  };
+  const redirect2 = (res, location) => send(res, 302, "", "text/plain", { location });
   const origin = (c) => `http${secure ? "s" : ""}://${c.req.headers.host ?? `127.0.0.1:${port}`}`;
   const CATEGORIES = {
     auth: "auth.%",
@@ -260849,6 +261260,288 @@ data: ${JSON.stringify(data)}
         }
       }
     },
+    // ── integrations: GitHub and model keys ──
+    {
+      method: "GET",
+      path: /^\/api\/integrations$/,
+      perm: "integrations.manage",
+      handler: async (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const stored = new Map(integrations.list(orgId).map((x) => [x.name, x]));
+        const app = integrations.app(orgId);
+        let installations = [];
+        let githubError = null;
+        if (app)
+          installations = await integrations.installations(orgId).catch((e) => {
+            githubError = e.message;
+            return [];
+          });
+        const env = orgEnv(orgId, await environment());
+        const tokenRow = stored.get("GITHUB_TOKEN");
+        return send(c.res, 200, {
+          github: {
+            app: app ? { name: app.name, slug: app.slug, owner: app.owner, html_url: app.html_url } : null,
+            installations,
+            installUrl: app ? integrations.installUrl(orgId, c.p?.user.id ?? "") : null,
+            token: tokenRow ? {
+              last4: tokenRow.last4,
+              updated_at: tokenRow.updated_at,
+              login: auth2.extra(orgId).githubLogin ?? null
+            } : null,
+            error: githubError
+          },
+          models: KEY_PROVIDERS.map((p) => ({
+            id: p.id,
+            label: p.label,
+            hint: p.hint,
+            last4: stored.get(p.env)?.last4 ?? null,
+            updated_at: stored.get(p.env)?.updated_at ?? null
+          })),
+          detected: env.providers.filter((p) => p.id === "claude-code" || p.id === "codex").map((p) => ({ id: p.id, label: p.label, ok: p.ok, detail: p.detail })),
+          defaultProvider: env.defaultProvider,
+          docker: env.docker
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/keys$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        const p = KEY_PROVIDERS.find((x) => x.id === String(b.provider ?? ""));
+        const key = String(b.key ?? "").trim();
+        if (!p || !key) return send(c.res, 400, { error: "Pick a provider and paste its key." });
+        const v = await integrations.verifyKey(p.id, key);
+        if (!v.ok) return send(c.res, 400, { error: v.detail });
+        integrations.set(c.p?.user.org_id ?? "", p.env, key, c.p?.user.id ?? "");
+        act(c, "integration.key_saved", p.label);
+        return send(c.res, 200, { ok: true });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/keys\/([\w-]+)\/remove$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: (c) => {
+        const p = KEY_PROVIDERS.find((x) => x.id === c.m[1]);
+        if (!p) return send(c.res, 404, { error: "No such provider." });
+        integrations.remove(c.p?.user.org_id ?? "", p.env);
+        act(c, "integration.key_removed", p.label);
+        return send(c.res, 200, { ok: true });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/default$/,
+      perm: "integrations.manage",
+      handler: async (c) => {
+        const provider2 = String((await body(c)).provider ?? "");
+        if (!/^[\w-]{2,30}$/.test(provider2))
+          return send(c.res, 400, { error: "Unknown provider." });
+        auth2.setExtra(c.p?.user.org_id ?? "", { defaultProvider: provider2 });
+        act(c, "integration.default_model", provider2);
+        return send(c.res, 200, { ok: true });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/github\/token$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const token = String((await body(c)).token ?? "").trim();
+        if (!/^(gh[pousr]_|github_pat_)\w{20,}$/.test(token))
+          return send(c.res, 400, {
+            error: "That does not look like a GitHub token (ghp_\u2026 or github_pat_\u2026)."
+          });
+        try {
+          const u = await integrations.verifyGithubToken(token);
+          const orgId = c.p?.user.org_id ?? "";
+          integrations.set(orgId, "GITHUB_TOKEN", token, c.p?.user.id ?? "");
+          auth2.setExtra(orgId, { githubLogin: u.login });
+          act(c, "integration.github_token_saved", u.login);
+          return send(c.res, 200, { login: u.login });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/github\/(token|app)\/remove$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: (c) => {
+        integrations.remove(
+          c.p?.user.org_id ?? "",
+          c.m[1] === "token" ? "GITHUB_TOKEN" : "GITHUB_APP"
+        );
+        act(
+          c,
+          c.m[1] === "token" ? "integration.github_token_removed" : "integration.github_app_removed"
+        );
+        return send(c.res, 200, { ok: true });
+      }
+    },
+    {
+      // Start creating the organisation's own GitHub App: the page posts this manifest to GitHub.
+      method: "POST",
+      path: /^\/api\/integrations\/github\/app$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          return send(
+            c.res,
+            200,
+            integrations.appManifest(
+              c.p?.user.org_id ?? "",
+              c.p?.user.id ?? "",
+              origin(c),
+              String(b.name ?? ""),
+              String(b.owner ?? "").trim()
+            )
+          );
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      // GitHub returns here after creating the app. No session cookie arrives on this
+      // cross-site redirect (SameSite=Strict), so the single-use state proves who started it.
+      method: "GET",
+      path: /^\/auth\/github\/app-created$/,
+      perm: "public",
+      handler: async (c) => {
+        const st = integrations.takeState(c.url.searchParams.get("state") ?? "", "create");
+        if (!st) return redirect2(c.res, "/#/org/integrations?github=expired");
+        try {
+          const app = await integrations.completeApp(
+            st.orgId,
+            st.userId,
+            c.url.searchParams.get("code") ?? ""
+          );
+          audit(db, {
+            orgId: st.orgId,
+            actorId: st.userId,
+            actor: auth2.user(st.userId)?.email ?? "",
+            action: "integration.github_app_created",
+            target: app.slug,
+            ip: c.ip
+          });
+          return redirect2(
+            c.res,
+            integrations.installUrl(st.orgId, st.userId) ?? "/#/org/integrations"
+          );
+        } catch {
+          return redirect2(c.res, "/#/org/integrations?github=failed");
+        }
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/auth\/github\/installed$/,
+      perm: "public",
+      handler: (c) => {
+        const st = integrations.takeState(c.url.searchParams.get("state") ?? "", "install");
+        if (st)
+          audit(db, {
+            orgId: st.orgId,
+            actorId: st.userId,
+            actor: auth2.user(st.userId)?.email ?? "",
+            action: "integration.github_app_installed",
+            target: c.url.searchParams.get("installation_id"),
+            ip: c.ip
+          });
+        return redirect2(c.res, `/#/onboarding?github=${st ? "installed" : "check"}`);
+      }
+    },
+    {
+      method: "GET",
+      path: /^\/api\/integrations\/github\/repos$/,
+      perm: "workspaces.manage",
+      handler: async (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        try {
+          const repos = await integrations.repos(orgId);
+          return send(c.res, 200, {
+            repos: repos.map((r) => ({ ...r, added: !!org.workspaceByRepo(orgId, r.full_name) }))
+          });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/workspaces\/github$/,
+      perm: "workspaces.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const p = c.p;
+        const repo = String((await body(c)).repo ?? "");
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo))
+          return send(c.res, 400, { error: "Pick a repository." });
+        const existing = org.workspaceByRepo(p.user.org_id, repo);
+        if (existing) return send(c.res, 200, { slug: existing.slug });
+        const dir = join23(dataDir, "workspaces", `${p.user.org_id}-${repo.replace("/", "--")}`);
+        try {
+          await integrations.clone(p.user.org_id, repo, join23(dir, "repo"));
+          const w = org.ensureGithub(
+            p.user.org_id,
+            repo,
+            join23(dir, "repo"),
+            join23(dir, "runs"),
+            p.user.id
+          );
+          act(c, "workspace.added", w.slug, { github: repo });
+          return send(c.res, 200, { slug: w.slug });
+        } catch (e) {
+          await rm7(dir, { recursive: true, force: true }).catch(() => {
+          });
+          return authErr(c, e);
+        }
+      }
+    },
+    // ── onboarding ──
+    {
+      method: "GET",
+      path: /^\/api\/onboarding$/,
+      perm: "session",
+      handler: async (c) => {
+        const p = c.p;
+        const orgId = p.user.org_id;
+        const env = orgEnv(orgId, await environment());
+        const stored = new Set(integrations.list(orgId).map((x) => x.name));
+        return send(c.res, 200, {
+          done: !!auth2.extra(orgId).onboardingDone,
+          steps: {
+            account: true,
+            mfa: !!p.user.mfa_enabled,
+            github: stored.has("GITHUB_APP") || stored.has("GITHUB_TOKEN"),
+            model: env.providers.some((x) => x.ok),
+            sandbox: !!env.docker,
+            repository: org.workspaces(orgId).length > 0,
+            team: org.members(orgId).length > 1
+          }
+        });
+      }
+    },
+    {
+      method: "POST",
+      path: /^\/api\/onboarding\/done$/,
+      perm: "integrations.manage",
+      handler: (c) => {
+        auth2.setExtra(c.p?.user.org_id ?? "", { onboardingDone: true });
+        act(c, "org.onboarding_finished");
+        return send(c.res, 200, { ok: true });
+      }
+    },
     // ── repositories ──
     {
       method: "GET",
@@ -261160,7 +261853,7 @@ data: ${JSON.stringify(data)}
             packageManager: inv?.packageManager ?? null,
             dependencies: inv?.dependencies ?? {}
           },
-          env,
+          env: orgEnv(W.org_id, env),
           runsDir: W.runs_dir,
           runs,
           debt: existsSync11(debtFile) ? JSON.parse(await readFile16(debtFile, "utf8")) : null,
@@ -261312,7 +262005,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       perm: "runs.start",
       handler: async (c) => {
         const W = c.w;
-        const child = cli(["scan", "--repo", W.path], W.path);
+        const child = cli(["scan", "--repo", W.path], W.path, W.org_id);
         let err = "";
         child.stderr.on("data", (d) => err += d.toString());
         const code = await new Promise((r) => child.on("close", r));
@@ -261464,6 +262157,7 @@ var init_server = __esm({
     init_auth();
     init_crypto();
     init_db();
+    init_integrations();
     init_org();
     init_rbac();
     init_proc();
@@ -261492,7 +262186,7 @@ var init_server = __esm({
 
 // src/cli.ts
 var import_semver9 = __toESM(require_semver2(), 1);
-import { mkdir as mkdir14, mkdtemp as mkdtemp5, readFile as readFile17, rm as rm8, writeFile as writeFile9 } from "node:fs/promises";
+import { mkdir as mkdir15, mkdtemp as mkdtemp5, readFile as readFile17, rm as rm8, writeFile as writeFile9 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
 import { basename as basename4, join as join24, resolve as resolve6 } from "node:path";
 import { parseArgs } from "node:util";
@@ -331428,7 +332122,7 @@ async function main() {
       const wfPath = join24(wfDir, "bumpsmith.yml");
       const cfgPath = join24(dir, ".bumpsmith.yml");
       const { existsSync: existsSync12 } = await import("node:fs");
-      await mkdir14(wfDir, { recursive: true });
+      await mkdir15(wfDir, { recursive: true });
       if (!existsSync12(wfPath)) await writeFile9(wfPath, initWorkflow(ciName));
       if (!existsSync12(cfgPath)) await writeFile9(cfgPath, INIT_CONFIG);
       log2(
@@ -331547,7 +332241,7 @@ cost: $${ledger.totalUsd.toFixed(3)}`);
         minReleaseAgeDays: cfg.release_age_days
       });
       const outDir = join24(dir, ".bumpsmith");
-      await mkdir14(outDir, { recursive: true });
+      await mkdir15(outDir, { recursive: true });
       await writeFile9(
         join24(outDir, "sbom.cdx.json"),
         JSON.stringify(

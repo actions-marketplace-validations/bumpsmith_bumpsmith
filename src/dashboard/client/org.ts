@@ -699,6 +699,7 @@ export const ORG_PAGE_PERM: Record<string, string> = {
   access: "access.manage",
   security: "security.manage",
   audit: "audit.view",
+  integrations: "integrations.manage",
 };
 export const noAccessPage = (what: string) =>
   `<div class="page"><div class="panel"><div class="blank"><div class="blank-i">${icon("lock")}</div><h3>You don't have access to ${esc(what)}</h3><p>Your role (${esc(session.info?.role.name ?? "")}) does not include it. Ask an Owner or Admin if you need it.</p></div></div></div>`;

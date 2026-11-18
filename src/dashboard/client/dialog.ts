@@ -65,6 +65,9 @@ export function openDialog(o: DialogOptions): Promise<boolean> {
     for (const b of host.querySelectorAll("[data-close]"))
       b.addEventListener("click", () => close(false));
     host.querySelector(".scrim")?.addEventListener("click", () => close(false));
+    // A link to another page of the app closes the dialog on its way there.
+    for (const a of host.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))
+      a.addEventListener("click", () => close(false));
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!o.onSubmit) return close(true);

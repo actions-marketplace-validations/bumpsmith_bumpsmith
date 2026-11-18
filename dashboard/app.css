@@ -3784,3 +3784,250 @@ tr.dim td {
 .matrix td {
   vertical-align: middle;
 }
+
+/* ─────────── integrations and onboarding ─────────── */
+.lnk {
+  color: var(--info);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lnk:hover {
+  text-decoration: underline;
+}
+.lnk svg {
+  width: 12px;
+  height: 12px;
+}
+.inline-l {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ok-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: var(--ok);
+  font-weight: 550;
+}
+.ok-line svg {
+  width: 16px;
+  height: 16px;
+}
+.choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.choice-i {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: var(--btn-face);
+  box-shadow: var(--btn-shadow);
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 120ms,
+    transform 120ms;
+}
+.choice-i:hover {
+  border-color: var(--muted);
+}
+.choice-i:active {
+  transform: translateY(1px);
+}
+.choice-i.rec {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.choice-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.choice-h svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+.choice-h .badge {
+  margin-left: auto;
+}
+.choice-i .muted {
+  font-size: 13px;
+  line-height: 20px;
+}
+.ob {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.ob-rail {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 72px;
+}
+.ob-s {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ob-s:hover {
+  background: var(--neutral-soft);
+}
+.ob-s.on {
+  background: var(--inset);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.ob-n {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  font: 600 11px var(--mono);
+  color: var(--muted);
+  background: var(--panel);
+}
+.ob-s.done .ob-n {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+.ob-s.done .ob-n svg {
+  width: 12px;
+  height: 12px;
+}
+.ob-s.on .ob-n {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ob-t {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ob-t b {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 550;
+}
+.ob-t span {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.ob-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.ob-body > h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.ob-body > .hint-p {
+  margin-top: -8px;
+}
+.ob-f {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.ob-repos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ob-repo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.ob-repo svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.ob-repo .badge {
+  margin-left: auto;
+}
+.gh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px;
+}
+.gh-r {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.gh-r:hover {
+  background: var(--neutral-soft);
+}
+.gh-r:has(input:checked) {
+  background: var(--accent-soft);
+}
+.gh-r.added {
+  opacity: 0.55;
+  cursor: default;
+}
+.gh-r input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pane[hidden] {
+  display: none;
+}
+@media (max-width: 900px) {
+  .ob,
+  .choice {
+    grid-template-columns: 1fr;
+  }
+  .ob-rail {
+    position: static;
+  }
+}

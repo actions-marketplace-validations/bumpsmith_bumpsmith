@@ -159,6 +159,20 @@ export class Auth {
     };
   }
 
+  /** Other organisation settings (default model, onboarding), kept beside the policy. */
+  extra(orgId: string): Record<string, unknown> {
+    const row = this.db.prepare("SELECT settings FROM orgs WHERE id = ?").get(orgId) as
+      | { settings: string }
+      | undefined;
+    return row ? (JSON.parse(row.settings) as Record<string, unknown>) : {};
+  }
+
+  setExtra(orgId: string, patch: Record<string, unknown>) {
+    this.db
+      .prepare("UPDATE orgs SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...this.extra(orgId), ...patch }), orgId);
+  }
+
   saveSettings(orgId: string, next: Partial<OrgSettings>) {
     const cur = this.settings(orgId);
     const merged: OrgSettings = {
@@ -172,7 +186,7 @@ export class Auth {
         Math.max(1, Math.round(Number(next.absoluteHours ?? cur.absoluteHours))),
       ),
     };
-    this.db.prepare("UPDATE orgs SET settings = ? WHERE id = ?").run(JSON.stringify(merged), orgId);
+    this.setExtra(orgId, merged as unknown as Record<string, unknown>);
     return merged;
   }
 

@@ -23,6 +23,7 @@ import {
 } from "../server/auth.ts";
 import { loadMasterKey, safeEqual, verifyPassword } from "../server/crypto.ts";
 import { openDb } from "../server/db.ts";
+import { Integrations, KEY_PROVIDERS } from "../server/integrations.ts";
 import { Org, type Workspace, WS_PERMS } from "../server/org.ts";
 import { can, PERMISSIONS, type Permission } from "../server/rbac.ts";
 import { run } from "../util/proc.ts";
@@ -370,6 +371,7 @@ export async function startDashboard(opts: DashboardOptions) {
   const masterKey = await loadMasterKey(join(dataDir, "master.key"));
   const auth = new Auth(db, DEFAULT_POLICY, masterKey);
   const org = new Org(db);
+  const integrations = new Integrations(db, masterKey);
   /** The repository this dashboard was started in becomes the organisation's first one. */
   const ensureLocalWorkspace = () => {
     const o = db.prepare("SELECT id FROM orgs ORDER BY created_at LIMIT 1").get() as
@@ -404,7 +406,7 @@ export async function startDashboard(opts: DashboardOptions) {
       "cross-origin-resource-policy": "same-origin",
       "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
       "content-security-policy":
-        "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://github.com",
       ...(secure ? { "strict-transport-security": "max-age=31536000; includeSubDomains" } : {}),
       ...extra,
     });
@@ -431,10 +433,11 @@ export async function startDashboard(opts: DashboardOptions) {
       });
     });
 
-  const cli = (args: string[], cwd: string) =>
+  /** Upgrade runs get the organisation's model keys in their environment, and only them. */
+  const cli = (args: string[], cwd: string, orgId?: string) =>
     spawn(process.execPath, [...process.execArgv, opts.cliEntry, ...args], {
       cwd,
-      env: process.env,
+      env: { ...process.env, ...(orgId ? integrations.runEnv(orgId) : {}) },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -472,6 +475,7 @@ export async function startDashboard(opts: DashboardOptions) {
         String(budget),
       ],
       w.path,
+      w.org_id,
     );
     const emit = (event: string, data: unknown) => {
       for (const l of lr.listeners) l.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -563,6 +567,22 @@ export async function startDashboard(opts: DashboardOptions) {
     return send(c.res, 200, sessionPayload(p), undefined, { "set-cookie": cookieFor(s.token) });
   };
   const mfaFailures = new Map<string, number>();
+  /** Model availability for one organisation: detected tools plus its stored keys. */
+  const orgEnv = (orgId: string, env: Awaited<ReturnType<typeof environment>>) => {
+    const stored = new Set(integrations.list(orgId).map((x) => x.name));
+    const providers = env.providers.map((p) => {
+      const k = KEY_PROVIDERS.find((x) => x.id === p.id);
+      return k && stored.has(k.env) ? { ...p, ok: true, detail: "key saved in Bumpsmith" } : p;
+    });
+    const want = auth.extra(orgId).defaultProvider as string | undefined;
+    const def =
+      providers.find((p) => p.id === want && p.ok)?.id ??
+      providers.find((p) => p.ok)?.id ??
+      env.defaultProvider;
+    return { ...env, providers, defaultProvider: def };
+  };
+  const redirect = (res: http.ServerResponse, location: string) =>
+    send(res, 302, "", "text/plain", { location });
   const origin = (c: Ctx) =>
     `http${secure ? "s" : ""}://${c.req.headers.host ?? `127.0.0.1:${port}`}`;
   const CATEGORIES: Record<string, string> = {
@@ -1008,6 +1028,298 @@ export async function startDashboard(opts: DashboardOptions) {
       },
     },
 
+    // ── integrations: GitHub and model keys ──
+    {
+      method: "GET",
+      path: /^\/api\/integrations$/,
+      perm: "integrations.manage",
+      handler: async (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        const stored = new Map(integrations.list(orgId).map((x) => [x.name, x]));
+        const app = integrations.app(orgId);
+        let installations: Awaited<ReturnType<Integrations["installations"]>> = [];
+        let githubError: string | null = null;
+        if (app)
+          installations = await integrations.installations(orgId).catch((e: Error) => {
+            githubError = e.message;
+            return [];
+          });
+        const env = orgEnv(orgId, await environment());
+        const tokenRow = stored.get("GITHUB_TOKEN");
+        return send(c.res, 200, {
+          github: {
+            app: app
+              ? { name: app.name, slug: app.slug, owner: app.owner, html_url: app.html_url }
+              : null,
+            installations,
+            installUrl: app ? integrations.installUrl(orgId, c.p?.user.id ?? "") : null,
+            token: tokenRow
+              ? {
+                  last4: tokenRow.last4,
+                  updated_at: tokenRow.updated_at,
+                  login: auth.extra(orgId).githubLogin ?? null,
+                }
+              : null,
+            error: githubError,
+          },
+          models: KEY_PROVIDERS.map((p) => ({
+            id: p.id,
+            label: p.label,
+            hint: p.hint,
+            last4: stored.get(p.env)?.last4 ?? null,
+            updated_at: stored.get(p.env)?.updated_at ?? null,
+          })),
+          detected: env.providers
+            .filter((p) => p.id === "claude-code" || p.id === "codex")
+            .map((p) => ({ id: p.id, label: p.label, ok: p.ok, detail: p.detail })),
+          defaultProvider: env.defaultProvider,
+          docker: env.docker,
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/keys$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        const p = KEY_PROVIDERS.find((x) => x.id === String(b.provider ?? ""));
+        const key = String(b.key ?? "").trim();
+        if (!p || !key) return send(c.res, 400, { error: "Pick a provider and paste its key." });
+        const v = await integrations.verifyKey(p.id, key);
+        if (!v.ok) return send(c.res, 400, { error: v.detail });
+        integrations.set(c.p?.user.org_id ?? "", p.env, key, c.p?.user.id ?? "");
+        act(c, "integration.key_saved", p.label);
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/keys\/([\w-]+)\/remove$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: (c) => {
+        const p = KEY_PROVIDERS.find((x) => x.id === c.m[1]);
+        if (!p) return send(c.res, 404, { error: "No such provider." });
+        integrations.remove(c.p?.user.org_id ?? "", p.env);
+        act(c, "integration.key_removed", p.label);
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/default$/,
+      perm: "integrations.manage",
+      handler: async (c) => {
+        const provider = String((await body(c)).provider ?? "");
+        if (!/^[\w-]{2,30}$/.test(provider))
+          return send(c.res, 400, { error: "Unknown provider." });
+        auth.setExtra(c.p?.user.org_id ?? "", { defaultProvider: provider });
+        act(c, "integration.default_model", provider);
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/github\/token$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const token = String((await body(c)).token ?? "").trim();
+        if (!/^(gh[pousr]_|github_pat_)\w{20,}$/.test(token))
+          return send(c.res, 400, {
+            error: "That does not look like a GitHub token (ghp_… or github_pat_…).",
+          });
+        try {
+          const u = await integrations.verifyGithubToken(token);
+          const orgId = c.p?.user.org_id ?? "";
+          integrations.set(orgId, "GITHUB_TOKEN", token, c.p?.user.id ?? "");
+          auth.setExtra(orgId, { githubLogin: u.login });
+          act(c, "integration.github_token_saved", u.login);
+          return send(c.res, 200, { login: u.login });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/integrations\/github\/(token|app)\/remove$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: (c) => {
+        integrations.remove(
+          c.p?.user.org_id ?? "",
+          c.m[1] === "token" ? "GITHUB_TOKEN" : "GITHUB_APP",
+        );
+        act(
+          c,
+          c.m[1] === "token"
+            ? "integration.github_token_removed"
+            : "integration.github_app_removed",
+        );
+        return send(c.res, 200, { ok: true });
+      },
+    },
+    {
+      // Start creating the organisation's own GitHub App: the page posts this manifest to GitHub.
+      method: "POST",
+      path: /^\/api\/integrations\/github\/app$/,
+      perm: "integrations.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const b = await body(c);
+        try {
+          return send(
+            c.res,
+            200,
+            integrations.appManifest(
+              c.p?.user.org_id ?? "",
+              c.p?.user.id ?? "",
+              origin(c),
+              String(b.name ?? ""),
+              String(b.owner ?? "").trim(),
+            ),
+          );
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      // GitHub returns here after creating the app. No session cookie arrives on this
+      // cross-site redirect (SameSite=Strict), so the single-use state proves who started it.
+      method: "GET",
+      path: /^\/auth\/github\/app-created$/,
+      perm: "public",
+      handler: async (c) => {
+        const st = integrations.takeState(c.url.searchParams.get("state") ?? "", "create");
+        if (!st) return redirect(c.res, "/#/org/integrations?github=expired");
+        try {
+          const app = await integrations.completeApp(
+            st.orgId,
+            st.userId,
+            c.url.searchParams.get("code") ?? "",
+          );
+          audit(db, {
+            orgId: st.orgId,
+            actorId: st.userId,
+            actor: auth.user(st.userId)?.email ?? "",
+            action: "integration.github_app_created",
+            target: app.slug,
+            ip: c.ip,
+          });
+          // Next: install it on the repositories Bumpsmith should work on.
+          return redirect(
+            c.res,
+            integrations.installUrl(st.orgId, st.userId) ?? "/#/org/integrations",
+          );
+        } catch {
+          return redirect(c.res, "/#/org/integrations?github=failed");
+        }
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/auth\/github\/installed$/,
+      perm: "public",
+      handler: (c) => {
+        const st = integrations.takeState(c.url.searchParams.get("state") ?? "", "install");
+        if (st)
+          audit(db, {
+            orgId: st.orgId,
+            actorId: st.userId,
+            actor: auth.user(st.userId)?.email ?? "",
+            action: "integration.github_app_installed",
+            target: c.url.searchParams.get("installation_id"),
+            ip: c.ip,
+          });
+        return redirect(c.res, `/#/onboarding?github=${st ? "installed" : "check"}`);
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/integrations\/github\/repos$/,
+      perm: "workspaces.manage",
+      handler: async (c) => {
+        const orgId = c.p?.user.org_id ?? "";
+        try {
+          const repos = await integrations.repos(orgId);
+          return send(c.res, 200, {
+            repos: repos.map((r) => ({ ...r, added: !!org.workspaceByRepo(orgId, r.full_name) })),
+          });
+        } catch (e) {
+          return authErr(c, e);
+        }
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/workspaces\/github$/,
+      perm: "workspaces.manage",
+      stepUp: true,
+      handler: async (c) => {
+        const p = c.p as Principal;
+        const repo = String((await body(c)).repo ?? "");
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo))
+          return send(c.res, 400, { error: "Pick a repository." });
+        const existing = org.workspaceByRepo(p.user.org_id, repo);
+        if (existing) return send(c.res, 200, { slug: existing.slug });
+        const dir = join(dataDir, "workspaces", `${p.user.org_id}-${repo.replace("/", "--")}`);
+        try {
+          await integrations.clone(p.user.org_id, repo, join(dir, "repo"));
+          const w = org.ensureGithub(
+            p.user.org_id,
+            repo,
+            join(dir, "repo"),
+            join(dir, "runs"),
+            p.user.id,
+          );
+          act(c, "workspace.added", w.slug, { github: repo });
+          return send(c.res, 200, { slug: w.slug });
+        } catch (e) {
+          await rm(dir, { recursive: true, force: true }).catch(() => {});
+          return authErr(c, e);
+        }
+      },
+    },
+
+    // ── onboarding ──
+    {
+      method: "GET",
+      path: /^\/api\/onboarding$/,
+      perm: "session",
+      handler: async (c) => {
+        const p = c.p as Principal;
+        const orgId = p.user.org_id;
+        const env = orgEnv(orgId, await environment());
+        const stored = new Set(integrations.list(orgId).map((x) => x.name));
+        return send(c.res, 200, {
+          done: !!auth.extra(orgId).onboardingDone,
+          steps: {
+            account: true,
+            mfa: !!p.user.mfa_enabled,
+            github: stored.has("GITHUB_APP") || stored.has("GITHUB_TOKEN"),
+            model: env.providers.some((x) => x.ok),
+            sandbox: !!env.docker,
+            repository: org.workspaces(orgId).length > 0,
+            team: org.members(orgId).length > 1,
+          },
+        });
+      },
+    },
+    {
+      method: "POST",
+      path: /^\/api\/onboarding\/done$/,
+      perm: "integrations.manage",
+      handler: (c) => {
+        auth.setExtra(c.p?.user.org_id ?? "", { onboardingDone: true });
+        act(c, "org.onboarding_finished");
+        return send(c.res, 200, { ok: true });
+      },
+    },
+
     // ── repositories ──
     {
       method: "GET",
@@ -1334,7 +1646,7 @@ export async function startDashboard(opts: DashboardOptions) {
             packageManager: inv?.packageManager ?? null,
             dependencies: inv?.dependencies ?? {},
           },
-          env,
+          env: orgEnv(W.org_id, env),
           runsDir: W.runs_dir,
           runs,
           debt: existsSync(debtFile) ? JSON.parse(await readFile(debtFile, "utf8")) : null,
@@ -1481,7 +1793,7 @@ export async function startDashboard(opts: DashboardOptions) {
       perm: "runs.start",
       handler: async (c) => {
         const W = c.w as Workspace;
-        const child = cli(["scan", "--repo", W.path], W.path);
+        const child = cli(["scan", "--repo", W.path], W.path, W.org_id);
         let err = "";
         child.stderr.on("data", (d: Buffer) => (err += d.toString()));
         const code = await new Promise<number | null>((r) => child.on("close", r));
