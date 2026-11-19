@@ -79,8 +79,9 @@ npx bumpsmith rescue --github owner/repo --provider claude-code   # fix red bot 
 npx bumpsmith dashboard                # http://127.0.0.1:4477
 ```
 
-The first start prints a one-time link that creates the owner account. Everything Bumpsmith did
-is there:
+The first start prints a one-time link that creates the owner account. Model keys and GitHub
+are connected in the browser, so no environment variables are needed (they are all optional; see
+[`.env.example`](.env.example)). Everything Bumpsmith did is there:
 
 - each upgrade's pipeline and the breaking changes it read;
 - the diff, with the agent's edits marked;
@@ -110,8 +111,10 @@ day one:
 | Data    | Encrypted secrets and a tamper-evident audit log.                          |
 | Setup   | Onboarding in the browser.                                                 |
 
-Read the [self-hosting guide](docs/self-hosting.md). The [security controls](docs/security/controls.md)
-page maps every control to SOC 2, ISO 27001, NIST 800-63B and OWASP ASVS.
+Read the [self-hosting guide](docs/self-hosting.md), set up [single sign-on with Okta, Entra ID
+and others](docs/sso.md), and see every setting in [`.env.example`](.env.example). The
+[security controls](docs/security/controls.md) page maps every control to SOC 2, ISO 27001,
+NIST 800-63B and OWASP ASVS.
 
 <div align="center">
 <img alt="Inviting a teammate, granting access per repository, single sign-on settings and the hash-chained audit log" src="docs/media/team.webp" width="80%">
@@ -334,7 +337,12 @@ Bug reports, repositories that trip it up, and pull requests are all welcome. Se
 pnpm install && pnpm check     # typecheck, lint, unit and Action tests
 pnpm test:docker               # sandbox isolation and exfiltration tests
 pnpm bumpsmith dashboard       # the dashboard, from source
+pnpm demo:workspace            # a ready-made demo organisation at http://127.0.0.1:4479
 ```
+
+The demo workspace has a real repository from the benchmark, real upgrade runs, a team of five
+and API tokens. Sign in as `maya@northwind.dev` with `anvil-sparks-demo-7` (fictional
+accounts; the data lives in `.demo/`, and `--reset` rebuilds it).
 
 The videos in this README are recorded from the real dashboard by
 [`scripts/demo`](scripts/demo). Re-record them after a UI change.

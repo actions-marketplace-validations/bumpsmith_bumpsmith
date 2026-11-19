@@ -64,6 +64,7 @@ describe("single sign-on", { timeout: 60_000 }, () => {
         });
       if (u.pathname === "/jwks") return json({ keys: [jwk] });
       if (u.pathname === "/token") {
+        const basicAuth = `Basic ${Buffer.from("bumpsmith:s3cret-value").toString("base64")}`;
         let body = "";
         for await (const c of req) body += c;
         const f = new URLSearchParams(body);
@@ -75,7 +76,8 @@ describe("single sign-on", { timeout: 60_000 }, () => {
           createHash("sha256")
             .update(f.get("code_verifier") ?? "")
             .digest("base64url") === entry.challenge &&
-          f.get("client_secret") === "s3cret-value";
+          // client authentication: HTTP Basic by default, or the secret in the body
+          (req.headers.authorization ?? "") === basicAuth;
         if (!ok) {
           res.writeHead(400);
           return res.end("{}");

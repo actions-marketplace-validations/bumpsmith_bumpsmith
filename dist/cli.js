@@ -332854,17 +332854,29 @@ var init_sso = __esm({
         const c = this.config(p.orgId).oidc;
         const d = await this.discover(c.issuer);
         const secret = this.secret(p.orgId, "OIDC_CLIENT_SECRET") ?? "";
+        const methods = d.token_endpoint_auth_methods_supported ?? ["client_secret_basic"];
+        const basic = methods.includes("client_secret_basic") || !methods.includes("client_secret_post");
+        const form = new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: `${origin}/auth/oidc/callback`,
+          code_verifier: p.verifier
+        });
+        const headers2 = {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "application/json"
+        };
+        if (basic) {
+          const enc = (v) => encodeURIComponent(v).replace(/%20/g, "+");
+          headers2.authorization = `Basic ${Buffer.from(`${enc(c.clientId)}:${enc(secret)}`).toString("base64")}`;
+        } else {
+          form.set("client_id", c.clientId);
+          form.set("client_secret", secret);
+        }
         const r = await fetch(d.token_endpoint, {
           method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-          body: new URLSearchParams({
-            grant_type: "authorization_code",
-            code,
-            redirect_uri: `${origin}/auth/oidc/callback`,
-            client_id: c.clientId,
-            client_secret: secret,
-            code_verifier: p.verifier
-          }),
+          headers: headers2,
+          body: form,
           signal: AbortSignal.timeout(1e4)
         }).catch(() => null);
         if (!r?.ok) throw new AuthError(502, "The identity provider did not accept the sign-in.");

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 — 2026-11-19
+
+- Dashboard: the landing page's buttons, one corner radius and one control height everywhere;
+  the selected page and the search field use the 3D button build; sign-out turns red on hover.
+- New sign-in, setup, two-factor, invite and reset screens with the animated anvil drawing.
+- Account page: API tokens next to two-factor, with pagination.
+- Single sign-on: the OIDC token request uses HTTP Basic client authentication when the
+  provider supports it (the default for Okta, Entra ID, Google, Auth0 and Keycloak apps).
+- Docs: [single sign-on guide](docs/sso.md) (Okta OIDC and SAML step by step) and
+  [`.env.example`](.env.example) with every environment variable.
+- `pnpm demo:workspace`: a ready-made demo organisation for trying the dashboard.
+
 ## 0.1.0 — 2026-11-19
 
 First public release.

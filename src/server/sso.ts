@@ -94,6 +94,7 @@ export class Sso {
         authorization_endpoint: string;
         token_endpoint: string;
         jwks_uri: string;
+        token_endpoint_auth_methods_supported?: string[];
       };
       at: number;
     }
@@ -203,6 +204,7 @@ export class Sso {
       authorization_endpoint: string;
       token_endpoint: string;
       jwks_uri: string;
+      token_endpoint_auth_methods_supported?: string[];
     };
     if (doc.issuer.replace(/\/$/, "") !== issuer)
       throw new AuthError(502, "The identity provider reports a different issuer.");
@@ -246,17 +248,34 @@ export class Sso {
     const c = this.config(p.orgId).oidc;
     const d = await this.discover(c.issuer);
     const secret = this.secret(p.orgId, "OIDC_CLIENT_SECRET") ?? "";
+    // Client authentication: HTTP Basic (the OAuth default, and what Okta, Entra ID, Google,
+    // Auth0 and Keycloak apps use out of the box), or the secret in the body when the provider
+    // only supports that. The code is single-use, so pick once instead of retrying.
+    const methods = d.token_endpoint_auth_methods_supported ?? ["client_secret_basic"];
+    const basic =
+      methods.includes("client_secret_basic") || !methods.includes("client_secret_post");
+    const form = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: `${origin}/auth/oidc/callback`,
+      code_verifier: p.verifier,
+    });
+    const headers: Record<string, string> = {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "application/json",
+    };
+    if (basic) {
+      // RFC 6749 2.3.1: form-encode both parts before joining them.
+      const enc = (v: string) => encodeURIComponent(v).replace(/%20/g, "+");
+      headers.authorization = `Basic ${Buffer.from(`${enc(c.clientId)}:${enc(secret)}`).toString("base64")}`;
+    } else {
+      form.set("client_id", c.clientId);
+      form.set("client_secret", secret);
+    }
     const r = await fetch(d.token_endpoint, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: `${origin}/auth/oidc/callback`,
-        client_id: c.clientId,
-        client_secret: secret,
-        code_verifier: p.verifier,
-      }),
+      headers,
+      body: form,
       signal: AbortSignal.timeout(10_000),
     }).catch(() => null);
     if (!r?.ok) throw new AuthError(502, "The identity provider did not accept the sign-in.");
