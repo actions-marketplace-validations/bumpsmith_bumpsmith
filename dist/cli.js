@@ -31495,7 +31495,7 @@ async function fetchText(url2, opts = {}) {
     if (!limited || attempt === 3) break;
     const retryAfter = Number(res.headers.get("retry-after"));
     const reset = Number(res.headers.get("x-ratelimit-reset"));
-    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1e3 : Number.isFinite(reset) && reset > 0 ? Math.max(1e3, reset * 1e3 - Date.now()) : 3e4 * (attempt + 1);
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1e3 : Number.isFinite(reset) && reset > 0 ? Math.max(1e3, reset * 1e3 - Date.now()) : 6e4 * 2 ** attempt;
     if (waitMs > (opts.maxRateLimitWaitMs ?? 6e4)) {
       const hint = /api\.github\.com/.test(url2) ? " Set GITHUB_TOKEN to raise GitHub's rate limit." : "";
       throw new HttpError(
@@ -31532,6 +31532,54 @@ var init_http = __esm({
       url;
       status;
     };
+  }
+});
+
+// src/util/github.ts
+function headers() {
+  const h = {
+    accept: "application/vnd.github+json",
+    "x-github-api-version": GITHUB_API_VERSION
+  };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) h.authorization = `Bearer ${token}`;
+  return h;
+}
+function parseGithubRepo(url2) {
+  if (!url2) return null;
+  const m = /github\.com[/:]([^/]+)\/([^/#?]+)/.exec(url2);
+  if (!m?.[1] || !m[2]) return null;
+  return { owner: m[1], repo: m[2].replace(/\.git$/, "") };
+}
+function gh(path5, cacheSeconds = 3600) {
+  return fetchJson(`https://api.github.com${path5}`, { headers: headers(), cacheSeconds });
+}
+async function listReleases(owner, repo, pages = 3) {
+  const out = [];
+  for (let page = 1; page <= pages; page++) {
+    const batch = await gh(
+      `/repos/${owner}/${repo}/releases?per_page=100&page=${page}`
+    );
+    out.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return out;
+}
+async function rawFile(owner, repo, path5, ref = "HEAD") {
+  try {
+    return await fetchText(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path5}`, {
+      cacheSeconds: 3600
+    });
+  } catch {
+    return null;
+  }
+}
+var GITHUB_API_VERSION;
+var init_github = __esm({
+  "src/util/github.ts"() {
+    "use strict";
+    init_http();
+    GITHUB_API_VERSION = "2026-03-10";
   }
 });
 
@@ -31658,27 +31706,35 @@ async function npmPeerDependencies(name2, version2) {
   return Object.keys(await npmPeerRanges(name2, version2));
 }
 async function checkMalicious(ecosystem, name2, version2) {
+  const vulns = [];
   try {
-    const res = await fetchJson(
-      "https://api.osv.dev/v1/query",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          package: { name: name2, ecosystem: ecosystem === "npm" ? "npm" : "PyPI" },
-          version: version2
-        }),
-        cacheSeconds: 3600
-      }
-    );
-    const mal = (res.vulns ?? []).filter(
-      (v) => v.id.startsWith("MAL-") || /malicious/i.test(`${v.summary ?? ""} ${v.details ?? ""}`)
-    );
-    return { malicious: mal.length > 0, ids: mal.map((v) => v.id) };
+    let pageToken;
+    for (let page = 0; page < 10; page++) {
+      const res = await fetchJson(
+        "https://api.osv.dev/v1/query",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            package: { name: name2, ecosystem: ecosystem === "npm" ? "npm" : "PyPI" },
+            version: version2,
+            ...pageToken ? { page_token: pageToken } : {}
+          }),
+          cacheSeconds: 3600
+        }
+      );
+      vulns.push(...res.vulns ?? []);
+      pageToken = res.next_page_token;
+      if (!pageToken) break;
+    }
+    if (pageToken) return { malicious: true, ids: ["OSV answer incomplete"] };
   } catch (err) {
-    if (err instanceof HttpError) return { malicious: false, ids: [] };
+    if (err instanceof HttpError) return { malicious: true, ids: ["OSV unavailable"] };
     throw err;
   }
+  const isMal = (id) => id.startsWith("MAL-");
+  const mal = vulns.filter((v) => isMal(v.id) || (v.aliases ?? []).some(isMal));
+  return { malicious: mal.length > 0, ids: mal.map((v) => v.id) };
 }
 function releaseGate(release, malicious, minAgeDays, now2 = /* @__PURE__ */ new Date()) {
   const reasons = [];
@@ -37972,13 +38028,13 @@ var require_timing_safe_equal = __commonJS({
   "node_modules/.pnpm/standardwebhooks@1.1.1/node_modules/standardwebhooks/dist/timing_safe_equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.timingSafeEqual = timingSafeEqual2;
+    exports.timingSafeEqual = timingSafeEqual3;
     function assert2(expr, msg = "") {
       if (!expr) {
         throw new Error(msg);
       }
     }
-    function timingSafeEqual2(a, b) {
+    function timingSafeEqual3(a, b) {
       if (a.byteLength !== b.byteLength) {
         return false;
       }
@@ -276336,6 +276392,9 @@ function brandedHasInstance(cls, value) {
   }
   return Function.prototype[Symbol.hasInstance].call(cls, value);
 }
+function requiredClientCapabilitiesForRequest(method) {
+  return Object.hasOwn(REQUIRED_CLIENT_CAPABILITIES_BY_METHOD, method) ? REQUIRED_CLIENT_CAPABILITIES_BY_METHOD[method] : void 0;
+}
 function isPlainObject$7(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -278598,6 +278657,72 @@ function scanXMcpHeaderDeclarations(inputSchema) {
 function pathName(path5) {
   return path5.length === 0 ? "<root>" : path5.join(".");
 }
+function mcpParamPrimitiveToString(value) {
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return void 0;
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) return void 0;
+    return String(value);
+  }
+}
+function base64ToUtf8(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.codePointAt(i);
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+function decodeMcpParamValue(value) {
+  if (!(value.startsWith(BASE64_SENTINEL_PREFIX) && value.endsWith(BASE64_SENTINEL_SUFFIX))) return value;
+  const b64 = value.slice(9, value.length - 2);
+  if (!BASE64_CANONICAL.test(b64)) return void 0;
+  try {
+    return base64ToUtf8(b64);
+  } catch {
+    return;
+  }
+}
+function valueAtPath(root, path5) {
+  let node2 = root;
+  for (const key of path5) {
+    if (node2 === null || typeof node2 !== "object") return void 0;
+    node2 = node2[key];
+  }
+  return node2;
+}
+function validateMcpParamHeaders(declarations, args, headers2) {
+  for (const decl of declarations) {
+    const headerKey = `${MCP_PARAM_HEADER_PREFIX}${decl.headerName}`;
+    const headerValue3 = headers2.get(headerKey);
+    const bodyRaw = valueAtPath(args, decl.path);
+    if (bodyRaw === void 0 || bodyRaw === null) continue;
+    const bodyString = mcpParamPrimitiveToString(bodyRaw);
+    if (bodyString === void 0) continue;
+    if (headerValue3 === null) return paramHeaderMismatchRejection("param-header-missing", headerKey, `the body carries ${pathName(decl.path)}=${JSON.stringify(bodyRaw)} but the ${headerKey} header is absent`);
+    const decoded = decodeMcpParamValue(headerValue3);
+    if (decoded === void 0) return paramHeaderMismatchRejection("param-header-invalid-encoding", headerKey, `the ${headerKey} header carries an invalid Base64 sentinel value`);
+    if (!((decl.type === "integer" || decl.type === "number") && CANONICAL_DECIMAL.test(decoded) && typeof bodyRaw === "number" ? Number(decoded) === bodyRaw : decoded === bodyString)) return paramHeaderMismatchRejection("param-header-mismatch", headerKey, `the ${headerKey} header decodes to ${JSON.stringify(decoded)} but the body carries ${pathName(decl.path)}=${JSON.stringify(bodyRaw)}`);
+  }
+}
+function paramHeaderMismatchRejection(cell, header, body) {
+  return {
+    kind: "reject",
+    rung: "param-header-validation",
+    cell,
+    httpStatus: 400,
+    code: HEADER_MISMATCH_ERROR_CODE,
+    message: `Bad Request: the request headers and body disagree: ${body}`,
+    data: { mismatch: {
+      header,
+      body
+    } },
+    settled: true
+  };
+}
+function httpStatusForErrorCode(code, origin) {
+  if (origin === "in-band") return code === ProtocolErrorCode.MissingRequiredClientCapability ? 400 : 200;
+  return LADDER_ERROR_HTTP_STATUS[code] ?? 400;
+}
 function rejection(rung, cell, httpStatus, error62, settled) {
   return {
     kind: "reject",
@@ -278610,12 +278735,187 @@ function rejection(rung, cell, httpStatus, error62, settled) {
     settled
   };
 }
+function crossCheckMismatch(cell, header, body, rung = "era-classification") {
+  return rejection(rung, cell, 400, new ProtocolError(HEADER_MISMATCH_ERROR_CODE, `Bad Request: the request headers and body disagree: ${body}`, { mismatch: {
+    header,
+    body
+  } }), true);
+}
+function mcpNameSource(method, params) {
+  const field = Object.hasOwn(MCP_NAME_HEADER_SOURCE, method) ? MCP_NAME_HEADER_SOURCE[method] : void 0;
+  if (field === void 0) return;
+  const raw = isPlainObject$2(params) ? params[field] : void 0;
+  return {
+    field,
+    value: typeof raw === "string" ? raw : void 0
+  };
+}
+function stripHttpOws(value) {
+  let start = 0;
+  while (start < value.length) {
+    const code = value.codePointAt(start);
+    if (code !== 9 && code !== 32) break;
+    start += 1;
+  }
+  let end = value.length;
+  while (end > start) {
+    const code = value.codePointAt(end - 1);
+    if (code !== 9 && code !== 32) break;
+    end -= 1;
+  }
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+function validateStandardRequestHeaders(request2, route) {
+  if (route.messageKind !== "request") return;
+  const method = route.message.method;
+  if (request2.protocolVersionHeader === void 0) {
+    const claimed = route.classification.revision;
+    return crossCheckMismatch("version-header-missing", "(missing)", claimed === void 0 ? "the body carries a modern per-request envelope but the required MCP-Protocol-Version header is absent" : `the body envelope names protocol version ${claimed} but the required MCP-Protocol-Version header is absent`, "standard-header-validation");
+  }
+  if (request2.mcpMethodHeader === void 0) return crossCheckMismatch("method-header-missing", "(missing)", `the body names method ${method} but the required Mcp-Method header is absent`, "standard-header-validation");
+  const source = mcpNameSource(method, route.message.params);
+  if (source === void 0) return;
+  const { field: sourceField, value: bodyValue } = source;
+  if (request2.mcpNameHeader === void 0) {
+    if (bodyValue === void 0) return;
+    return crossCheckMismatch("name-header-missing", "(missing)", `the body carries params.${sourceField}="${bodyValue}" but the required Mcp-Name header is absent`, "standard-header-validation");
+  }
+  const normalizedNameHeader = stripHttpOws(request2.mcpNameHeader);
+  const decoded = decodeMcpParamValue(normalizedNameHeader);
+  if (decoded === void 0) return crossCheckMismatch("name-header-invalid-encoding", normalizedNameHeader, "the Mcp-Name header carries an invalid Base64 sentinel value", "standard-header-validation");
+  if (bodyValue !== void 0 && decoded !== bodyValue) return crossCheckMismatch("name-header-mismatch", normalizedNameHeader, `the body carries params.${sourceField}="${bodyValue}" but the Mcp-Name header names "${decoded}"`, "standard-header-validation");
+}
+function isPlainObject$2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function classificationForClaim(claimedVersion) {
+  if (claimedVersion === void 0) return { era: "modern" };
+  return {
+    era: isModernProtocolVersion(claimedVersion) ? "modern" : "legacy",
+    revision: claimedVersion
+  };
+}
 function carriesValidModernEnvelopeClaim(params) {
   if (!hasEnvelopeClaim(params)) return false;
   const claimedVersion = envelopeClaimVersion(params);
   if (claimedVersion === void 0 || !isModernProtocolVersion(claimedVersion)) return false;
   const meta3 = requestMetaOf(params);
   return meta3 !== void 0 && validateEnvelopeMeta(meta3).length === 0;
+}
+function classifyBatch(body) {
+  if (body.length === 0) return rejection("jsonrpc-shape", "empty-batch", 400, new ProtocolError(ProtocolErrorCode.InvalidRequest, "Bad Request: empty JSON-RPC batch"), true);
+  for (const element of body) {
+    if (hasEnvelopeClaim(isPlainObject$2(element) ? element["params"] : void 0)) return rejection("jsonrpc-shape", "batch-with-modern-element", 400, new ProtocolError(ProtocolErrorCode.InvalidRequest, "Bad Request: JSON-RPC batches may not contain requests for protocol revision 2026-07-28 or later"), true);
+    if (!(isJSONRPCRequest(element) || isJSONRPCNotification(element) || isJSONRPCResultResponse(element) || isJSONRPCErrorResponse(element))) return rejection("jsonrpc-shape", "batch-with-invalid-element", 400, new ProtocolError(ProtocolErrorCode.InvalidRequest, "Bad Request: JSON-RPC batch contains an invalid message"), true);
+  }
+  return {
+    kind: "legacy",
+    reason: "batch"
+  };
+}
+function classifyRequestBody(request2, body) {
+  const params = body.params;
+  const method = body.method;
+  const headerVersion = request2.protocolVersionHeader;
+  const headerNamesModern = headerVersion !== void 0 && isModernProtocolVersion(headerVersion);
+  if (method === "initialize" && !carriesValidModernEnvelopeClaim(params)) {
+    if (headerNamesModern) return crossCheckMismatch("initialize-with-modern-header", headerVersion, "an initialize request (legacy handshake) was sent with a modern MCP-Protocol-Version header");
+    const requestedVersion = isPlainObject$2(params) && typeof params["protocolVersion"] === "string" ? params["protocolVersion"] : void 0;
+    return {
+      kind: "legacy",
+      reason: "initialize",
+      ...requestedVersion !== void 0 && { requestedVersion }
+    };
+  }
+  if (hasEnvelopeClaim(params)) {
+    const meta3 = requestMetaOf(params);
+    const firstIssue = (meta3 === void 0 ? [] : validateEnvelopeMeta(meta3))[0];
+    if (firstIssue !== void 0) return rejection("envelope", "envelope-invalid", 400, new ProtocolError(ProtocolErrorCode.InvalidParams, `Invalid _meta envelope for protocol revision 2026-07-28: ${firstIssue.key}: ${firstIssue.problem}`, { envelope: firstIssue }), true);
+    const claimedVersion = envelopeClaimVersion(params);
+    if (headerVersion !== void 0 && claimedVersion !== void 0 && headerVersion !== claimedVersion) return crossCheckMismatch("header-body-version-mismatch", headerVersion, `the body envelope names protocol version ${claimedVersion} but the MCP-Protocol-Version header names ${headerVersion}`);
+    if (request2.mcpMethodHeader !== void 0 && request2.mcpMethodHeader !== method) return crossCheckMismatch("method-header-mismatch", request2.mcpMethodHeader, `the body names method ${method} but the Mcp-Method header names ${request2.mcpMethodHeader}`);
+    return {
+      kind: "modern",
+      messageKind: "request",
+      message: body,
+      classification: classificationForClaim(claimedVersion)
+    };
+  }
+  if (headerNamesModern) {
+    const meta3 = requestMetaOf(params);
+    const missingFromEnvelope = validateEnvelopeMeta(meta3 ?? {}).filter((issue2) => issue2.problem === "missing").map((issue2) => issue2.key);
+    const missing = meta3 === void 0 ? ["_meta"] : missingFromEnvelope.length > 0 ? missingFromEnvelope : [PROTOCOL_VERSION_META_KEY];
+    return rejection("envelope", "modern-header-without-claim", 400, new ProtocolError(ProtocolErrorCode.InvalidParams, `Invalid params: the MCP-Protocol-Version header names protocol revision ${headerVersion}, but the request is missing the required per-request envelope key(s): ${missing.join(", ")}`, { envelope: { missing } }), true);
+  }
+  return {
+    kind: "legacy",
+    reason: "no-claim",
+    ...headerVersion !== void 0 && { requestedVersion: headerVersion }
+  };
+}
+function classifyNotificationBody(request2, body) {
+  const params = body.params;
+  const method = body.method;
+  const headerVersion = request2.protocolVersionHeader;
+  const headerNamesModern = headerVersion !== void 0 && isModernProtocolVersion(headerVersion);
+  if (hasEnvelopeClaim(params)) {
+    const claimedVersion = envelopeClaimVersion(params);
+    if (claimedVersion === void 0) {
+      const meta3 = requestMetaOf(params);
+      const claimIssue = (meta3 === void 0 ? [] : validateEnvelopeMeta(meta3)).find((issue2) => issue2.key === PROTOCOL_VERSION_META_KEY) ?? {
+        key: PROTOCOL_VERSION_META_KEY,
+        problem: "expected a protocol version string"
+      };
+      return rejection("envelope", "notification-envelope-invalid", 400, new ProtocolError(ProtocolErrorCode.InvalidParams, `Invalid _meta envelope for protocol revision 2026-07-28: ${claimIssue.key}: ${claimIssue.problem}`, { envelope: claimIssue }), true);
+    }
+    if (headerVersion !== void 0 && headerVersion !== claimedVersion) return crossCheckMismatch("notification-header-body-version-mismatch", headerVersion, `the notification envelope names protocol version ${claimedVersion} but the MCP-Protocol-Version header names ${headerVersion}`);
+    const classification = classificationForClaim(claimedVersion);
+    if (classification.era === "modern" && request2.mcpMethodHeader !== void 0 && request2.mcpMethodHeader !== method) return crossCheckMismatch("notification-method-header-mismatch", request2.mcpMethodHeader, `the notification body names method ${method} but the Mcp-Method header names ${request2.mcpMethodHeader}`);
+    return {
+      kind: "modern",
+      messageKind: "notification",
+      message: body,
+      classification
+    };
+  }
+  if (headerNamesModern) {
+    if (request2.mcpMethodHeader !== void 0 && request2.mcpMethodHeader !== method) return crossCheckMismatch("notification-method-header-mismatch", request2.mcpMethodHeader, `the notification body names method ${method} but the Mcp-Method header names ${request2.mcpMethodHeader}`);
+    return {
+      kind: "modern",
+      messageKind: "notification",
+      message: body,
+      classification: {
+        era: "modern",
+        revision: headerVersion
+      }
+    };
+  }
+  return {
+    kind: "legacy",
+    reason: "notification",
+    ...headerVersion !== void 0 && { requestedVersion: headerVersion }
+  };
+}
+function classifyInboundRequest(request2) {
+  request2 = {
+    ...request2,
+    ...request2.protocolVersionHeader !== void 0 && { protocolVersionHeader: stripHttpOws(request2.protocolVersionHeader) },
+    ...request2.mcpMethodHeader !== void 0 && { mcpMethodHeader: stripHttpOws(request2.mcpMethodHeader) },
+    ...request2.mcpNameHeader !== void 0 && { mcpNameHeader: stripHttpOws(request2.mcpNameHeader) }
+  };
+  if (request2.httpMethod.toUpperCase() !== "POST") return {
+    kind: "legacy",
+    reason: "http-method"
+  };
+  const body = request2.body;
+  if (Array.isArray(body)) return classifyBatch(body);
+  if (isJSONRPCResultResponse(body) || isJSONRPCErrorResponse(body)) return {
+    kind: "legacy",
+    reason: "response"
+  };
+  if (isPlainObject$2(body) && isJSONRPCRequest(body)) return classifyRequestBody(request2, body);
+  if (isPlainObject$2(body) && isJSONRPCNotification(body)) return classifyNotificationBody(request2, body);
+  return rejection("jsonrpc-shape", "invalid-json-rpc-body", 400, new ProtocolError(ProtocolErrorCode.InvalidRequest, "Bad Request: the request body is not a valid JSON-RPC message"), true);
 }
 function modernOnlyStrictRejection(route, supportedVersions) {
   switch (route.reason) {
@@ -279081,7 +279381,7 @@ function normalizeRawShapeSchema(schema) {
   if (!isStandardSchema(schema)) throw new TypeError("inputSchema/outputSchema/argsSchema must be a Standard Schema (e.g. z.object({...})) or a raw Zod shape ({ field: z.string() }).");
   return schema;
 }
-var BRANDS, OAuthErrorCode, OAuthError2, SdkErrorCode, SdkError, SdkHttpError, FIRST_MODERN_PROTOCOL_VERSION, SUPPORTED_MODERN_PROTOCOL_VERSIONS, TOOL_RESULT_FOREIGN_FAMILY_KEYS, memo$1, REF_REWRITE_DATA_POSITION_KEYS, REF_REWRITE_NAME_MAP_KEYS, requestMethodKeys$1, notificationMethodKeys$1, resultMethodKeys, maps$1, rev2025RequestMethods, rev2025NotificationMethods, NOT_IN_ERA$1, rev2025Codec, memo2, CACHEABLE_RESULT_METHODS, RESULT_CACHE_HINT_FALLBACK, ProtocolErrorCode, ProtocolError, ResourceNotFoundError, UrlElicitationRequiredError, UnsupportedProtocolVersionError, MissingRequiredClientCapabilityError, DEFAULT_CACHE_TTL_MS, DEFAULT_CACHE_SCOPE, EXTENDED_RESULT_TYPE_METHODS, INPUT_REQUEST_METHODS_2026, maps, requestMethodKeys, notificationMethodKeys, rev2026RequestMethods, rev2026NotificationMethods, NOT_IN_ERA, REQUIRED_ENVELOPE_KEYS, rev2026Codec, wireResultSchemasMemo, MODERN_WIRE_REVISION, ALL_CODECS, schemas_exports3, isJSONRPCRequest, isJSONRPCNotification, isJSONRPCResultResponse, isJSONRPCErrorResponse, isInputRequiredResult, isInitializeRequest, X_MCP_HEADER_KEY, RFC9110_TOKEN, PERMITTED_X_MCP_HEADER_TYPES, NON_REACHABLE_SUBSCHEMA_KEYWORDS, OBJECT_VALUED_SUBSCHEMA_KEYWORDS, HEADER_MISMATCH_ERROR_CODE, INBOUND_VALIDATION_LADDER, LADDER_ERROR_HTTP_STATUS, warnedZodFallback, JSON_SCHEMA_CONVERSION_TARGET, LOCAL_DEFINITION_REF, DATETIME_FRACTION_DIGITS, ANNOTATION_ONLY_JSON_SCHEMA_KEYWORDS, ROOT_KEYS, PROPERTY_KEYS_BY_TYPE, SUPPORTED_STRING_FORMATS2, inputRequired, REQUEST_STATE_ONLY_LEG_PACING_MS, SPEC_SCHEMA_KEYS, authSchemas, _specTypeSchemas, _isSpecType, specTypeSchemas, isSpecType, DEFAULT_REQUEST_TIMEOUT_MSEC, RESERVED_ENVELOPE_META_KEYS, RETRY_PARAMS_KEYS, NO_REQUEST_STATE, writeNegotiatedProtocolVersion, Protocol, require_content_type, import_content_type2, STDIO_DEFAULT_MAX_BUFFER_SIZE, ReadBuffer, TOOL_NAME_REGEX;
+var BRANDS, OAuthErrorCode, OAuthError2, SdkErrorCode, SdkError, SdkHttpError, REQUIRED_CLIENT_CAPABILITIES_BY_METHOD, FIRST_MODERN_PROTOCOL_VERSION, SUPPORTED_MODERN_PROTOCOL_VERSIONS, TOOL_RESULT_FOREIGN_FAMILY_KEYS, memo$1, REF_REWRITE_DATA_POSITION_KEYS, REF_REWRITE_NAME_MAP_KEYS, requestMethodKeys$1, notificationMethodKeys$1, resultMethodKeys, maps$1, rev2025RequestMethods, rev2025NotificationMethods, NOT_IN_ERA$1, rev2025Codec, memo2, CACHEABLE_RESULT_METHODS, RESULT_CACHE_HINT_FALLBACK, ProtocolErrorCode, ProtocolError, ResourceNotFoundError, UrlElicitationRequiredError, UnsupportedProtocolVersionError, MissingRequiredClientCapabilityError, DEFAULT_CACHE_TTL_MS, DEFAULT_CACHE_SCOPE, EXTENDED_RESULT_TYPE_METHODS, INPUT_REQUEST_METHODS_2026, maps, requestMethodKeys, notificationMethodKeys, rev2026RequestMethods, rev2026NotificationMethods, NOT_IN_ERA, REQUIRED_ENVELOPE_KEYS, rev2026Codec, wireResultSchemasMemo, MODERN_WIRE_REVISION, ALL_CODECS, schemas_exports3, isJSONRPCRequest, isJSONRPCNotification, isJSONRPCResultResponse, isJSONRPCErrorResponse, isInputRequiredResult, isInitializeRequest, MCP_PARAM_HEADER_PREFIX, X_MCP_HEADER_KEY, RFC9110_TOKEN, PERMITTED_X_MCP_HEADER_TYPES, NON_REACHABLE_SUBSCHEMA_KEYWORDS, OBJECT_VALUED_SUBSCHEMA_KEYWORDS, BASE64_SENTINEL_PREFIX, BASE64_SENTINEL_SUFFIX, BASE64_CANONICAL, CANONICAL_DECIMAL, HEADER_MISMATCH_ERROR_CODE, INBOUND_VALIDATION_LADDER, LADDER_ERROR_HTTP_STATUS, MCP_NAME_HEADER_SOURCE, warnedZodFallback, JSON_SCHEMA_CONVERSION_TARGET, LOCAL_DEFINITION_REF, DATETIME_FRACTION_DIGITS, ANNOTATION_ONLY_JSON_SCHEMA_KEYWORDS, ROOT_KEYS, PROPERTY_KEYS_BY_TYPE, SUPPORTED_STRING_FORMATS2, inputRequired, REQUEST_STATE_ONLY_LEG_PACING_MS, SPEC_SCHEMA_KEYS, authSchemas, _specTypeSchemas, _isSpecType, specTypeSchemas, isSpecType, DEFAULT_REQUEST_TIMEOUT_MSEC, RESERVED_ENVELOPE_META_KEYS, RETRY_PARAMS_KEYS, NO_REQUEST_STATE, writeNegotiatedProtocolVersion, Protocol, require_content_type, import_content_type2, STDIO_DEFAULT_MAX_BUFFER_SIZE, ReadBuffer, TOOL_NAME_REGEX;
 var init_src_DdvbAHrR = __esm({
   "node_modules/.pnpm/@modelcontextprotocol+server@2.4.0/node_modules/@modelcontextprotocol/server/dist/src-DdvbAHrR.mjs"() {
     init_chunk_vYduTEsO();
@@ -279235,6 +279535,7 @@ var init_src_DdvbAHrR = __esm({
         return this.data.statusText;
       }
     };
+    REQUIRED_CLIENT_CAPABILITIES_BY_METHOD = {};
     FIRST_MODERN_PROTOCOL_VERSION = "2026-07-28";
     SUPPORTED_MODERN_PROTOCOL_VERSIONS = [FIRST_MODERN_PROTOCOL_VERSION];
     TOOL_RESULT_FOREIGN_FAMILY_KEYS = [
@@ -279833,6 +280134,7 @@ var init_src_DdvbAHrR = __esm({
     isJSONRPCErrorResponse = (value) => JSONRPCErrorResponseSchema.safeParse(value).success;
     isInputRequiredResult = (value) => typeof value === "object" && value !== null && !Array.isArray(value) && value.resultType === "input_required";
     isInitializeRequest = (value) => InitializeRequestSchema.safeParse(value).success;
+    MCP_PARAM_HEADER_PREFIX = "Mcp-Param-";
     X_MCP_HEADER_KEY = "x-mcp-header";
     RFC9110_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
     PERMITTED_X_MCP_HEADER_TYPES = /* @__PURE__ */ new Set([
@@ -279866,6 +280168,10 @@ var init_src_DdvbAHrR = __esm({
       "$defs",
       "definitions"
     ]);
+    BASE64_SENTINEL_PREFIX = "=?base64?";
+    BASE64_SENTINEL_SUFFIX = "?=";
+    BASE64_CANONICAL = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+    CANONICAL_DECIMAL = /^-?\d+(\.\d+)?$/;
     HEADER_MISMATCH_ERROR_CODE = -32020;
     INBOUND_VALIDATION_LADDER = [
       {
@@ -279952,6 +280258,14 @@ var init_src_DdvbAHrR = __esm({
       [ProtocolErrorCode.UnsupportedProtocolVersion]: 400,
       [ProtocolErrorCode.MissingRequiredClientCapability]: 400,
       [HEADER_MISMATCH_ERROR_CODE]: 400
+    };
+    MCP_NAME_HEADER_SOURCE = {
+      "tools/call": "name",
+      "prompts/get": "name",
+      "resources/read": "uri",
+      "tasks/get": "taskId",
+      "tasks/update": "taskId",
+      "tasks/cancel": "taskId"
     };
     warnedZodFallback = false;
     JSON_SCHEMA_CONVERSION_TARGET = "draft-2020-12";
@@ -288536,6 +288850,9 @@ function legacyShimFailure(method, message2) {
   };
   throw new ProtocolError(ProtocolErrorCode.InternalError, message2);
 }
+function seedClientIdentityFromEnvelope(server2, identity) {
+  writeClientIdentity(server2, identity);
+}
 function installModernOnlyHandlers(server2, servedModernVersions) {
   installDiscoverHandler(server2, servedModernVersions);
 }
@@ -290147,6 +290464,17 @@ data: ${JSON.stringify(message2)}
 });
 
 // node_modules/.pnpm/@modelcontextprotocol+server@2.4.0/node_modules/@modelcontextprotocol/server/dist/listenRouter-Bartj63y.mjs
+function createServerNotifier(bus) {
+  return {
+    toolsChanged: () => bus.publish({ kind: "tools_list_changed" }),
+    promptsChanged: () => bus.publish({ kind: "prompts_list_changed" }),
+    resourcesChanged: () => bus.publish({ kind: "resources_list_changed" }),
+    resourceUpdated: (uri) => bus.publish({
+      kind: "resource_updated",
+      uri
+    })
+  };
+}
 function listenFilterAccepts(filter, event) {
   switch (event.kind) {
     case "tools_list_changed":
@@ -290168,6 +290496,43 @@ function honoredSubset(requested, capabilities) {
   if (requested.resourceSubscriptions !== void 0 && requested.resourceSubscriptions.length > 0 && allow(capabilities?.resources?.subscribe)) honored.resourceSubscriptions = [...requested.resourceSubscriptions];
   return honored;
 }
+function serverEventToNotification(event) {
+  switch (event.kind) {
+    case "tools_list_changed":
+      return {
+        method: "notifications/tools/list_changed",
+        ...event.params !== void 0 && { params: event.params }
+      };
+    case "prompts_list_changed":
+      return {
+        method: "notifications/prompts/list_changed",
+        ...event.params !== void 0 && { params: event.params }
+      };
+    case "resources_list_changed":
+      return {
+        method: "notifications/resources/list_changed",
+        ...event.params !== void 0 && { params: event.params }
+      };
+    case "resource_updated":
+      return {
+        method: "notifications/resources/updated",
+        params: {
+          ...event.params,
+          uri: event.uri
+        }
+      };
+  }
+}
+function jsonRpcError(id, code, message2) {
+  return Response.json({
+    jsonrpc: "2.0",
+    error: {
+      code,
+      message: message2
+    },
+    id
+  }, { status: 200 });
+}
 function stampSubscriptionId(notification, subscriptionId) {
   return {
     method: notification.method,
@@ -290184,6 +290549,124 @@ function parseListenFilter(message2) {
   const outcome = codecForVersion(MODERN_WIRE_REVISION).validateRequest("subscriptions/listen", message2);
   return outcome.ok ? outcome.value.params?.notifications : void 0;
 }
+function createListenRouter(options) {
+  const { bus, onerror } = options;
+  const maxSubscriptions = options.maxSubscriptions ?? DEFAULT_MAX_SUBSCRIPTIONS;
+  const keepAliveMs = options.keepAliveMs ?? DEFAULT_SSE_KEEP_ALIVE_MS;
+  const open2 = /* @__PURE__ */ new Set();
+  function serve(message2, signal, capabilities, serverInfo) {
+    if (open2.size >= maxSubscriptions) {
+      onerror?.(/* @__PURE__ */ new Error(`subscriptions/listen refused: subscription limit reached (${maxSubscriptions})`));
+      return jsonRpcError(message2.id, -32603, "Subscription limit reached");
+    }
+    const filter = parseListenFilter(message2);
+    if (filter === void 0) return jsonRpcError(message2.id, -32602, "Invalid params: 'notifications' is required and must be a valid SubscriptionFilter");
+    const honored = honoredSubset(filter, capabilities);
+    const subscriptionId = message2.id;
+    const encoder2 = new TextEncoder();
+    let controller;
+    let closed = false;
+    let unsubscribe;
+    let keepAliveTimer;
+    let abortCleanup;
+    const writeFrame = (frame) => {
+      if (closed) return;
+      try {
+        controller.enqueue(encoder2.encode(frame));
+      } catch (error62) {
+        onerror?.(error62 instanceof Error ? error62 : new Error(String(error62)));
+      }
+    };
+    const writeNotification = (method, params) => {
+      writeFrame(`event: message
+data: ${JSON.stringify({
+        jsonrpc: "2.0",
+        method,
+        params
+      })}
+
+`);
+    };
+    const teardown = (graceful) => {
+      if (closed) return;
+      if (graceful) writeFrame(`event: message
+data: ${JSON.stringify({
+        jsonrpc: "2.0",
+        id: subscriptionId,
+        result: {
+          resultType: "complete",
+          _meta: {
+            [SUBSCRIPTION_ID_META_KEY]: subscriptionId,
+            [SERVER_INFO_META_KEY]: serverInfo
+          }
+        }
+      })}
+
+`);
+      closed = true;
+      try {
+        unsubscribe?.();
+      } catch (error62) {
+        onerror?.(error62 instanceof Error ? error62 : new Error(String(error62)));
+      }
+      if (keepAliveTimer !== void 0) clearInterval(keepAliveTimer);
+      abortCleanup?.();
+      open2.delete(teardown);
+      try {
+        controller.close();
+      } catch {
+      }
+    };
+    const readable = new ReadableStream({
+      start(streamController) {
+        controller = streamController;
+        const ack = stampSubscriptionId({
+          method: "notifications/subscriptions/acknowledged",
+          params: { notifications: honored }
+        }, subscriptionId);
+        writeNotification(ack.method, ack.params);
+        if (Object.keys(honored).length === 0) {
+          teardown(true);
+          return;
+        }
+        unsubscribe = bus.subscribe((event) => {
+          if (closed || !listenFilterAccepts(honored, event)) return;
+          const note = stampSubscriptionId(serverEventToNotification(event), subscriptionId);
+          writeNotification(note.method, note.params);
+        });
+        keepAliveTimer = armSseKeepAlive(keepAliveMs, () => writeFrame(": keepalive\n\n"));
+        open2.add(teardown);
+      },
+      cancel() {
+        teardown(false);
+      }
+    });
+    if (signal !== void 0) if (signal.aborted) teardown(false);
+    else {
+      const onAbort = () => teardown(false);
+      signal.addEventListener("abort", onAbort, { once: true });
+      abortCleanup = () => signal.removeEventListener("abort", onAbort);
+    }
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no"
+      }
+    });
+  }
+  return {
+    serve,
+    closeAll() {
+      for (const teardown of open2) teardown(true);
+    },
+    get openCount() {
+      return open2.size;
+    }
+  };
+}
 function notificationToServerEvent(method, uri) {
   switch (method) {
     case "notifications/tools/list_changed":
@@ -290199,11 +290682,41 @@ function notificationToServerEvent(method, uri) {
       };
   }
 }
-var DEFAULT_MAX_SUBSCRIPTIONS, CHANGE_NOTIFICATION_METHODS, StdioListenRouter;
+var InMemoryServerEventBus, DEFAULT_MAX_SUBSCRIPTIONS, CHANGE_NOTIFICATION_METHODS, StdioListenRouter;
 var init_listenRouter_Bartj63y = __esm({
   "node_modules/.pnpm/@modelcontextprotocol+server@2.4.0/node_modules/@modelcontextprotocol/server/dist/listenRouter-Bartj63y.mjs"() {
     init_mcp_oHn3ureC();
     init_src_DdvbAHrR();
+    InMemoryServerEventBus = class {
+      _listeners = /* @__PURE__ */ new Set();
+      /**
+      * @param onerror - Optional callback for errors thrown by listeners
+      *   during dispatch.
+      */
+      constructor(onerror) {
+        this.onerror = onerror;
+      }
+      publish(event) {
+        for (const listener of this._listeners) try {
+          listener(event);
+        } catch (error62) {
+          this.onerror?.(error62 instanceof Error ? error62 : new Error(String(error62)));
+        }
+      }
+      subscribe(listener) {
+        this._listeners.add(listener);
+        let live = true;
+        return () => {
+          if (!live) return;
+          live = false;
+          this._listeners.delete(listener);
+        };
+      }
+      /** The number of currently registered listeners (test/introspection only — the routers track capacity via their own open-subscription set). */
+      get listenerCount() {
+        return this._listeners.size;
+      }
+    };
     DEFAULT_MAX_SUBSCRIPTIONS = 1024;
     CHANGE_NOTIFICATION_METHODS = /* @__PURE__ */ new Set([
       "notifications/tools/list_changed",
@@ -290340,6 +290853,18 @@ var init_listenRouter_Bartj63y = __esm({
 });
 
 // node_modules/.pnpm/@modelcontextprotocol+server@2.4.0/node_modules/@modelcontextprotocol/server/dist/index.mjs
+async function invoke(server2, message2, ctx) {
+  const transport = new PerRequestHTTPServerTransport({
+    classification: ctx.classification,
+    ...ctx.responseMode !== void 0 && { responseMode: ctx.responseMode },
+    ...ctx.keepAliveMs !== void 0 && { keepAliveMs: ctx.keepAliveMs }
+  });
+  await server2.connect(transport);
+  return transport.handleMessage(message2, {
+    ...ctx.request !== void 0 && { request: ctx.request },
+    ...ctx.authInfo !== void 0 && { authInfo: ctx.authInfo }
+  });
+}
 function requestBodyTooLargeMessage(maxBytes) {
   return `Payload Too Large: Request body must not exceed ${maxBytes} bytes`;
 }
@@ -290372,6 +290897,349 @@ async function readRequestBody(request2, maxBytes = DEFAULT_MAX_REQUEST_BODY_SIZ
   return {
     tooLarge: false,
     text: text2 + decoder2.decode()
+  };
+}
+function echoableRequestId(body) {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
+  const { method, id } = body;
+  if (typeof method !== "string") return null;
+  return typeof id === "string" || typeof id === "number" ? id : null;
+}
+function jsonRpcErrorResponse(httpStatus, code, message2, data, id = null) {
+  return Response.json({
+    jsonrpc: "2.0",
+    error: {
+      code,
+      message: message2,
+      ...data !== void 0 && { data }
+    },
+    id
+  }, {
+    status: httpStatus,
+    ...httpStatus === 405 && { headers: { Allow: "POST" } }
+  });
+}
+function rejectionResponse(rejection2, id = null) {
+  return jsonRpcErrorResponse(rejection2.httpStatus, rejection2.code, rejection2.message, rejection2.data, id);
+}
+function toError(value) {
+  return value instanceof Error ? value : new Error(String(value));
+}
+function internalServerErrorResponse(id = null) {
+  return jsonRpcErrorResponse(500, -32603, "Internal server error", void 0, id);
+}
+function assertNotServing(server2) {
+  if (server2.transport !== void 0) throw new Error("The factory returned an instance that is still serving another request. Return a new instance for each request.");
+}
+function createLegacyStatelessFallback(factory, onerror, keepAliveMs, maxRequestBodySize) {
+  return async (request2, options) => {
+    if (request2.method.toUpperCase() !== "POST") return jsonRpcErrorResponse(405, -32e3, "Method not allowed.");
+    try {
+      const product = await factory({
+        era: "legacy",
+        ...options?.authInfo !== void 0 && { authInfo: options.authInfo },
+        requestInfo: request2
+      });
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: void 0,
+        ...keepAliveMs !== void 0 && { keepAliveMs },
+        ...maxRequestBodySize !== void 0 && { maxRequestBodySize }
+      });
+      await product.connect(transport);
+      const teardown = () => {
+        transport.close().catch(() => {
+        });
+        product.close().catch(() => {
+        });
+      };
+      request2.signal?.addEventListener("abort", teardown, { once: true });
+      const response = await transport.handleRequest(request2, {
+        ...options?.authInfo !== void 0 && { authInfo: options.authInfo },
+        ...options?.parsedBody !== void 0 && { parsedBody: options.parsedBody }
+      });
+      if (response.body === null || mediaTypeEssence(response.headers.get("content-type")) !== "text/event-stream") {
+        teardown();
+        return response;
+      }
+      const reader = response.body.getReader();
+      let toreDown = false;
+      const completeExchange = () => {
+        if (!toreDown) {
+          toreDown = true;
+          teardown();
+        }
+      };
+      const monitoredBody = new ReadableStream({
+        pull: async (controller) => {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              completeExchange();
+              controller.close();
+              return;
+            }
+            if (value !== void 0) controller.enqueue(value);
+          } catch (error62) {
+            completeExchange();
+            controller.error(error62);
+          }
+        },
+        cancel: (reason) => {
+          completeExchange();
+          return reader.cancel(reason).catch(() => {
+          });
+        }
+      });
+      return new Response(monitoredBody, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
+    } catch (error62) {
+      try {
+        onerror?.(toError(error62));
+      } catch {
+      }
+      return internalServerErrorResponse(echoableRequestId(options?.parsedBody));
+    }
+  };
+}
+function standardHeadersOf(request2) {
+  return {
+    protocolVersionHeader: request2.headers.get("mcp-protocol-version") ?? void 0,
+    mcpMethodHeader: request2.headers.get("mcp-method") ?? void 0,
+    mcpNameHeader: request2.headers.get("mcp-name") ?? void 0
+  };
+}
+async function classifyEntryRequest(request2, providedParsedBody, needsForward = true, maxRequestBodySize = DEFAULT_MAX_REQUEST_BODY_SIZE) {
+  const httpMethod = request2.method.toUpperCase();
+  let body;
+  let parsedBody = providedParsedBody;
+  let forwardRequest = request2;
+  let unparseable = false;
+  if (httpMethod === "POST") {
+    if (parsedBody === void 0) {
+      if (needsForward) forwardRequest = request2.clone();
+      let bodyText;
+      try {
+        const read2 = await readRequestBody(request2, maxRequestBodySize);
+        if (read2.tooLarge) return { step: "body-too-large" };
+        bodyText = read2.text;
+      } catch {
+        return { step: "unreadable-body" };
+      }
+      try {
+        body = bodyText.length === 0 ? void 0 : JSON.parse(bodyText);
+      } catch {
+        unparseable = true;
+      }
+      if (!unparseable && body !== void 0) parsedBody = body;
+    } else body = parsedBody;
+    if (unparseable || body === void 0) return {
+      step: "no-json-body",
+      forwardRequest
+    };
+  }
+  return {
+    step: "classified",
+    outcome: classifyInboundRequest({
+      httpMethod,
+      ...standardHeadersOf(request2),
+      ...body !== void 0 && { body }
+    }),
+    body,
+    parsedBody,
+    forwardRequest
+  };
+}
+function createMcpHandler(factory, options = {}) {
+  const { legacy, onerror, responseMode } = options;
+  const maxRequestBodySize = resolveMaxRequestBodySize(options.maxRequestBodySize);
+  if (typeof legacy === "function") throw new TypeError("The 'legacy' option only accepts 'stateless' or 'reject', not a handler function. To serve 2025-era traffic with your own handler, route in user land with the exported isLegacyRequest(request) predicate in front of a strict (legacy: 'reject') handler.");
+  const inflight = /* @__PURE__ */ new Set();
+  let closed = false;
+  const reportError = (error62) => {
+    try {
+      onerror?.(error62);
+    } catch {
+    }
+  };
+  const bus = options.bus ?? new InMemoryServerEventBus(reportError);
+  const notify = createServerNotifier(bus);
+  const listenRouter = createListenRouter({
+    bus,
+    maxSubscriptions: options.maxSubscriptions ?? DEFAULT_MAX_SUBSCRIPTIONS,
+    keepAliveMs: options.keepAliveMs ?? DEFAULT_SSE_KEEP_ALIVE_MS,
+    onerror: reportError
+  });
+  if (responseMode === "json") console.warn("responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.");
+  const legacyHandler = legacy === "reject" ? void 0 : createLegacyStatelessFallback(factory, reportError, options.keepAliveMs, maxRequestBodySize);
+  async function serveModern(route, request2, authInfo) {
+    const claimedRevision = route.classification.revision;
+    if (claimedRevision === void 0 || !SUPPORTED_MODERN_PROTOCOL_VERSIONS.includes(claimedRevision)) {
+      const error62 = new UnsupportedProtocolVersionError({
+        supported: [...SUPPORTED_MODERN_PROTOCOL_VERSIONS],
+        requested: claimedRevision ?? "unknown"
+      });
+      reportError(error62);
+      return jsonRpcErrorResponse(400, error62.code, error62.message, error62.data, echoableRequestId(route.message));
+    }
+    const stdHeaderRejection = validateStandardRequestHeaders({
+      httpMethod: request2.method,
+      ...standardHeadersOf(request2)
+    }, route);
+    if (stdHeaderRejection !== void 0) {
+      reportError(/* @__PURE__ */ new Error(`Rejected inbound request (${stdHeaderRejection.cell}): ${stdHeaderRejection.message}`));
+      return rejectionResponse(stdHeaderRejection, echoableRequestId(route.message));
+    }
+    const meta3 = route.messageKind === "request" ? requestMetaOf(route.message.params) : void 0;
+    const declaredClientCapabilities = meta3?.[CLIENT_CAPABILITIES_META_KEY];
+    if (route.messageKind === "request") {
+      const required2 = requiredClientCapabilitiesForRequest(route.message.method);
+      if (required2 !== void 0) {
+        const missing = missingClientCapabilities(required2, declaredClientCapabilities);
+        if (missing !== void 0) {
+          const error62 = new MissingRequiredClientCapabilityError({ requiredCapabilities: missing });
+          reportError(error62);
+          return jsonRpcErrorResponse(httpStatusForErrorCode(error62.code, "ladder"), error62.code, error62.message, error62.data, route.message.id);
+        }
+      }
+    }
+    const product = await factory({
+      era: "modern",
+      ...authInfo !== void 0 && { authInfo },
+      requestInfo: request2
+    });
+    const server2 = product instanceof McpServer ? product.server : product;
+    assertNotServing(server2);
+    if (route.messageKind === "request" && route.message.method === "subscriptions/listen") {
+      const capabilities = server2.getCapabilities();
+      const serverInfo = serverIdentityOf(server2);
+      product.close().catch(reportError);
+      return listenRouter.serve(route.message, request2.signal, capabilities, serverInfo);
+    }
+    if (route.messageKind === "request" && route.message.method === "tools/call" && product instanceof McpServer) {
+      const callParams = route.message.params;
+      const toolName2 = typeof callParams?.name === "string" ? callParams.name : void 0;
+      const inputSchema = toolName2 === void 0 ? void 0 : product.toolInputSchemaJson(toolName2);
+      if (inputSchema !== void 0) {
+        const scan = scanXMcpHeaderDeclarations(inputSchema);
+        if (scan.declarations !== void 0 && scan.declarations.length > 0) {
+          const rejection2 = validateMcpParamHeaders(scan.declarations, callParams?.arguments, request2.headers);
+          if (rejection2 !== void 0) {
+            product.close().catch(reportError);
+            reportError(/* @__PURE__ */ new Error(`Rejected inbound request (${rejection2.cell}): ${rejection2.message}`));
+            return rejectionResponse(rejection2, route.message.id);
+          }
+        }
+      }
+    }
+    if (route.messageKind === "request" && product instanceof McpServer) try {
+      const challenge = await findScopeChallenge([route.message], authInfo, (context2) => product.resolveScopeChallenge(context2));
+      if (challenge !== void 0) {
+        product.close().catch(reportError);
+        return createScopeChallengeResponse(challenge, scopeChallengeResourceMetadataUrl(authInfo));
+      }
+    } catch (error62) {
+      product.close().catch(reportError);
+      reportError(toError(error62));
+      return internalServerErrorResponse(route.message.id);
+    }
+    assertNotServing(server2);
+    setNegotiatedProtocolVersion(server2, claimedRevision);
+    installModernOnlyHandlers(server2, SUPPORTED_MODERN_PROTOCOL_VERSIONS);
+    if (meta3 !== void 0) seedClientIdentityFromEnvelope(server2, {
+      clientInfo: meta3[CLIENT_INFO_META_KEY],
+      clientCapabilities: declaredClientCapabilities
+    });
+    const previousOnClose = server2.onclose;
+    inflight.add(server2);
+    const onExchangeClose = () => {
+      inflight.delete(server2);
+      if (server2.onclose === onExchangeClose) server2.onclose = previousOnClose;
+      previousOnClose?.();
+    };
+    server2.onclose = onExchangeClose;
+    try {
+      const response = await invoke(product, route.message, {
+        classification: route.classification,
+        request: request2,
+        ...authInfo !== void 0 && { authInfo },
+        ...responseMode !== void 0 && { responseMode },
+        ...options.keepAliveMs !== void 0 && { keepAliveMs: options.keepAliveMs }
+      });
+      if (route.messageKind === "notification") queueMicrotask(() => void server2.close().catch(() => {
+      }));
+      return response;
+    } catch (error62) {
+      if (error62 instanceof SdkError && error62.code === SdkErrorCode.ConnectionClosed) return new Response(null, { status: 499 });
+      await server2.close().catch(() => {
+      });
+      inflight.delete(server2);
+      reportError(toError(error62));
+      return internalServerErrorResponse(echoableRequestId(route.message));
+    }
+  }
+  async function serveLegacyRoute(route, forwardRequest, authInfo, parsedBody) {
+    if (legacyHandler !== void 0) return legacyHandler(forwardRequest, {
+      ...authInfo !== void 0 && { authInfo },
+      ...parsedBody !== void 0 && { parsedBody }
+    });
+    const strict = modernOnlyStrictRejection(route, SUPPORTED_MODERN_PROTOCOL_VERSIONS);
+    if (strict === void 0) return new Response(null, { status: 202 });
+    reportError(/* @__PURE__ */ new Error(`Rejected 2025-era request on a modern-only endpoint (${strict.cell}): ${strict.message}`));
+    return rejectionResponse(strict, echoableRequestId(parsedBody));
+  }
+  async function handle(request2, requestOptions) {
+    const authInfo = requestOptions?.authInfo;
+    if (request2.method.toUpperCase() === "POST" && !isJsonContentType(request2.headers.get("content-type"))) {
+      reportError(/* @__PURE__ */ new Error("Unsupported Media Type: Content-Type must be application/json"));
+      return jsonRpcErrorResponse(415, -32e3, "Unsupported Media Type: Content-Type must be application/json");
+    }
+    const classified = await classifyEntryRequest(request2, requestOptions?.parsedBody, true, maxRequestBodySize);
+    if (classified.step === "unreadable-body") return jsonRpcErrorResponse(400, -32700, "Parse error: the request body could not be read");
+    if (classified.step === "body-too-large") return jsonRpcErrorResponse(413, -32e3, requestBodyTooLargeMessage(maxRequestBodySize));
+    if (classified.step === "no-json-body") {
+      if (legacyHandler !== void 0) return legacyHandler(classified.forwardRequest, { ...authInfo !== void 0 && { authInfo } });
+      return jsonRpcErrorResponse(400, -32700, "Parse error: the request body is not valid JSON");
+    }
+    const { outcome, body, parsedBody, forwardRequest } = classified;
+    try {
+      switch (outcome.kind) {
+        case "reject":
+          reportError(/* @__PURE__ */ new Error(`Rejected inbound request (${outcome.cell}): ${outcome.message}`));
+          return rejectionResponse(outcome, echoableRequestId(body));
+        case "modern":
+          return await serveModern(outcome, request2, authInfo);
+        case "legacy":
+          return await serveLegacyRoute(outcome, forwardRequest, authInfo, parsedBody);
+      }
+    } catch (error62) {
+      reportError(toError(error62));
+      return internalServerErrorResponse(echoableRequestId(body));
+    }
+  }
+  const fetchFace = async (request2, requestOptions) => {
+    if (closed) throw new Error("This MCP handler has been closed");
+    try {
+      return await handle(request2, requestOptions);
+    } catch (error62) {
+      reportError(toError(error62));
+      return internalServerErrorResponse(echoableRequestId(requestOptions?.parsedBody));
+    }
+  };
+  return {
+    fetch: fetchFace,
+    notify,
+    bus,
+    close: async () => {
+      closed = true;
+      listenRouter.closeAll();
+      const closing = [...inflight].map((server2) => server2.close().catch(() => {
+      }));
+      inflight.clear();
+      await Promise.all(closing);
+    }
   };
 }
 function validateHostHeader(hostHeader, allowedHostnames) {
@@ -292395,7 +293263,141 @@ function originValidation(allowedOriginHostnames) {
 function localhostOriginValidation() {
   return originValidation(localhostAllowedOrigins());
 }
-var NodeStreamableHTTPServerTransport;
+function resolveMaxRequestBodySize2(value) {
+  if (value === void 0) return DEFAULT_MAX_REQUEST_BODY_SIZE;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new RangeError(`maxRequestBodySize must be a positive number of bytes, got ${String(value)}`);
+  return value;
+}
+function toNodeHandler(handler, opts) {
+  const maxRequestBodySize = resolveMaxRequestBodySize2(opts?.maxRequestBodySize);
+  return async (req, res, parsedBody) => {
+    if (typeof parsedBody === "function") parsedBody = void 0;
+    let finished = false;
+    const abort = new AbortController();
+    res.on("close", () => {
+      if (!finished) abort.abort();
+    });
+    if (res.destroyed === true) abort.abort();
+    let response;
+    try {
+      const request2 = await toWebRequest(req, parsedBody, {
+        signal: abort.signal,
+        maxRequestBodySize
+      });
+      response = await handler.fetch(request2, {
+        ...req.auth !== void 0 && { authInfo: req.auth },
+        ...parsedBody !== void 0 && { parsedBody }
+      });
+    } catch (error62) {
+      if (error62 instanceof RequestBodyTooLargeError) response = Response.json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32e3,
+          message: error62.message
+        },
+        id: null
+      }, {
+        status: 413,
+        headers: { connection: "close" }
+      });
+      else {
+        try {
+          opts?.onerror?.(error62 instanceof Error ? error62 : new Error(String(error62)));
+        } catch {
+        }
+        response = internalServerErrorResponse2(echoableRequestId2(parsedBody));
+      }
+    }
+    const headers2 = {};
+    for (const [name2, value] of response.headers) headers2[name2] = value;
+    res.writeHead(response.status, headers2);
+    if (response.body === null) {
+      finished = true;
+      res.end();
+      return;
+    }
+    let drainResolve;
+    const releaseDrainWait = () => {
+      drainResolve?.();
+      drainResolve = void 0;
+    };
+    res.on("drain", releaseDrainWait);
+    const closed = new Promise((resolve8) => {
+      abort.signal.addEventListener("abort", () => resolve8(), { once: true });
+    });
+    try {
+      for await (const chunk of response.body) {
+        if (abort.signal.aborted) break;
+        if (res.write(chunk) === false) await Promise.race([new Promise((resolve8) => {
+          drainResolve = resolve8;
+        }), closed]);
+      }
+    } catch {
+    }
+    finished = true;
+    res.end();
+  };
+}
+function singleHeaderValue(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+async function toWebRequest(req, parsedBody, options) {
+  const maxRequestBodySize = resolveMaxRequestBodySize2(options?.maxRequestBodySize);
+  const method = (req.method ?? "GET").toUpperCase();
+  const url2 = `http://${singleHeaderValue(req.headers["host"]) ?? singleHeaderValue(req.headers[":authority"]) ?? "localhost"}${req.url ?? "/"}`;
+  const headers2 = new Headers();
+  for (const [name2, value] of Object.entries(req.headers)) {
+    if (value === void 0 || name2.startsWith(":")) continue;
+    if (Array.isArray(value)) for (const item of value) headers2.append(name2, item);
+    else headers2.set(name2, value);
+  }
+  let body;
+  if (method !== "GET" && method !== "HEAD") if (parsedBody === void 0) {
+    if (Number(singleHeaderValue(req.headers["content-length"])) > maxRequestBodySize) throw new RequestBodyTooLargeError(maxRequestBodySize);
+    const decoder2 = new TextDecoder();
+    let collected = "";
+    let received = 0;
+    for await (const chunk of req) {
+      received += typeof chunk === "string" ? new TextEncoder().encode(chunk).byteLength : chunk.byteLength;
+      if (received > maxRequestBodySize) throw new RequestBodyTooLargeError(maxRequestBodySize);
+      collected += typeof chunk === "string" ? chunk : decoder2.decode(chunk, { stream: true });
+    }
+    collected += decoder2.decode();
+    if (collected.length > 0) body = collected;
+  } else {
+    const serialized = JSON.stringify(parsedBody);
+    headers2.delete("content-encoding");
+    headers2.delete("transfer-encoding");
+    if (serialized === void 0) headers2.delete("content-length");
+    else {
+      body = serialized;
+      headers2.set("content-length", String(new TextEncoder().encode(serialized).byteLength));
+    }
+  }
+  return new Request(url2, {
+    method,
+    headers: headers2,
+    ...options?.signal !== void 0 && { signal: options.signal },
+    ...body !== void 0 && { body }
+  });
+}
+function echoableRequestId2(body) {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
+  const { method, id } = body;
+  if (typeof method !== "string") return null;
+  return typeof id === "string" || typeof id === "number" ? id : null;
+}
+function internalServerErrorResponse2(id) {
+  return Response.json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32603,
+      message: "Internal server error"
+    },
+    id
+  }, { status: 500 });
+}
+var NodeStreamableHTTPServerTransport, RequestBodyTooLargeError;
 var init_dist4 = __esm({
   "node_modules/.pnpm/@modelcontextprotocol+node@2.1.2_@modelcontextprotocol+server@2.4.0/node_modules/@modelcontextprotocol/node/dist/index.mjs"() {
     init_dist2();
@@ -292515,6 +293517,13 @@ var init_dist4 = __esm({
         this._webStandardTransport.closeStandaloneSSEStream();
       }
     };
+    RequestBodyTooLargeError = class extends Error {
+      status = 413;
+      constructor(maxBytes) {
+        super(`Payload Too Large: Request body must not exceed ${maxBytes} bytes`);
+        this.name = "RequestBodyTooLargeError";
+      }
+    };
   }
 });
 
@@ -292574,7 +293583,7 @@ function serveStdio(factory, options = {}) {
       message: message2,
       ...data !== void 0 && { data }
     }
-  }).catch((error62) => reportError(toError(error62)));
+  }).catch((error62) => reportError(toError2(error62)));
   const listenRouter = new StdioListenRouter(options.maxSubscriptions ?? DEFAULT_MAX_SUBSCRIPTIONS);
   const modernOutboundIntercept = (message2) => {
     if (!isJSONRPCNotification(message2)) return void 0;
@@ -292583,7 +293592,7 @@ function serveStdio(factory, options = {}) {
     for (const stamped of routed) wire.send({
       jsonrpc: "2.0",
       ...stamped
-    }).catch((error62) => reportError(toError(error62)));
+    }).catch((error62) => reportError(toError2(error62)));
     return "handled";
   };
   const tryServeListen = async (message2) => {
@@ -292622,7 +293631,7 @@ function serveStdio(factory, options = {}) {
         jsonrpc: "2.0",
         method: reply.method,
         params: reply.params
-      }).catch((error62) => reportError(toError(error62)));
+      }).catch((error62) => reportError(toError2(error62)));
       return true;
     }
     if (isJSONRPCNotification(message2) && message2.method === "notifications/cancelled") {
@@ -292660,14 +293669,14 @@ function serveStdio(factory, options = {}) {
       channel
     };
   };
-  const disposeLateInstance = (instance) => instance.product.close().catch((error62) => reportError(toError(error62)));
+  const disposeLateInstance = (instance) => instance.product.close().catch((error62) => reportError(toError2(error62)));
   const discardProbeInstance = async (instance) => {
     discarding = instance.channel;
     try {
       if (!await instance.channel.whenRequestsAnswered(DISCARD_ANSWER_TIMEOUT_MS)) reportError(/* @__PURE__ */ new Error(`Discarded the probe instance with requests still unanswered after ${DISCARD_ANSWER_TIMEOUT_MS}ms; continuing with the fallback`));
       await instance.product.close();
     } catch (error62) {
-      reportError(toError(error62));
+      reportError(toError2(error62));
     } finally {
       discarding = void 0;
     }
@@ -292787,7 +293796,7 @@ function serveStdio(factory, options = {}) {
           await processMessage(message2);
         } catch (error62) {
           if (isJSONRPCRequest(message2)) await writeErrorResponse(message2.id, ProtocolErrorCode.InternalError, "Internal server error");
-          reportError(toError(error62));
+          reportError(toError2(error62));
         }
       }
     } finally {
@@ -292799,9 +293808,9 @@ function serveStdio(factory, options = {}) {
     closing = true;
     const current = state2;
     state2 = { phase: "closed" };
-    for (const result of listenRouter.teardownAll()) await wire.send(result).catch((error62) => reportError(toError(error62)));
-    if (current.phase === "probe" || current.phase === "pinned") await current.instance.product.close().catch((error62) => reportError(toError(error62)));
-    await wire.close().catch((error62) => reportError(toError(error62)));
+    for (const result of listenRouter.teardownAll()) await wire.send(result).catch((error62) => reportError(toError2(error62)));
+    if (current.phase === "probe" || current.phase === "pinned") await current.instance.product.close().catch((error62) => reportError(toError2(error62)));
+    await wire.close().catch((error62) => reportError(toError2(error62)));
   };
   wire.onmessage = (message2) => {
     queue.push(message2);
@@ -292816,10 +293825,10 @@ function serveStdio(factory, options = {}) {
     closing = true;
     const current = state2;
     state2 = { phase: "closed" };
-    if (current.phase === "probe" || current.phase === "pinned") current.instance.product.close().catch((error62) => reportError(toError(error62)));
+    if (current.phase === "probe" || current.phase === "pinned") current.instance.product.close().catch((error62) => reportError(toError2(error62)));
   };
   const started = wire.start().catch((error62) => {
-    reportError(toError(error62));
+    reportError(toError2(error62));
     throw error62;
   });
   started.catch(() => {
@@ -292830,7 +293839,7 @@ function serveStdio(factory, options = {}) {
     await closeAll();
   } };
 }
-function toError(value) {
+function toError2(value) {
   return value instanceof Error ? value : new Error(String(value));
 }
 var swallowsErrorsAfterClose, StdioServerTransport, DISCARD_ANSWER_TIMEOUT_MS, StdioConnectionChannel;
@@ -297632,7 +298641,7 @@ ${rows.join("\n")}`
         ecosystem: external_exports.enum(["npm", "pypi"]),
         package: external_exports.string().regex(SPEC).describe("Package name, e.g. zod or @sentry/node"),
         version: external_exports.string().optional().describe("Version to check (default: the latest)"),
-        min_age_days: external_exports.number().min(0).max(60).optional()
+        min_age_days: external_exports.number().min(3).max(60).optional().describe("Minimum release age in days (at least 3, as in the upgrade pipeline)")
       }),
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
@@ -298348,6 +299357,7 @@ function common() {
       } catch {
       }
     }
+    if (!text2) throw new Error("common-passwords.txt is missing from this build of Bumpsmith.");
     COMMON = new Set(text2.split("\n").filter(Boolean));
   }
   return COMMON;
@@ -298375,7 +299385,7 @@ function readCookie(header, name2) {
   }
   return void 0;
 }
-var DEFAULT_POLICY, DEFAULT_SETTINGS, ADMIN_PERMS, TOKEN_SCOPES, STEP_UP_MS, COMMON, Auth, AuthError, recoveryHash, cookieName, clearCookie;
+var DEFAULT_POLICY, DEFAULT_SETTINGS, ADMIN_PERMS, TOKEN_SCOPES, STEP_UP_MS, COMMON, UNKNOWN_FAILS, lockMinutes, Auth, AuthError, recoveryHash, cookieName, clearCookie;
 var init_auth = __esm({
   "src/server/auth.ts"() {
     "use strict";
@@ -298403,6 +299413,8 @@ var init_auth = __esm({
     ];
     STEP_UP_MS = 10 * 6e4;
     COMMON = null;
+    UNKNOWN_FAILS = /* @__PURE__ */ new Map();
+    lockMinutes = (n) => n >= 5 ? Math.min(60, 2 ** (n - 5)) : 0;
     Auth = class {
       constructor(db, policy = DEFAULT_POLICY, key = Buffer.alloc(32)) {
         this.db = db;
@@ -298549,6 +299561,11 @@ var init_auth = __esm({
         const email3 = emailRaw.trim().toLowerCase();
         const user = this.db.prepare("SELECT * FROM users WHERE email = ? AND status = 'active'").get(email3);
         const fail = new AuthError(401, "That email and password do not match.");
+        const ghost = user ? void 0 : UNKNOWN_FAILS.get(email3);
+        if (ghost && ghost.until > Date.now()) {
+          await verifyPassword(password, null);
+          throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+        }
         if (user?.locked_until && Date.parse(user.locked_until) > Date.now()) {
           await verifyPassword(password, null);
           audit(this.db, {
@@ -298575,6 +299592,9 @@ var init_auth = __esm({
               detail: { attempt: n }
             });
           } else {
+            const n = (UNKNOWN_FAILS.get(email3)?.n ?? 0) + 1;
+            if (UNKNOWN_FAILS.size > 1e4) UNKNOWN_FAILS.clear();
+            UNKNOWN_FAILS.set(email3, { n, until: Date.now() + lockMinutes(n) * 6e4 });
             audit(this.db, {
               orgId: null,
               actorId: null,
@@ -298910,6 +299930,7 @@ var KEY_PROVIDERS, SECRET_NAMES, GH, ghHeaders, Integrations;
 var init_integrations = __esm({
   "src/server/integrations.ts"() {
     "use strict";
+    init_github();
     init_proc();
     init_auth();
     init_crypto();
@@ -298955,14 +299976,14 @@ var init_integrations = __esm({
         label: "Together AI",
         env: "TOGETHER_API_KEY",
         hint: "",
-        base: "https://api.together.xyz/v1"
+        base: "https://api.together.ai/v1"
       },
       {
         id: "deepseek",
         label: "DeepSeek",
         env: "DEEPSEEK_API_KEY",
         hint: "sk-\u2026",
-        base: "https://api.deepseek.com/v1"
+        base: "https://api.deepseek.com"
       }
     ];
     SECRET_NAMES = /* @__PURE__ */ new Set([
@@ -298974,9 +299995,10 @@ var init_integrations = __esm({
     GH = "https://api.github.com";
     ghHeaders = (auth2) => ({
       accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
+      "x-github-api-version": GITHUB_API_VERSION,
       "user-agent": "bumpsmith-self-hosted",
-      authorization: auth2
+      // the manifest conversion takes no credentials, so no header at all rather than an empty one
+      ...auth2 ? { authorization: auth2 } : {}
     });
     Integrations = class {
       constructor(db, key) {
@@ -299033,12 +300055,15 @@ var init_integrations = __esm({
           const r = p.id === "anthropic-api" ? await fetch("https://api.anthropic.com/v1/models?limit=1", {
             headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
             signal: AbortSignal.timeout(1e4)
-          }) : await fetch(`${p.base}/models`, {
-            headers: { authorization: `Bearer ${key}` },
-            signal: AbortSignal.timeout(1e4)
-          });
+          }) : (
+            // OpenRouter's /models is public (any key passes), so check the key itself.
+            await fetch(`${p.base}/${p.id === "openrouter" ? "key" : "models"}`, {
+              headers: { authorization: `Bearer ${key}` },
+              signal: AbortSignal.timeout(1e4)
+            })
+          );
           if (r.ok) return { ok: true, detail: "Key works." };
-          if (r.status === 401 || r.status === 403)
+          if (r.status === 401 || r.status === 403 || p.id === "gemini" && r.status === 400)
             return { ok: false, detail: `${p.label} rejected this key.` };
           return { ok: false, detail: `${p.label} answered ${r.status}. Try again in a moment.` };
         } catch {
@@ -299142,11 +300167,12 @@ var init_integrations = __esm({
         const app = this.app(orgId);
         return app ? `https://github.com/apps/${app.slug}/installations/new?state=${encodeURIComponent(this.newState(orgId, userId, "install"))}` : null;
       }
-      /** A short-lived JWT that authenticates as the app itself (RS256, 9 minutes). */
+      /** A short-lived JWT that authenticates as the app itself (RS256, 9 minutes). GitHub recommends
+       *  the client ID as the issuer; apps saved before it was stored fall back to the app ID. */
       appJwt(app) {
         const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
         const t = Math.floor(Date.now() / 1e3);
-        const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: t - 60, exp: t + 540, iss: String(app.id) })}`;
+        const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: t - 60, exp: t + 540, iss: app.client_id || String(app.id) })}`;
         return `${body}.${createSign("RSA-SHA256").update(body).sign(app.pem).toString("base64url")}`;
       }
       async gh(path5, auth2, init = {}) {
@@ -299163,10 +300189,31 @@ var init_integrations = __esm({
           );
         return await r.json();
       }
+      /** Every page of a GitHub list (follows the `link: rel="next"` header, at most 20 pages). */
+      async ghAll(path5, auth2, key) {
+        const out = [];
+        let url2 = `${GH}${path5}`;
+        for (let i = 0; url2 && i < 20; i++) {
+          const r = await fetch(url2, {
+            headers: ghHeaders(auth2),
+            signal: AbortSignal.timeout(15e3)
+          }).catch(() => null);
+          if (!r) throw new AuthError(502, "Could not reach GitHub.");
+          if (!r.ok)
+            throw new AuthError(
+              r.status === 401 ? 400 : 502,
+              `GitHub answered ${r.status} for ${path5.split("?")[0]}.`
+            );
+          const body = await r.json();
+          out.push(...key ? body[key] : body);
+          url2 = /<([^>]+)>;\s*rel="next"/.exec(r.headers.get("link") ?? "")?.[1] ?? null;
+        }
+        return out;
+      }
       async installations(orgId) {
         const app = this.app(orgId);
         if (!app) return [];
-        return (await this.gh("/app/installations", `Bearer ${this.appJwt(app)}`)).map((i) => ({
+        return (await this.ghAll("/app/installations?per_page=100", `Bearer ${this.appJwt(app)}`)).map((i) => ({
           id: i.id,
           account: i.account.login,
           type: i.account.type,
@@ -299216,17 +300263,18 @@ var init_integrations = __esm({
               `Bearer ${this.appJwt(app)}`,
               { method: "POST" }
             );
-            const list = await this.gh(
+            const list = await this.ghAll(
               "/installation/repositories?per_page=100",
-              `Bearer ${t.token}`
+              `Bearer ${t.token}`,
+              "repositories"
             );
-            out.push(...list.repositories.map(pick2));
+            out.push(...list.map(pick2));
           }
           return out;
         }
         const token = this.get(orgId, "GITHUB_TOKEN");
         if (!token) return [];
-        return (await this.gh(
+        return (await this.ghAll(
           "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
           `Bearer ${token}`
         )).map(pick2);
@@ -332671,19 +333719,56 @@ var init_remote = __esm({
   }
 });
 
+// node_modules/.pnpm/jose@6.1.0/node_modules/jose/dist/webapi/util/decode_jwt.js
+function decodeJwt(jwt2) {
+  if (typeof jwt2 !== "string")
+    throw new JWTInvalid("JWTs must use Compact JWS serialization, JWT must be a string");
+  const { 1: payload, length } = jwt2.split(".");
+  if (length === 5)
+    throw new JWTInvalid("Only JWTs using Compact JWS serialization can be decoded");
+  if (length !== 3)
+    throw new JWTInvalid("Invalid JWT");
+  if (!payload)
+    throw new JWTInvalid("JWTs must contain a payload");
+  let decoded;
+  try {
+    decoded = decode3(payload);
+  } catch {
+    throw new JWTInvalid("Failed to base64url decode the payload");
+  }
+  let result;
+  try {
+    result = JSON.parse(decoder.decode(decoded));
+  } catch {
+    throw new JWTInvalid("Failed to parse the decoded payload as JSON");
+  }
+  if (!is_object_default(result))
+    throw new JWTInvalid("Invalid JWT Claims Set");
+  return result;
+}
+var init_decode_jwt = __esm({
+  "node_modules/.pnpm/jose@6.1.0/node_modules/jose/dist/webapi/util/decode_jwt.js"() {
+    init_base64url();
+    init_buffer_utils();
+    init_is_object();
+    init_errors5();
+  }
+});
+
 // node_modules/.pnpm/jose@6.1.0/node_modules/jose/dist/webapi/index.js
 var init_webapi = __esm({
   "node_modules/.pnpm/jose@6.1.0/node_modules/jose/dist/webapi/index.js"() {
     init_verify4();
     init_remote();
+    init_decode_jwt();
     init_errors5();
     init_base64url();
   }
 });
 
 // src/server/sso.ts
-import { createHash as createHash6 } from "node:crypto";
-var import_node_saml, defaultSso, httpsOrLocal, Sso;
+import { createHash as createHash6, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+var import_node_saml, defaultSso, normScopes, TENANT_TEMPLATE, safeEqual2, httpsOrLocal, Sso;
 var init_sso = __esm({
   "src/server/sso.ts"() {
     "use strict";
@@ -332700,7 +333785,8 @@ var init_sso = __esm({
         issuer: "",
         clientId: "",
         scopes: "openid email profile",
-        groupsClaim: "groups"
+        groupsClaim: "groups",
+        tokenAuth: "auto"
       },
       saml: {
         enabled: false,
@@ -332719,6 +333805,16 @@ var init_sso = __esm({
       enforce: false,
       trustIdpMfa: true
     });
+    normScopes = (v) => {
+      const list = (v || "").split(/\s+/).filter((x) => /^[\w.:/-]{1,60}$/.test(x));
+      return [.../* @__PURE__ */ new Set(["openid", ...list])].join(" ") || "openid email profile";
+    };
+    TENANT_TEMPLATE = "{tenantid}";
+    safeEqual2 = (a, b) => {
+      const x = Buffer.from(a);
+      const y = Buffer.from(b);
+      return x.length === y.length && timingSafeEqual2(x, y);
+    };
     httpsOrLocal = (u) => /^https:\/\//.test(u) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(u);
     Sso = class {
       constructor(db, getExtra, setExtra, secret) {
@@ -332784,8 +333880,9 @@ var init_sso = __esm({
             label: (o.label || "SSO").slice(0, 30),
             issuer: o.issuer.trim().replace(/\/$/, ""),
             clientId: o.clientId.trim(),
-            scopes: o.scopes.trim() || "openid email profile",
-            groupsClaim: o.groupsClaim.trim() || "groups"
+            scopes: normScopes(o.scopes),
+            groupsClaim: o.groupsClaim.trim() || "groups",
+            tokenAuth: o.tokenAuth === "basic" || o.tokenAuth === "post" ? o.tokenAuth : "auto"
           },
           saml: {
             enabled: !!s.enabled,
@@ -332818,11 +333915,15 @@ var init_sso = __esm({
         if (!r?.ok)
           throw new AuthError(502, "Could not read the identity provider's OIDC configuration.");
         const doc = await r.json();
-        if (doc.issuer.replace(/\/$/, "") !== issuer)
+        const reported = doc.issuer.replace(/\/$/, "");
+        const entra = /^https:\/\/login\.microsoftonline\.com\/[^/]+\/v2\.0$/.test(issuer) && /^https:\/\/login\.microsoftonline\.com\/[^/]+\/v2\.0$/.test(reported);
+        if (reported !== issuer && !entra)
           throw new AuthError(502, "The identity provider reports a different issuer.");
         this.discovery.set(issuer, { doc, at: Date.now() });
         return doc;
       }
+      /** Returns the provider URL and a value the browser must hold (in a cookie) at the callback,
+       *  so a sign-in started in one browser cannot be finished in another (login CSRF). */
       async oidcStart(orgId, origin) {
         const c = this.config(orgId).oidc;
         if (!c.enabled) throw new AuthError(400, "OIDC sign-in is not set up.");
@@ -332830,7 +333931,14 @@ var init_sso = __esm({
         const state2 = newToken();
         const nonce = newToken();
         const verifier = newToken(48);
-        this.pending.set(sha256(state2), { orgId, verifier, nonce, expires: Date.now() + 10 * 6e4 });
+        const bind2 = newToken();
+        this.pending.set(sha256(state2), {
+          orgId,
+          verifier,
+          nonce,
+          bind: bind2,
+          expires: Date.now() + 10 * 6e4
+        });
         for (const [k, v] of this.pending) if (v.expires < Date.now()) this.pending.delete(k);
         const u = new URL(d.authorization_endpoint);
         u.search = new URLSearchParams({
@@ -332843,19 +333951,21 @@ var init_sso = __esm({
           code_challenge: createHash6("sha256").update(verifier).digest("base64url"),
           code_challenge_method: "S256"
         }).toString();
-        return u.toString();
+        return { url: u.toString(), bind: bind2 };
       }
-      async oidcCallback(code, state2, origin) {
+      async oidcCallback(code, state2, origin, bind2) {
         const h = sha256(state2);
         const p = this.pending.get(h);
         this.pending.delete(h);
         if (!p || p.expires < Date.now())
           throw new AuthError(400, "This sign-in link expired. Start again.");
+        if (!safeEqual2(bind2, p.bind))
+          throw new AuthError(400, "This sign-in was started in another browser. Start again here.");
         const c = this.config(p.orgId).oidc;
         const d = await this.discover(c.issuer);
         const secret = this.secret(p.orgId, "OIDC_CLIENT_SECRET") ?? "";
         const methods = d.token_endpoint_auth_methods_supported ?? ["client_secret_basic"];
-        const basic = methods.includes("client_secret_basic") || !methods.includes("client_secret_post");
+        const basic = c.tokenAuth === "basic" || c.tokenAuth !== "post" && (methods.includes("client_secret_basic") || !methods.includes("client_secret_post"));
         const form = new URLSearchParams({
           grant_type: "authorization_code",
           code,
@@ -332867,7 +333977,7 @@ var init_sso = __esm({
           accept: "application/json"
         };
         if (basic) {
-          const enc = (v) => encodeURIComponent(v).replace(/%20/g, "+");
+          const enc = (v) => encodeURIComponent(v).replace(/[!'()*~]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`).replace(/%20/g, "+");
           headers2.authorization = `Basic ${Buffer.from(`${enc(c.clientId)}:${enc(secret)}`).toString("base64")}`;
         } else {
           form.set("client_id", c.clientId);
@@ -332887,9 +333997,26 @@ var init_sso = __esm({
           jwks = createRemoteJWKSet(new URL(d.jwks_uri));
           this.jwks.set(d.jwks_uri, jwks);
         }
+        const algorithms = (d.id_token_signing_alg_values_supported ?? ["RS256"]).filter(
+          (a) => a !== "none" && !a.startsWith("HS")
+        );
+        if (!algorithms.length)
+          throw new AuthError(
+            400,
+            "Set the app to sign ID tokens with RS256 in your identity provider."
+          );
+        const multiTenant = d.issuer.includes(TENANT_TEMPLATE);
+        let issuer = d.issuer;
+        if (multiTenant) {
+          const tid = String(decodeJwt(tokens.id_token).tid ?? "");
+          if (!/^[0-9a-f-]{36}$/i.test(tid)) throw new AuthError(400, "The token names no tenant.");
+          issuer = d.issuer.replace(TENANT_TEMPLATE, tid);
+        } else if (d.issuer === "https://accounts.google.com")
+          issuer = [d.issuer, "accounts.google.com"];
         const { payload } = await jwtVerify(tokens.id_token, jwks, {
-          issuer: d.issuer,
+          issuer,
           audience: c.clientId,
+          algorithms,
           clockTolerance: 60,
           maxTokenAge: "10 minutes"
         }).catch(() => {
@@ -332897,19 +334024,28 @@ var init_sso = __esm({
         });
         if (payload.nonce !== p.nonce)
           throw new AuthError(400, "The sign-in response does not match this request.");
+        if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp !== c.clientId)
+          throw new AuthError(400, "The token was issued to another application.");
+        const verified = payload.email_verified === true || payload.email_verified === "true" || payload.xms_edov === true || payload.xms_edov === "true" || payload.xms_edov === "1";
         const email3 = String(
-          payload.email ?? payload.preferred_username ?? payload.upn ?? ""
+          payload.email ?? (multiTenant ? "" : payload.preferred_username ?? payload.upn ?? "")
         ).toLowerCase();
+        if (multiTenant && !verified)
+          throw new AuthError(
+            403,
+            "Your organisation's email domain is not verified by Microsoft. Ask an admin to add the xms_edov optional claim, or use a single-tenant issuer."
+          );
+        const overage = !!payload._claim_names?.[c.groupsClaim] || payload.hasgroups === true || payload.hasgroups === "true";
         const groups2 = payload[c.groupsClaim];
         return {
           orgId: p.orgId,
           identity: {
             kind: "oidc",
-            subject: `oidc:${d.issuer}:${payload.sub}`,
+            subject: `oidc:${multiTenant ? issuer : d.issuer}:${payload.sub}`,
             email: email3,
-            emailVerified: payload.email_verified !== false,
+            emailVerified: verified,
             name: String(payload.name ?? email3.split("@")[0] ?? ""),
-            groups: Array.isArray(groups2) ? groups2.map(String) : []
+            groups: overage ? null : Array.isArray(groups2) ? groups2.map(String) : []
           }
         };
       }
@@ -332938,8 +334074,10 @@ var init_sso = __esm({
         this.samlCache.set(orgId, { key, saml });
         return saml;
       }
-      samlStart(orgId, origin) {
-        return this.saml(orgId, origin).getAuthorizeUrlAsync("", void 0, {});
+      /** The bind value travels as RelayState and in a cookie; the response must bring both back. */
+      async samlStart(orgId, origin) {
+        const bind2 = newToken();
+        return { url: await this.saml(orgId, origin).getAuthorizeUrlAsync(bind2, void 0, {}), bind: bind2 };
       }
       samlMetadata(origin) {
         return new import_node_saml.SAML({
@@ -332949,8 +334087,13 @@ var init_sso = __esm({
           wantAssertionsSigned: true
         }).generateServiceProviderMetadata(null, null);
       }
-      async samlCallback(orgId, origin, samlResponse) {
+      async samlCallback(orgId, origin, samlResponse, relayState, bind2) {
         const c = this.config(orgId).saml;
+        if (!relayState || !safeEqual2(relayState, bind2))
+          throw new AuthError(
+            400,
+            "Start single sign-on from the Bumpsmith sign-in page (sign-in from the identity provider's dashboard is not accepted)."
+          );
         const r = await this.saml(orgId, origin).validatePostResponseAsync({ SAMLResponse: samlResponse }).catch((e) => {
           throw new AuthError(400, `The SAML response was rejected: ${e.message.slice(0, 120)}`);
         });
@@ -332977,7 +334120,8 @@ var init_sso = __esm({
         const domain2 = id.email.split("@")[1] ?? "";
         if (cfg.domains.length && !cfg.domains.includes(domain2))
           throw new AuthError(403, `Accounts at ${domain2} cannot sign in here.`);
-        const mapped = cfg.mapping.find((m) => id.groups.includes(m.group))?.roleId;
+        const groups2 = id.groups;
+        const mapped = groups2 ? cfg.mapping.find((m) => groups2.includes(m.group))?.roleId : void 0;
         const owner = `${orgId}:owner`;
         const log2 = (action, actorId, detail) => audit(this.db, {
           orgId,
@@ -333021,6 +334165,10 @@ var init_sso = __esm({
           this.db.prepare("DELETE FROM invites WHERE user_id = ?").run(u.id);
           log2("member.joined", u.id);
         }
+        if (!groups2)
+          log2("sso.groups_missing", u.id, {
+            reason: "the identity provider left the groups out (Entra ID: more than 200 groups)"
+          });
         if (mapped && u.role_id !== mapped && u.role_id !== owner) {
           this.db.prepare("UPDATE users SET role_id = ? WHERE id = ?").run(mapped, u.id);
           log2("member.role_synced", u.id, { to: mapped });
@@ -333421,6 +334569,8 @@ data: ${JSON.stringify(data)}
   });
   const ua = (c) => String(c.req.headers["user-agent"] ?? "");
   const cookieFor = (token) => sessionCookie(token, secure, 72 * 3600);
+  const ssoBindName = (kind) => `${secure ? "__Host-" : ""}bs_sso_${kind}`;
+  const ssoBindCookie = (kind, value, maxAge) => `${ssoBindName(kind)}=${value}; Path=/; HttpOnly; Max-Age=${maxAge}; ${kind === "saml" ? "SameSite=None; Secure" : `SameSite=Lax${secure ? "; Secure" : ""}`}`;
   const signIn = (c, user) => {
     if (c.token) auth2.endSession(c.token, null, c.ip);
     if (user.mfa_enabled) {
@@ -333450,7 +334600,11 @@ data: ${JSON.stringify(data)}
     const s = auth2.createSession(user, c.ip, ua(c), false, "sso");
     return send(c.res, 302, "", "text/plain", {
       location: "/#/",
-      "set-cookie": cookieFor(s.token)
+      "set-cookie": [
+        cookieFor(s.token),
+        ssoBindCookie("oidc", "", 0),
+        ssoBindCookie("saml", "", 0)
+      ]
     });
   };
   const readForm = (req) => new Promise((ok, fail) => {
@@ -333882,8 +335036,12 @@ data: ${JSON.stringify(data)}
         const orgId = firstOrg();
         if (!orgId) return redirect2(c.res, "/");
         try {
-          const url3 = c.m[1] === "oidc" ? await sso.oidcStart(orgId, origin(c)) : await sso.samlStart(orgId, origin(c));
-          return redirect2(c.res, url3);
+          const kind = c.m[1];
+          const { url: url3, bind: bind2 } = kind === "oidc" ? await sso.oidcStart(orgId, origin(c)) : await sso.samlStart(orgId, origin(c));
+          return send(c.res, 302, "", "text/plain", {
+            location: url3,
+            "set-cookie": ssoBindCookie(kind, bind2, 600)
+          });
         } catch (e) {
           return redirect2(
             c.res,
@@ -333907,7 +335065,8 @@ data: ${JSON.stringify(data)}
           const { orgId, identity } = await sso.oidcCallback(
             c.url.searchParams.get("code") ?? "",
             c.url.searchParams.get("state") ?? "",
-            origin(c)
+            origin(c),
+            readCookie(c.req.headers.cookie, ssoBindName("oidc")) ?? ""
           );
           return ssoSignIn(c, orgId, identity);
         } catch (e) {
@@ -333929,7 +335088,13 @@ data: ${JSON.stringify(data)}
         try {
           if (!orgId) throw new AuthError(400, "Not set up.");
           const form = await readForm(c.req);
-          const identity = await sso.samlCallback(orgId, origin(c), form.get("SAMLResponse") ?? "");
+          const identity = await sso.samlCallback(
+            orgId,
+            origin(c),
+            form.get("SAMLResponse") ?? "",
+            form.get("RelayState") ?? "",
+            readCookie(c.req.headers.cookie, ssoBindName("saml")) ?? ""
+          );
           return ssoSignIn(c, orgId, identity);
         } catch (e) {
           return redirect2(
@@ -335022,14 +336187,14 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
         });
       })
     };
-    const mcp = createMcpServer(mcpHost, bumpsmithVersion());
-    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: void 0 });
-    await mcp.connect(transport);
-    res.on("close", () => {
-      void transport.close();
-      void mcp.close();
-    });
-    await transport.handleRequest(req, res);
+    if (req.method !== "POST") {
+      res.writeHead(405, { allow: "POST", "content-type": "text/plain" }).end("POST only");
+      return;
+    }
+    await toNodeHandler(createMcpHandler(() => createMcpServer(mcpHost, bumpsmithVersion())))(
+      req,
+      res
+    );
   };
   const server2 = opts.tls ? https.createServer({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.2" }, handle) : http.createServer(handle);
   server2.requestTimeout = 3e4;
@@ -335077,6 +336242,7 @@ var init_server = __esm({
   "src/dashboard/server.ts"() {
     "use strict";
     init_dist4();
+    init_dist2();
     import_qrcode = __toESM(require_lib(), 1);
     init_inventory();
     init_local2();
@@ -337034,49 +338200,8 @@ function throttling(octokit, octokitOptions) {
 throttling.VERSION = VERSION6;
 throttling.triggersNotification = triggersNotification;
 
-// src/util/github.ts
-init_http();
-var GITHUB_API_VERSION = "2026-03-10";
-function headers() {
-  const h = {
-    accept: "application/vnd.github+json",
-    "x-github-api-version": GITHUB_API_VERSION
-  };
-  const token = process.env.GITHUB_TOKEN;
-  if (token) h.authorization = `Bearer ${token}`;
-  return h;
-}
-function parseGithubRepo(url2) {
-  if (!url2) return null;
-  const m = /github\.com[/:]([^/]+)\/([^/#?]+)/.exec(url2);
-  if (!m?.[1] || !m[2]) return null;
-  return { owner: m[1], repo: m[2].replace(/\.git$/, "") };
-}
-function gh(path5, cacheSeconds = 3600) {
-  return fetchJson(`https://api.github.com${path5}`, { headers: headers(), cacheSeconds });
-}
-async function listReleases(owner, repo, pages = 3) {
-  const out = [];
-  for (let page = 1; page <= pages; page++) {
-    const batch = await gh(
-      `/repos/${owner}/${repo}/releases?per_page=100&page=${page}`
-    );
-    out.push(...batch);
-    if (batch.length < 100) break;
-  }
-  return out;
-}
-async function rawFile(owner, repo, path5, ref = "HEAD") {
-  try {
-    return await fetchText(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path5}`, {
-      cacheSeconds: 3600
-    });
-  } catch {
-    return null;
-  }
-}
-
 // src/github/client.ts
+init_github();
 var BumpsmithOctokit = Octokit.plugin(throttling, retry);
 var MAX_RATE_RETRIES = 2;
 function clientDefaults(opts) {
@@ -338767,7 +339892,11 @@ var PRICES = {
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5 },
   "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1, cacheWrite5m: 2.5 },
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite5m: 0.125 },
-  "claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.2, cacheWrite5m: 10 }
+  "claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.2, cacheWrite5m: 10 },
+  // Models a server-side fallback can serve from (refusals-and-fallback docs, 2026-11-20).
+  "claude-opus-5": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25 },
+  "claude-opus-4-8": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25 },
+  "claude-fable-5-1": { input: 10, output: 50, cacheRead: 1, cacheWrite5m: 12.5 }
 };
 function priceFor(model) {
   return PRICES[model];
@@ -338821,12 +339950,22 @@ var AnthropicProvider = class {
       cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: u.cache_read_input_tokens ?? 0
     };
+    const its = u.iterations;
+    const cost = its?.length ? its.reduce(
+      (n, it) => n + costUsd(it.model ?? model, {
+        input_tokens: it.input_tokens ?? 0,
+        output_tokens: it.output_tokens ?? 0,
+        cache_creation_input_tokens: it.cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: it.cache_read_input_tokens ?? 0
+      }),
+      0
+    ) : costUsd(model, usage);
     return {
       role,
       provider: this.name,
       model,
       ...usage,
-      api_equivalent_usd: costUsd(model, usage),
+      api_equivalent_usd: cost,
       duration_ms: Date.now() - started
     };
   }
@@ -338885,7 +340024,14 @@ var AnthropicProvider = class {
         const message2 = await stream2.finalMessage();
         const e = this.entry(req.role, message2.model, message2.usage, started);
         usage.push(e);
-        spent += Number.isNaN(e.api_equivalent_usd) ? 0 : e.api_equivalent_usd;
+        if (Number.isNaN(e.api_equivalent_usd))
+          return {
+            finalText,
+            stop: "budget",
+            usage,
+            error: `no list price for ${message2.model}; stopped to keep the spend cap`
+          };
+        spent += e.api_equivalent_usd;
         started = Date.now();
         turns += 1;
         finalText = message2.content.flatMap((b) => b.type === "text" ? [b.text] : []).join("\n").trim() || finalText;
@@ -353076,8 +354222,8 @@ _AgentToolDispatcher_handlers = /* @__PURE__ */ new WeakMap(), _AgentToolDispatc
   });
   try {
     __classPrivateFieldGet2(this, _AgentToolDispatcher_instances, "m", _AgentToolDispatcher_checkAbort).call(this);
-    const invoke = async () => await action();
-    return await Promise.race([invoke(), aborted2]);
+    const invoke2 = async () => await action();
+    return await Promise.race([invoke2(), aborted2]);
   } finally {
     if (onAbort) {
       __classPrivateFieldGet2(this, _AgentToolDispatcher_controller, "f").signal.removeEventListener("abort", onAbort);
@@ -361514,12 +362660,12 @@ async function resolveRealtimeAPIKey(client, deferCache = false) {
   const capture = (resolved) => {
     apiKey = resolved;
   };
-  const invoke = () => client._callApiKey(capture);
+  const invoke2 = () => client._callApiKey(capture);
   const context2 = client[realtimeCacheContext] ?? cacheContext;
   if (deferCache && context2 && !client[realtimeCacheContext]) {
     Object.defineProperty(client, realtimeCacheContext, { value: context2 });
   }
-  const isProvider = await (context2 ? context2.run(deferCache ? current : void 0, invoke) : invoke());
+  const isProvider = await (context2 ? context2.run(deferCache ? current : void 0, invoke2) : invoke2());
   return {
     apiKey: apiKey === void 0 ? client.apiKey : apiKey,
     isProvider,
@@ -363126,15 +364272,27 @@ _a7 = brand_privateBedrockClient;
 // src/model/openai-compatible.ts
 init_zod();
 var PRESETS = {
-  openai: { baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY" },
+  openai: { baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY", maxEffort: "max" },
   gemini: {
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     keyEnv: "GEMINI_API_KEY"
   },
-  openrouter: { baseURL: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY" },
-  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY" },
-  together: { baseURL: "https://api.together.xyz/v1", keyEnv: "TOGETHER_API_KEY" },
-  deepseek: { baseURL: "https://api.deepseek.com/v1", keyEnv: "DEEPSEEK_API_KEY" },
+  openrouter: {
+    baseURL: "https://openrouter.ai/api/v1",
+    keyEnv: "OPENROUTER_API_KEY",
+    maxEffort: "xhigh"
+  },
+  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", maxEffort: "max" },
+  together: {
+    baseURL: "https://api.together.ai/v1",
+    keyEnv: "TOGETHER_API_KEY",
+    maxTokensParam: "max_tokens"
+  },
+  deepseek: {
+    baseURL: "https://api.deepseek.com",
+    keyEnv: "DEEPSEEK_API_KEY",
+    maxTokensParam: "max_tokens"
+  },
   ollama: { baseURL: "http://localhost:11434/v1", keyEnv: null, local: true },
   lmstudio: { baseURL: "http://localhost:1234/v1", keyEnv: null, local: true }
 };
@@ -363144,19 +364302,15 @@ function assertSafeBaseUrl(url2) {
   if (u.protocol !== "https:" && !(u.protocol === "http:" && local))
     throw new Error(`refusing non-HTTPS model endpoint ${u.origin}`);
 }
-var EFFORT = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "high",
-  max: "high"
-};
+var ORDER = ["low", "medium", "high", "xhigh", "max"];
+var effortFor = (e, cap = "high") => ORDER[Math.min(ORDER.indexOf(e), ORDER.indexOf(cap))] ?? "high";
 var OpenAICompatibleProvider = class {
   name;
   model;
   client;
   pricing;
   reasoningSupported = true;
+  preset;
   constructor(opts) {
     const preset = PRESETS[opts.preset];
     const baseURL = opts.baseURL ?? preset?.baseURL;
@@ -363173,6 +364327,7 @@ var OpenAICompatibleProvider = class {
     if (!apiKey && !opts.client)
       throw new Error(`set ${preset?.keyEnv ?? "OPENAI_API_KEY"} for ${opts.preset}`);
     this.name = opts.preset;
+    this.preset = preset;
     this.model = opts.model;
     this.pricing = opts.pricing ?? null;
     this.client = opts.client ?? new OpenAI({ apiKey, baseURL, maxRetries: 3, timeout: 10 * 6e4 });
@@ -363195,7 +364350,14 @@ var OpenAICompatibleProvider = class {
     };
   }
   async complete(body, effort) {
-    const withEffort = this.reasoningSupported ? { ...body, reasoning_effort: EFFORT[effort] } : body;
+    if (this.preset?.maxTokensParam === "max_tokens" && body.max_completion_tokens != null) {
+      const { max_completion_tokens, ...rest } = body;
+      body = { ...rest, max_tokens: max_completion_tokens };
+    }
+    const withEffort = this.reasoningSupported ? {
+      ...body,
+      reasoning_effort: effortFor(effort, this.preset?.maxEffort)
+    } : body;
     try {
       return await this.client.chat.completions.create({ model: this.model, ...withEffort });
     } catch (err) {
@@ -363295,7 +364457,13 @@ ${JSON.stringify(schema)}`
       if (msg.refusal) return { finalText: msg.refusal, stop: "refusal", usage };
       const calls = (msg.tool_calls ?? []).filter((c) => c.type === "function");
       if (!calls.length) return { finalText: msg.content ?? "", stop: "completed", usage };
-      messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: calls });
+      const reasoning = msg.reasoning_content;
+      messages.push({
+        role: "assistant",
+        content: msg.content ?? null,
+        tool_calls: calls,
+        ...reasoning != null ? { reasoning_content: reasoning } : {}
+      });
       for (const call of calls) {
         const tool = byName.get(call.function.name);
         let result;
@@ -363398,6 +364566,7 @@ init_dts_diff();
 
 // src/change/sources.ts
 var import_semver2 = __toESM(require_semver2(), 1);
+init_github();
 var MAX_SOURCE_CHARS = 6e4;
 function versionOf(tag2) {
   const cleaned = tag2.replace(/^[^\d]*/, "");
@@ -365956,7 +367125,8 @@ async function runJob(input3, opts) {
   };
   let sb = null;
   const deadline = new Deadline(opts.jobMinutes ?? 45);
-  const minAge = Math.max(3, opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
+  const wanted = Number(opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
+  const minAge = Math.max(3, Number.isFinite(wanted) ? wanted : 3);
   try {
     log2(`job ${id}: preparing repository`);
     const repoRoot = await prepareRepo(input3, dir);
@@ -366542,6 +367712,7 @@ async function runJob(input3, opts) {
 
 // src/bench/mine.ts
 var import_semver4 = __toESM(require_semver2(), 1);
+init_github();
 import { mkdir as mkdir10, writeFile as writeFile5 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
 var TITLE = /^(?:\[[^\]]*\]\s*)?(?:build\(deps(?:-dev)?\):\s*|chore\(deps(?:-dev)?\):\s*|deps(?:-dev)?:\s*)?bump\s+(\S+)\s+from\s+v?([\w.\-+]+)\s+to\s+v?([\w.\-+]+)(\s+in\s+(\S+))?/i;
@@ -366952,14 +368123,26 @@ async function resolveTargets(gh2, owner, repo, event, payload, opts = modeFromI
     })).data;
     for (const p of pulls) {
       if (!BOT_AUTHORS.has(p.user?.login ?? "")) continue;
-      const runs = (await gh2.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
-        owner,
-        repo,
-        ref: p.head.sha,
-        per_page: 100
-      })).data.check_runs;
-      if (runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out") && !runs.some((c) => c.status !== "completed"))
-        prNumbers.push(p.number);
+      let red = false;
+      try {
+        const runs = (await gh2.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
+          owner,
+          repo,
+          ref: p.head.sha,
+          per_page: 100
+        })).data.check_runs;
+        red = runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out") && !runs.some((c) => c.status !== "completed");
+      } catch (e) {
+        const status = e.status;
+        if (status !== 403 && status !== 404) throw e;
+        const combined = (await gh2.request("GET /repos/{owner}/{repo}/commits/{ref}/status", {
+          owner,
+          repo,
+          ref: p.head.sha
+        })).data;
+        red = combined.state === "failure" || combined.state === "error";
+      }
+      if (red) prNumbers.push(p.number);
     }
   }
   const out = [];
@@ -367250,6 +368433,7 @@ var FakeProvider = class {
 };
 
 // src/bench/zoo.ts
+init_github();
 function classify(paths, dir) {
   const pre = dir ? `${dir}/` : "";
   const has3 = (f) => paths.includes(`${pre}${f}`);
@@ -367493,8 +368677,17 @@ var ClaudeCodeProvider = class {
   async invokeOnce(args, prompt, timeoutMs) {
     const cwd = await mkdtemp3(join20(tmpdir2(), "bumpsmith-cc-"));
     const env = { ...process.env };
-    delete env.ANTHROPIC_API_KEY;
-    delete env.ANTHROPIC_AUTH_TOKEN;
+    for (const k of [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_PROFILE",
+      "ANTHROPIC_FEDERATION_RULE_ID",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CODE_USE_FOUNDRY"
+    ])
+      delete env[k];
     try {
       const r = await run(
         this.bin,
@@ -367660,12 +368853,13 @@ var DISABLED_FEATURES = [
   "goals",
   "workspace_dependencies"
 ];
-var EFFORT2 = {
+var EFFORT = {
   low: "low",
   medium: "medium",
   high: "high",
   xhigh: "xhigh",
   max: "xhigh"
+  // "max" exists in recent Codex releases only; xhigh works everywhere
 };
 function parseEvents(jsonl) {
   const out = { inputTokens: 0, cachedTokens: 0, outputTokens: 0, error: null };
@@ -367699,6 +368893,7 @@ var CodexProvider = class {
     const started = Date.now();
     const childEnv = { ...process.env, ...env };
     delete childEnv.OPENAI_API_KEY;
+    delete childEnv.CODEX_API_KEY;
     try {
       const args = [
         "exec",
@@ -367714,7 +368909,7 @@ var CodexProvider = class {
         "-c",
         'web_search="disabled"',
         "-c",
-        `model_reasoning_effort="${EFFORT2[effort]}"`,
+        `model_reasoning_effort="${EFFORT[effort]}"`,
         ...DISABLED_FEATURES.flatMap((f) => ["--disable", f]),
         ...this.model ? ["-m", this.model] : [],
         ...extra,

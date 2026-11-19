@@ -155,6 +155,9 @@ describe("MCP over HTTP on a Bumpsmith server (/mcp)", { timeout: 60_000 }, () =
     const i = await rpc(`${base}/mcp`, init, auth);
     expect(i.status).toBe(200);
     expect(i.body.result.serverInfo.name).toBe("bumpsmith");
+    // No server-initiated stream: GET answers 405 instead of holding a connection open.
+    const get = await fetch(`${base}/mcp`, { headers: auth });
+    expect(get.status).toBe(405);
     const list = await rpc(`${base}/mcp`, { jsonrpc: "2.0", id: 2, method: "tools/list" }, auth);
     const names = list.body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(

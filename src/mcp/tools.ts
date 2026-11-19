@@ -158,7 +158,12 @@ Typical flow: check_release (is the version safe to adopt?) → explain_upgrade 
         ecosystem: z.enum(["npm", "pypi"]),
         package: z.string().regex(SPEC).describe("Package name, e.g. zod or @sentry/node"),
         version: z.string().optional().describe("Version to check (default: the latest)"),
-        min_age_days: z.number().min(0).max(60).optional(),
+        min_age_days: z
+          .number()
+          .min(3)
+          .max(60)
+          .optional()
+          .describe("Minimum release age in days (at least 3, as in the upgrade pipeline)"),
       }),
       annotations: { readOnlyHint: true, openWorldHint: true },
     },

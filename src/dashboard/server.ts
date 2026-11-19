@@ -7,7 +7,8 @@ import https from "node:https";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import QRCode from "qrcode";
 import { inventory } from "../inventory/inventory.ts";
 import { bumpsmithVersion } from "../mcp/local.ts";
@@ -463,7 +464,7 @@ export async function startDashboard(opts: DashboardOptions) {
     code: number,
     body: unknown,
     type?: string,
-    extra: Record<string, string> = {},
+    extra: Record<string, string | string[]> = {},
   ) => {
     const text = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
     res.writeHead(code, {
@@ -626,6 +627,14 @@ export async function startDashboard(opts: DashboardOptions) {
   });
   const ua = (c: Ctx) => String(c.req.headers["user-agent"] ?? "");
   const cookieFor = (token: string) => sessionCookie(token, secure, 72 * 3600);
+  // Single sign-on binding cookies (login CSRF protection). OIDC comes back as a top-level GET,
+  // so SameSite=Lax is enough; SAML comes back as a cross-site POST from the identity provider,
+  // which only carries SameSite=None cookies, and those must be Secure.
+  const ssoBindName = (kind: "oidc" | "saml") => `${secure ? "__Host-" : ""}bs_sso_${kind}`;
+  const ssoBindCookie = (kind: "oidc" | "saml", value: string, maxAge: number) =>
+    `${ssoBindName(kind)}=${value}; Path=/; HttpOnly; Max-Age=${maxAge}; ${
+      kind === "saml" ? "SameSite=None; Secure" : `SameSite=Lax${secure ? "; Secure" : ""}`
+    }`;
   const signIn = (c: Ctx, user: Parameters<Auth["createSession"]>[0]) => {
     if (c.token) auth.endSession(c.token, null, c.ip); // rotate: never reuse a pre-login session
     if (user.mfa_enabled) {
@@ -661,7 +670,11 @@ export async function startDashboard(opts: DashboardOptions) {
     const s = auth.createSession(user, c.ip, ua(c), false, "sso");
     return send(c.res, 302, "", "text/plain", {
       location: "/#/",
-      "set-cookie": cookieFor(s.token),
+      "set-cookie": [
+        cookieFor(s.token),
+        ssoBindCookie("oidc", "", 0),
+        ssoBindCookie("saml", "", 0),
+      ],
     });
   };
   const readForm = (req: http.IncomingMessage) =>
@@ -1115,11 +1128,16 @@ export async function startDashboard(opts: DashboardOptions) {
         const orgId = firstOrg();
         if (!orgId) return redirect(c.res, "/");
         try {
-          const url =
-            c.m[1] === "oidc"
+          const kind = c.m[1] as "oidc" | "saml";
+          const { url, bind } =
+            kind === "oidc"
               ? await sso.oidcStart(orgId, origin(c))
               : await sso.samlStart(orgId, origin(c));
-          return redirect(c.res, url);
+          // Ties the sign-in to this browser: the callback must bring the same value back.
+          return send(c.res, 302, "", "text/plain", {
+            location: url,
+            "set-cookie": ssoBindCookie(kind, bind, 600),
+          });
         } catch (e) {
           return redirect(
             c.res,
@@ -1144,6 +1162,7 @@ export async function startDashboard(opts: DashboardOptions) {
             c.url.searchParams.get("code") ?? "",
             c.url.searchParams.get("state") ?? "",
             origin(c),
+            readCookie(c.req.headers.cookie, ssoBindName("oidc")) ?? "",
           );
           return ssoSignIn(c, orgId, identity);
         } catch (e) {
@@ -1165,7 +1184,13 @@ export async function startDashboard(opts: DashboardOptions) {
         try {
           if (!orgId) throw new AuthError(400, "Not set up.");
           const form = await readForm(c.req);
-          const identity = await sso.samlCallback(orgId, origin(c), form.get("SAMLResponse") ?? "");
+          const identity = await sso.samlCallback(
+            orgId,
+            origin(c),
+            form.get("SAMLResponse") ?? "",
+            form.get("RelayState") ?? "",
+            readCookie(c.req.headers.cookie, ssoBindName("saml")) ?? "",
+          );
           return ssoSignIn(c, orgId, identity);
         } catch (e) {
           return redirect(
@@ -2335,14 +2360,16 @@ export async function startDashboard(opts: DashboardOptions) {
           });
         }),
     };
-    const mcp = createMcpServer(mcpHost, bumpsmithVersion());
-    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcp.connect(transport);
-    res.on("close", () => {
-      void transport.close();
-      void mcp.close();
-    });
-    await transport.handleRequest(req, res);
+    // Stateless Streamable HTTP: the 2026-07-28 revision, and the 2025 handshake for older
+    // clients. No server-initiated stream, so GET and DELETE answer 405 (per the spec).
+    if (req.method !== "POST") {
+      res.writeHead(405, { allow: "POST", "content-type": "text/plain" }).end("POST only");
+      return;
+    }
+    await toNodeHandler(createMcpHandler(() => createMcpServer(mcpHost, bumpsmithVersion())))(
+      req,
+      res,
+    );
   };
 
   const server = opts.tls

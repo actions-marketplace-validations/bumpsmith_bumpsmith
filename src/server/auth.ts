@@ -95,6 +95,10 @@ export const STEP_UP_MS = 10 * 60_000;
 // ── password policy ──
 
 let COMMON: Set<string> | null = null;
+/** Failed sign-ins for emails with no account, so they lock exactly like real ones and the
+ *  answer never reveals whether an account exists. In memory; cleared on restart. */
+const UNKNOWN_FAILS = new Map<string, { n: number; until: number }>();
+const lockMinutes = (n: number) => (n >= 5 ? Math.min(60, 2 ** (n - 5)) : 0);
 function common(): Set<string> {
   if (!COMMON) {
     // UK NCSC top-100k list via SecLists (MIT), filtered to 12+ characters.
@@ -111,6 +115,8 @@ function common(): Set<string> {
         break;
       } catch {}
     }
+    // Fail closed: a build without the list would silently accept breached passwords.
+    if (!text) throw new Error("common-passwords.txt is missing from this build of Bumpsmith.");
     COMMON = new Set(text.split("\n").filter(Boolean));
   }
   return COMMON;
@@ -319,6 +325,11 @@ export class Auth {
       .prepare("SELECT * FROM users WHERE email = ? AND status = 'active'")
       .get(email) as unknown as User | undefined;
     const fail = new AuthError(401, "That email and password do not match.");
+    const ghost = user ? undefined : UNKNOWN_FAILS.get(email);
+    if (ghost && ghost.until > Date.now()) {
+      await verifyPassword(password, null); // same timing as a real check
+      throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+    }
     if (user?.locked_until && Date.parse(user.locked_until) > Date.now()) {
       await verifyPassword(password, null); // same timing as a real check
       audit(this.db, {
@@ -349,6 +360,9 @@ export class Auth {
           detail: { attempt: n },
         });
       } else {
+        const n = (UNKNOWN_FAILS.get(email)?.n ?? 0) + 1;
+        if (UNKNOWN_FAILS.size > 10_000) UNKNOWN_FAILS.clear();
+        UNKNOWN_FAILS.set(email, { n, until: Date.now() + lockMinutes(n) * 60_000 });
         audit(this.db, {
           orgId: null,
           actorId: null,

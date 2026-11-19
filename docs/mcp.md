@@ -38,6 +38,15 @@ claude mcp add bumpsmith -- npx -y bumpsmith@latest mcp
 codex mcp add bumpsmith -- npx -y bumpsmith@latest mcp
 ```
 
+Codex's default timeouts (10 s to start, 60 s per tool) are too short for the first `npx`
+download and for `explain_upgrade`. Raise them in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.bumpsmith]
+startup_timeout_sec = 120
+tool_timeout_sec = 900
+```
+
 ### Cursor
 
 [Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bumpsmith&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJ1bXBzbWl0aEBsYXRlc3QiLCJtY3AiXX0=), or add it to `.cursor/mcp.json`:
@@ -48,13 +57,30 @@ codex mcp add bumpsmith -- npx -y bumpsmith@latest mcp
 
 ### VS Code
 
-[Install in VS Code](https://vscode.dev/redirect/mcp/install?name=bumpsmith&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D), or run:
+[Install in VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22bumpsmith%22%2C%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D), or run:
 
 ```sh
-code --add-mcp '{"name":"bumpsmith","command":"npx","args":["-y","bumpsmith@latest","mcp"]}'
+code --add-mcp '{"name":"bumpsmith","type":"stdio","command":"npx","args":["-y","bumpsmith@latest","mcp"]}'
 ```
 
-### Claude Desktop, Windsurf, Zed and anything else
+### Zed
+
+In Zed's `settings.json`:
+
+```json
+{
+  "context_servers": {
+    "bumpsmith": { "command": "npx", "args": ["-y", "bumpsmith@latest", "mcp"] }
+  }
+}
+```
+
+### Devin Desktop (formerly Windsurf)
+
+Add the same `mcpServers` entry as for Cursor to `~/.config/devin/mcp_config.json`, or to
+`.devin/mcp_config.json` in a project.
+
+### Claude Desktop and anything else
 
 Use command `npx` with args `["-y", "bumpsmith@latest", "mcp"]`. For example, in
 `claude_desktop_config.json`:
@@ -74,10 +100,10 @@ Use command `npx` with args `["-y", "bumpsmith@latest", "mcp"]`. For example, in
 
 1. In Bumpsmith, open **Account → API tokens**.
 2. Create a token. Its scopes set what it can do:
-   - `runs.view`: read results;
-   - `runs.start`: start upgrades;
-   - `workspaces.view`: list repositories.
-3. Point the client at your server:
+   - `runs.view`: list repositories and read results;
+   - `runs.start`: start upgrades.
+3. Point the client at your server. The endpoint takes this token as a static bearer token (it
+   does not run an OAuth flow), so configure the header in the client:
 
 ```json
 {
@@ -89,6 +115,15 @@ Use command `npx` with args `["-y", "bumpsmith@latest", "mcp"]`. For example, in
     }
   }
 }
+```
+
+VS Code uses `"servers"` instead of `"mcpServers"`, with the same entry. In Codex
+(`~/.codex/config.toml`), keep the token in an environment variable:
+
+```toml
+[mcp_servers.bumpsmith]
+url = "https://bumpsmith.acme.dev/mcp"
+bearer_token_env_var = "BUMPSMITH_MCP_TOKEN"
 ```
 
 Runs started over MCP appear live in the dashboard and in the audit log. They use your organisation's

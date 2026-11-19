@@ -3,6 +3,7 @@
 import { createSign } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { GITHUB_API_VERSION } from "../util/github.ts";
 import { run } from "../util/proc.ts";
 import { AuthError } from "./auth.ts";
 import { decrypt, encrypt, newToken, sha256 } from "./crypto.ts";
@@ -50,14 +51,14 @@ export const KEY_PROVIDERS = [
     label: "Together AI",
     env: "TOGETHER_API_KEY",
     hint: "",
-    base: "https://api.together.xyz/v1",
+    base: "https://api.together.ai/v1",
   },
   {
     id: "deepseek",
     label: "DeepSeek",
     env: "DEEPSEEK_API_KEY",
     hint: "sk-…",
-    base: "https://api.deepseek.com/v1",
+    base: "https://api.deepseek.com",
   },
 ] as const;
 
@@ -81,11 +82,12 @@ export interface GithubApp {
 }
 
 const GH = "https://api.github.com";
-const ghHeaders = (auth: string) => ({
+const ghHeaders = (auth: string): Record<string, string> => ({
   accept: "application/vnd.github+json",
-  "x-github-api-version": "2022-11-28",
+  "x-github-api-version": GITHUB_API_VERSION,
   "user-agent": "bumpsmith-self-hosted",
-  authorization: auth,
+  // the manifest conversion takes no credentials, so no header at all rather than an empty one
+  ...(auth ? { authorization: auth } : {}),
 });
 
 export class Integrations {
@@ -169,12 +171,14 @@ export class Integrations {
               headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
               signal: AbortSignal.timeout(10_000),
             })
-          : await fetch(`${p.base}/models`, {
+          : // OpenRouter's /models is public (any key passes), so check the key itself.
+            await fetch(`${p.base}/${p.id === "openrouter" ? "key" : "models"}`, {
               headers: { authorization: `Bearer ${key}` },
               signal: AbortSignal.timeout(10_000),
             });
       if (r.ok) return { ok: true, detail: "Key works." };
-      if (r.status === 401 || r.status === 403)
+      // Gemini answers 400 INVALID_ARGUMENT for a bad key.
+      if (r.status === 401 || r.status === 403 || (p.id === "gemini" && r.status === 400))
         return { ok: false, detail: `${p.label} rejected this key.` };
       return { ok: false, detail: `${p.label} answered ${r.status}. Try again in a moment.` };
     } catch {
@@ -292,11 +296,12 @@ export class Integrations {
       : null;
   }
 
-  /** A short-lived JWT that authenticates as the app itself (RS256, 9 minutes). */
+  /** A short-lived JWT that authenticates as the app itself (RS256, 9 minutes). GitHub recommends
+   *  the client ID as the issuer; apps saved before it was stored fall back to the app ID. */
   private appJwt(app: GithubApp): string {
     const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
     const t = Math.floor(Date.now() / 1000);
-    const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: t - 60, exp: t + 540, iss: String(app.id) })}`;
+    const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: t - 60, exp: t + 540, iss: app.client_id || String(app.id) })}`;
     return `${body}.${createSign("RSA-SHA256").update(body).sign(app.pem).toString("base64url")}`;
   }
 
@@ -315,13 +320,37 @@ export class Integrations {
     return (await r.json()) as T;
   }
 
+  /** Every page of a GitHub list (follows the `link: rel="next"` header, at most 20 pages). */
+  private async ghAll<T>(path: string, auth: string, key?: string): Promise<T[]> {
+    const out: T[] = [];
+    let url: string | null = `${GH}${path}`;
+    for (let i = 0; url && i < 20; i++) {
+      const r: Response | null = await fetch(url, {
+        headers: ghHeaders(auth),
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => null);
+      if (!r) throw new AuthError(502, "Could not reach GitHub.");
+      if (!r.ok)
+        throw new AuthError(
+          r.status === 401 ? 400 : 502,
+          `GitHub answered ${r.status} for ${path.split("?")[0]}.`,
+        );
+      const body = (await r.json()) as Record<string, unknown> | T[];
+      out.push(...((key ? (body as Record<string, unknown>)[key] : body) as T[]));
+      url = /<([^>]+)>;\s*rel="next"/.exec(r.headers.get("link") ?? "")?.[1] ?? null;
+    }
+    return out;
+  }
+
   async installations(orgId: string) {
     const app = this.app(orgId);
     if (!app) return [];
     return (
-      await this.gh<
-        { id: number; account: { login: string; type: string }; repository_selection: string }[]
-      >("/app/installations", `Bearer ${this.appJwt(app)}`)
+      await this.ghAll<{
+        id: number;
+        account: { login: string; type: string };
+        repository_selection: string;
+      }>("/app/installations?per_page=100", `Bearer ${this.appJwt(app)}`)
     ).map((i) => ({
       id: i.id,
       account: i.account.login,
@@ -388,18 +417,19 @@ export class Integrations {
           `Bearer ${this.appJwt(app)}`,
           { method: "POST" },
         );
-        const list = await this.gh<{ repositories: Parameters<typeof pick>[0][] }>(
+        const list = await this.ghAll<Parameters<typeof pick>[0]>(
           "/installation/repositories?per_page=100",
           `Bearer ${t.token}`,
+          "repositories",
         );
-        out.push(...list.repositories.map(pick));
+        out.push(...list.map(pick));
       }
       return out;
     }
     const token = this.get(orgId, "GITHUB_TOKEN");
     if (!token) return [];
     return (
-      await this.gh<Parameters<typeof pick>[0][]>(
+      await this.ghAll<Parameters<typeof pick>[0]>(
         "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
         `Bearer ${token}`,
       )

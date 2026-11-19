@@ -479,7 +479,9 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
 
   let sb: Sandbox | null = null;
   const deadline = new Deadline(opts.jobMinutes ?? 45);
-  const minAge = Math.max(3, opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
+  // At least 3 days, whatever the config or flag says (a non-number counts as the default).
+  const wanted = Number(opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
+  const minAge = Math.max(3, Number.isFinite(wanted) ? wanted : 3);
   try {
     log(`job ${id}: preparing repository`);
     const repoRoot = await prepareRepo(input, dir);

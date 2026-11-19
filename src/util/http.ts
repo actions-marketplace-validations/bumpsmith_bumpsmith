@@ -76,7 +76,7 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
         ? retryAfter * 1000
         : Number.isFinite(reset) && reset > 0
           ? Math.max(1000, reset * 1000 - Date.now())
-          : 30_000 * (attempt + 1);
+          : 60_000 * 2 ** attempt; // GitHub: wait at least a minute, then back off exponentially
     // Wait out short limits only. A long one (GitHub's unauthenticated hourly quota) would stall
     // the whole run for many minutes, so fail now; callers treat these sources as optional.
     if (waitMs > (opts.maxRateLimitWaitMs ?? 60_000)) {

@@ -35,12 +35,12 @@ jobs:
     steps:
       # Recommended: a GitHub App token, so the pull request triggers your CI.
       # Create an app with Contents + Pull requests (write) and Checks (read), install it on
-      # this repository, and store its ID and private key as secrets.
+      # this repository, and store its client ID (variable) and private key (secret).
       - id: app-token
-        if: ${{ vars.BUMPSMITH_APP_ID != '' }}
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: ${{ vars.BUMPSMITH_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
-          app-id: ${{ vars.BUMPSMITH_APP_ID }}
+          client-id: ${{ vars.BUMPSMITH_APP_CLIENT_ID }}
           private-key: ${{ secrets.BUMPSMITH_APP_PRIVATE_KEY }}
       - uses: bumpsmith/bumpsmith@v1 # pin to a commit SHA in production
         with:

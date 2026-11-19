@@ -1,3 +1,4 @@
+import { copyFileSync, mkdirSync } from "node:fs";
 // Bundle the CLI and the GitHub Action into self-contained files in dist/.
 import { build } from "esbuild";
 
@@ -45,3 +46,7 @@ await build({
   minify: true,
   logLevel: "info",
 });
+
+// The breached-password list the server checks against (read at runtime from dist/data).
+mkdirSync("dist/data", { recursive: true });
+copyFileSync("src/server/data/common-passwords.txt", "dist/data/common-passwords.txt");

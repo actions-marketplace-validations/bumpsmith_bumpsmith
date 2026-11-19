@@ -12,6 +12,36 @@
   [`.env.example`](.env.example) with every environment variable.
 - `pnpm demo:workspace`: a ready-made demo organisation for trying the dashboard.
 
+Fixes from an audit against each provider's current documentation:
+
+- **Security:**
+  - the breached-password list now ships in the npm package and Docker image (it was missing, so that check was off), and the server refuses to run without it;
+  - sign-in lockout no longer reveals which emails have accounts;
+  - the malicious-release check only counts OSV `MAL-` advisories (ordinary CVEs were blocking upgrades), follows OSV paging, and fails closed when OSV can't be read;
+  - the release-age floor of 3 days can't be bypassed.
+- **Single sign-on:**
+  - the sign-in is bound to the browser that started it (login CSRF);
+  - only verified emails link existing accounts;
+  - asymmetric ID-token algorithms only;
+  - Entra ID multi-tenant and domain-name issuers, Google's issuer forms, `azp` and the Entra groups overage;
+  - scopes and client authentication (Basic or Post) can be set;
+  - the guide now covers Okta's `groups` scope, Entra group IDs, Auth0 and Keycloak correctly.
+- **Models:**
+  - DeepSeek tool runs keep `reasoning_content` (turn 2 failed);
+  - OpenRouter and Gemini key checks report bad keys correctly;
+  - Together and DeepSeek get `max_tokens` and their documented URLs;
+  - reasoning effort is capped per provider;
+  - the Anthropic spend cap counts every billed fallback attempt and stops on an unknown price;
+  - the Claude Code and Codex runs clear every variable that would bill an API instead of your subscription.
+- **GitHub:**
+  - API version `2026-03-10` everywhere;
+  - the app JWT uses the client ID;
+  - installations and repositories are paginated;
+  - `rescue` works with fine-grained tokens;
+  - rate-limit backoff follows GitHub's guidance;
+  - the example workflow uses `client-id` and create-github-app-token v3.4.0.
+- **MCP:** `/mcp` serves the 2026-07-28 protocol (and the 2025 handshake) and answers 405 to GET. The install guide is fixed for VS Code, Codex timeouts, Zed and Devin Desktop.
+
 ## 0.1.0 — 2026-11-19
 
 First public release.

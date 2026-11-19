@@ -156,19 +156,34 @@ export async function resolveTargets(
     ).data;
     for (const p of pulls) {
       if (!BOT_AUTHORS.has(p.user?.login ?? "")) continue;
-      const runs = (
-        await gh.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
-          owner,
-          repo,
-          ref: p.head.sha,
-          per_page: 100,
-        })
-      ).data.check_runs;
-      if (
-        runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out") &&
-        !runs.some((c) => c.status !== "completed")
-      )
-        prNumbers.push(p.number);
+      // Check runs can't be read with a fine-grained personal access token (GitHub only allows
+      // app and user tokens there), so fall back to the commit's combined status.
+      let red = false;
+      try {
+        const runs = (
+          await gh.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
+            owner,
+            repo,
+            ref: p.head.sha,
+            per_page: 100,
+          })
+        ).data.check_runs;
+        red =
+          runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out") &&
+          !runs.some((c) => c.status !== "completed");
+      } catch (e) {
+        const status = (e as { status?: number }).status;
+        if (status !== 403 && status !== 404) throw e;
+        const combined = (
+          await gh.request("GET /repos/{owner}/{repo}/commits/{ref}/status", {
+            owner,
+            repo,
+            ref: p.head.sha,
+          })
+        ).data;
+        red = combined.state === "failure" || combined.state === "error";
+      }
+      if (red) prNumbers.push(p.number);
     }
   }
   const out: Target[] = [];

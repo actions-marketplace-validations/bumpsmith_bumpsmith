@@ -42,6 +42,7 @@ export interface SsoState {
       clientId: string;
       scopes: string;
       groupsClaim: string;
+      tokenAuth: "auto" | "basic" | "post";
     };
     saml: {
       enabled: boolean;
@@ -127,6 +128,21 @@ function ssoSection(): string {
           ${input("oidc-secret", "Client secret", "", { type: "password", mono: true, placeholder: x.clientSecret ? `saved, ends in ${x.clientSecret.last4}` : "", hint: "Stored encrypted. Leave empty to keep the saved one." })}
           ${input("oidc-label", "Button label", c.oidc.label, { placeholder: "Okta" })}
           ${input("oidc-groups", "Groups claim", c.oidc.groupsClaim, { mono: true, hint: "The ID-token claim that lists the person's groups." })}
+          ${input("oidc-scopes", "Scopes", c.oidc.scopes, { mono: true, hint: "Okta's org server sends groups only when you add groups here." })}
+          <div class="field"><label for="oidc-auth">Client authentication</label><select class="input" id="oidc-auth">${(
+            [
+              ["auto", "Automatic (HTTP Basic when supported)"],
+              ["basic", "Client secret (Basic)"],
+              ["post", "Client secret (Post)"],
+            ] as const
+          )
+            .map(
+              ([v, l]) =>
+                `<option value="${v}" ${c.oidc.tokenAuth === v ? "selected" : ""}>${l}</option>`,
+            )
+            .join(
+              "",
+            )}</select><div class="hint">Match the app's setting in your identity provider. Auth0 apps default to Post.</div></div>
           ${copyRow("Redirect URI (give this to your identity provider)", x.sp.oidcRedirect)}
         </div></div>
       <div class="panel"><div class="panel-h"><h2>SAML 2.0</h2><span class="sub">any SAML identity provider</span><div class="r">${c.saml.enabled ? `<span class="badge ok"><span class="dot ok"></span>on</span>` : `<span class="badge">off</span>`}</div></div>
@@ -165,7 +181,9 @@ function readSso(): SsoState["config"] | null {
       label: v("oidc-label"),
       issuer: v("oidc-issuer"),
       clientId: v("oidc-client"),
-      scopes: x.config.oidc.scopes,
+      scopes: v("oidc-scopes") || x.config.oidc.scopes,
+      tokenAuth: ((document.getElementById("oidc-auth") as HTMLSelectElement | null)?.value ??
+        "auto") as "auto" | "basic" | "post",
       groupsClaim: v("oidc-groups"),
     },
     saml: {

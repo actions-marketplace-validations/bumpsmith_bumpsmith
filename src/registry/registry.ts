@@ -134,33 +134,45 @@ export interface MaliciousCheck {
   ids: string[];
 }
 
-/** Query OSV for known-malicious advisories on an exact version (CHG-10). */
+/** Query OSV for known-malicious advisories on an exact version (CHG-10).
+ *  Only MAL- advisories count (an ordinary CVE that mentions "malicious input" is not a malicious
+ *  package). Fails closed: if OSV can't be read completely, the release is treated as unsafe. */
 export async function checkMalicious(
   ecosystem: Ecosystem,
   name: string,
   version: string,
 ): Promise<MaliciousCheck> {
+  type Vuln = { id: string; aliases?: string[] };
+  const vulns: Vuln[] = [];
   try {
-    const res = await fetchJson<{ vulns?: { id: string; summary?: string; details?: string }[] }>(
-      "https://api.osv.dev/v1/query",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          package: { name, ecosystem: ecosystem === "npm" ? "npm" : "PyPI" },
-          version,
-        }),
-        cacheSeconds: 3600,
-      },
-    );
-    const mal = (res.vulns ?? []).filter(
-      (v) => v.id.startsWith("MAL-") || /malicious/i.test(`${v.summary ?? ""} ${v.details ?? ""}`),
-    );
-    return { malicious: mal.length > 0, ids: mal.map((v) => v.id) };
+    let pageToken: string | undefined;
+    // OSV may answer with only a next_page_token when a query takes too long: keep asking.
+    for (let page = 0; page < 10; page++) {
+      const res = await fetchJson<{ vulns?: Vuln[]; next_page_token?: string }>(
+        "https://api.osv.dev/v1/query",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            package: { name, ecosystem: ecosystem === "npm" ? "npm" : "PyPI" },
+            version,
+            ...(pageToken ? { page_token: pageToken } : {}),
+          }),
+          cacheSeconds: 3600,
+        },
+      );
+      vulns.push(...(res.vulns ?? []));
+      pageToken = res.next_page_token;
+      if (!pageToken) break;
+    }
+    if (pageToken) return { malicious: true, ids: ["OSV answer incomplete"] };
   } catch (err) {
-    if (err instanceof HttpError) return { malicious: false, ids: [] };
+    if (err instanceof HttpError) return { malicious: true, ids: ["OSV unavailable"] };
     throw err;
   }
+  const isMal = (id: string) => id.startsWith("MAL-");
+  const mal = vulns.filter((v) => isMal(v.id) || (v.aliases ?? []).some(isMal));
+  return { malicious: mal.length > 0, ids: mal.map((v) => v.id) };
 }
 
 export interface GateResult {

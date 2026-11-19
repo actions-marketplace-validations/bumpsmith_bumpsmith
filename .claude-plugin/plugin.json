@@ -2,12 +2,14 @@
   "name": "bumpsmith",
   "version": "0.1.1",
   "description": "Verified dependency upgrades: the Bumpsmith MCP server (scan, check a release, explain, upgrade and fix in a sandbox, apply) and a skill that teaches the agent when and how to use it.",
-  "author": { "name": "Bumpsmith", "url": "https://github.com/bumpsmith" },
+  "author": {
+    "name": "Bumpsmith",
+    "url": "https://github.com/bumpsmith"
+  },
   "homepage": "https://github.com/bumpsmith/bumpsmith",
   "repository": "https://github.com/bumpsmith/bumpsmith",
   "license": "Apache-2.0",
   "keywords": ["dependencies", "upgrades", "dependabot", "renovate", "npm", "pypi", "mcp"],
-  "skills": "./skills/",
   "mcpServers": {
     "bumpsmith": {
       "command": "npx",

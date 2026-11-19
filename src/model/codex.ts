@@ -52,7 +52,7 @@ const EFFORT: Record<Effort, string> = {
   medium: "medium",
   high: "high",
   xhigh: "xhigh",
-  max: "xhigh",
+  max: "xhigh", // "max" exists in recent Codex releases only; xhigh works everywhere
 };
 
 interface CodexEvents {
@@ -108,6 +108,7 @@ export class CodexProvider implements ModelProvider {
     // Bill the user's ChatGPT plan, never an API key that happens to be in the environment.
     const childEnv: NodeJS.ProcessEnv = { ...process.env, ...env };
     delete childEnv.OPENAI_API_KEY;
+    delete childEnv.CODEX_API_KEY; // Codex exec's own API-key variable
     try {
       const args = [
         "exec",

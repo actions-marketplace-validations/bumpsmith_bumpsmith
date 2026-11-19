@@ -274955,7 +274955,7 @@ async function fetchText(url2, opts = {}) {
     if (!limited || attempt === 3) break;
     const retryAfter = Number(res.headers.get("retry-after"));
     const reset = Number(res.headers.get("x-ratelimit-reset"));
-    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1e3 : Number.isFinite(reset) && reset > 0 ? Math.max(1e3, reset * 1e3 - Date.now()) : 3e4 * (attempt + 1);
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1e3 : Number.isFinite(reset) && reset > 0 ? Math.max(1e3, reset * 1e3 - Date.now()) : 6e4 * 2 ** attempt;
     if (waitMs > (opts.maxRateLimitWaitMs ?? 6e4)) {
       const hint = /api\.github\.com/.test(url2) ? " Set GITHUB_TOKEN to raise GitHub's rate limit." : "";
       throw new HttpError(
@@ -275290,27 +275290,35 @@ async function npmPeerDependencies(name, version2) {
   return Object.keys(await npmPeerRanges(name, version2));
 }
 async function checkMalicious(ecosystem, name, version2) {
+  const vulns = [];
   try {
-    const res = await fetchJson(
-      "https://api.osv.dev/v1/query",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          package: { name, ecosystem: ecosystem === "npm" ? "npm" : "PyPI" },
-          version: version2
-        }),
-        cacheSeconds: 3600
-      }
-    );
-    const mal = (res.vulns ?? []).filter(
-      (v) => v.id.startsWith("MAL-") || /malicious/i.test(`${v.summary ?? ""} ${v.details ?? ""}`)
-    );
-    return { malicious: mal.length > 0, ids: mal.map((v) => v.id) };
+    let pageToken;
+    for (let page = 0; page < 10; page++) {
+      const res = await fetchJson(
+        "https://api.osv.dev/v1/query",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            package: { name, ecosystem: ecosystem === "npm" ? "npm" : "PyPI" },
+            version: version2,
+            ...pageToken ? { page_token: pageToken } : {}
+          }),
+          cacheSeconds: 3600
+        }
+      );
+      vulns.push(...res.vulns ?? []);
+      pageToken = res.next_page_token;
+      if (!pageToken) break;
+    }
+    if (pageToken) return { malicious: true, ids: ["OSV answer incomplete"] };
   } catch (err) {
-    if (err instanceof HttpError) return { malicious: false, ids: [] };
+    if (err instanceof HttpError) return { malicious: true, ids: ["OSV unavailable"] };
     throw err;
   }
+  const isMal = (id) => id.startsWith("MAL-");
+  const mal = vulns.filter((v) => isMal(v.id) || (v.aliases ?? []).some(isMal));
+  return { malicious: mal.length > 0, ids: mal.map((v) => v.id) };
 }
 function releaseGate(release, malicious, minAgeDays, now = /* @__PURE__ */ new Date()) {
   const reasons = [];
@@ -276875,7 +276883,11 @@ var PRICES = {
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5 },
   "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1, cacheWrite5m: 2.5 },
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite5m: 0.125 },
-  "claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.2, cacheWrite5m: 10 }
+  "claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.2, cacheWrite5m: 10 },
+  // Models a server-side fallback can serve from (refusals-and-fallback docs, 2026-11-20).
+  "claude-opus-5": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25 },
+  "claude-opus-4-8": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25 },
+  "claude-fable-5-1": { input: 10, output: 50, cacheRead: 1, cacheWrite5m: 12.5 }
 };
 function priceFor(model) {
   return PRICES[model];
@@ -276913,12 +276925,22 @@ var AnthropicProvider = class {
       cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: u.cache_read_input_tokens ?? 0
     };
+    const its = u.iterations;
+    const cost = its?.length ? its.reduce(
+      (n, it) => n + costUsd(it.model ?? model, {
+        input_tokens: it.input_tokens ?? 0,
+        output_tokens: it.output_tokens ?? 0,
+        cache_creation_input_tokens: it.cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: it.cache_read_input_tokens ?? 0
+      }),
+      0
+    ) : costUsd(model, usage);
     return {
       role,
       provider: this.name,
       model,
       ...usage,
-      api_equivalent_usd: costUsd(model, usage),
+      api_equivalent_usd: cost,
       duration_ms: Date.now() - started
     };
   }
@@ -276977,7 +276999,14 @@ var AnthropicProvider = class {
         const message = await stream2.finalMessage();
         const e = this.entry(req.role, message.model, message.usage, started);
         usage.push(e);
-        spent += Number.isNaN(e.api_equivalent_usd) ? 0 : e.api_equivalent_usd;
+        if (Number.isNaN(e.api_equivalent_usd))
+          return {
+            finalText,
+            stop: "budget",
+            usage,
+            error: `no list price for ${message.model}; stopped to keep the spend cap`
+          };
+        spent += e.api_equivalent_usd;
         started = Date.now();
         turns += 1;
         finalText = message.content.flatMap((b) => b.type === "text" ? [b.text] : []).join("\n").trim() || finalText;
@@ -301217,15 +301246,27 @@ _a7 = brand_privateBedrockClient;
 
 // src/model/openai-compatible.ts
 var PRESETS = {
-  openai: { baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY" },
+  openai: { baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY", maxEffort: "max" },
   gemini: {
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     keyEnv: "GEMINI_API_KEY"
   },
-  openrouter: { baseURL: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY" },
-  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY" },
-  together: { baseURL: "https://api.together.xyz/v1", keyEnv: "TOGETHER_API_KEY" },
-  deepseek: { baseURL: "https://api.deepseek.com/v1", keyEnv: "DEEPSEEK_API_KEY" },
+  openrouter: {
+    baseURL: "https://openrouter.ai/api/v1",
+    keyEnv: "OPENROUTER_API_KEY",
+    maxEffort: "xhigh"
+  },
+  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", maxEffort: "max" },
+  together: {
+    baseURL: "https://api.together.ai/v1",
+    keyEnv: "TOGETHER_API_KEY",
+    maxTokensParam: "max_tokens"
+  },
+  deepseek: {
+    baseURL: "https://api.deepseek.com",
+    keyEnv: "DEEPSEEK_API_KEY",
+    maxTokensParam: "max_tokens"
+  },
   ollama: { baseURL: "http://localhost:11434/v1", keyEnv: null, local: true },
   lmstudio: { baseURL: "http://localhost:1234/v1", keyEnv: null, local: true }
 };
@@ -301235,19 +301276,15 @@ function assertSafeBaseUrl(url2) {
   if (u.protocol !== "https:" && !(u.protocol === "http:" && local))
     throw new Error(`refusing non-HTTPS model endpoint ${u.origin}`);
 }
-var EFFORT = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "high",
-  max: "high"
-};
+var ORDER = ["low", "medium", "high", "xhigh", "max"];
+var effortFor = (e, cap = "high") => ORDER[Math.min(ORDER.indexOf(e), ORDER.indexOf(cap))] ?? "high";
 var OpenAICompatibleProvider = class {
   name;
   model;
   client;
   pricing;
   reasoningSupported = true;
+  preset;
   constructor(opts) {
     const preset = PRESETS[opts.preset];
     const baseURL = opts.baseURL ?? preset?.baseURL;
@@ -301264,6 +301301,7 @@ var OpenAICompatibleProvider = class {
     if (!apiKey && !opts.client)
       throw new Error(`set ${preset?.keyEnv ?? "OPENAI_API_KEY"} for ${opts.preset}`);
     this.name = opts.preset;
+    this.preset = preset;
     this.model = opts.model;
     this.pricing = opts.pricing ?? null;
     this.client = opts.client ?? new OpenAI({ apiKey, baseURL, maxRetries: 3, timeout: 10 * 6e4 });
@@ -301286,7 +301324,14 @@ var OpenAICompatibleProvider = class {
     };
   }
   async complete(body, effort) {
-    const withEffort = this.reasoningSupported ? { ...body, reasoning_effort: EFFORT[effort] } : body;
+    if (this.preset?.maxTokensParam === "max_tokens" && body.max_completion_tokens != null) {
+      const { max_completion_tokens, ...rest } = body;
+      body = { ...rest, max_tokens: max_completion_tokens };
+    }
+    const withEffort = this.reasoningSupported ? {
+      ...body,
+      reasoning_effort: effortFor(effort, this.preset?.maxEffort)
+    } : body;
     try {
       return await this.client.chat.completions.create({ model: this.model, ...withEffort });
     } catch (err) {
@@ -301386,7 +301431,13 @@ ${JSON.stringify(schema)}`
       if (msg.refusal) return { finalText: msg.refusal, stop: "refusal", usage };
       const calls = (msg.tool_calls ?? []).filter((c) => c.type === "function");
       if (!calls.length) return { finalText: msg.content ?? "", stop: "completed", usage };
-      messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: calls });
+      const reasoning = msg.reasoning_content;
+      messages.push({
+        role: "assistant",
+        content: msg.content ?? null,
+        tool_calls: calls,
+        ...reasoning != null ? { reasoning_content: reasoning } : {}
+      });
       for (const call of calls) {
         const tool = byName.get(call.function.name);
         let result;
@@ -304927,7 +304978,8 @@ async function runJob(input3, opts) {
   };
   let sb = null;
   const deadline = new Deadline(opts.jobMinutes ?? 45);
-  const minAge = Math.max(3, opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
+  const wanted = Number(opts.config?.release_age_days ?? opts.minReleaseAgeDays ?? 3);
+  const minAge = Math.max(3, Number.isFinite(wanted) ? wanted : 3);
   try {
     log2(`job ${id}: preparing repository`);
     const repoRoot = await prepareRepo(input3, dir);
@@ -305668,14 +305720,26 @@ async function resolveTargets(gh2, owner, repo, event, payload, opts = modeFromI
     })).data;
     for (const p of pulls) {
       if (!BOT_AUTHORS.has(p.user?.login ?? "")) continue;
-      const runs = (await gh2.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
-        owner,
-        repo,
-        ref: p.head.sha,
-        per_page: 100
-      })).data.check_runs;
-      if (runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out") && !runs.some((c) => c.status !== "completed"))
-        prNumbers.push(p.number);
+      let red = false;
+      try {
+        const runs = (await gh2.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
+          owner,
+          repo,
+          ref: p.head.sha,
+          per_page: 100
+        })).data.check_runs;
+        red = runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out") && !runs.some((c) => c.status !== "completed");
+      } catch (e) {
+        const status = e.status;
+        if (status !== 403 && status !== 404) throw e;
+        const combined = (await gh2.request("GET /repos/{owner}/{repo}/commits/{ref}/status", {
+          owner,
+          repo,
+          ref: p.head.sha
+        })).data;
+        red = combined.state === "failure" || combined.state === "error";
+      }
+      if (red) prNumbers.push(p.number);
     }
   }
   const out = [];

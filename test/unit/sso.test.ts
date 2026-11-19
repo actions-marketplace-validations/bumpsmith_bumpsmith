@@ -27,6 +27,7 @@ describe("single sign-on", { timeout: 60_000 }, () => {
   let roles: Record<string, string> = {};
   // The fake identity provider: what it signs into the next ID token.
   let keys: Awaited<ReturnType<typeof generateKeyPair>>;
+  let lastAuth = "";
   const codes = new Map<string, { claims: Record<string, unknown>; challenge: string }>();
   let samlKey = "";
   let samlCert = "";
@@ -77,7 +78,11 @@ describe("single sign-on", { timeout: 60_000 }, () => {
             .update(f.get("code_verifier") ?? "")
             .digest("base64url") === entry.challenge &&
           // client authentication: HTTP Basic by default, or the secret in the body
-          (req.headers.authorization ?? "") === basicAuth;
+          ((req.headers.authorization ?? "") === basicAuth ||
+            (!req.headers.authorization &&
+              f.get("client_id") === "bumpsmith" &&
+              f.get("client_secret") === "s3cret-value"));
+        lastAuth = req.headers.authorization ? "basic" : "post";
         if (!ok) {
           res.writeHead(400);
           return res.end("{}");
@@ -187,8 +192,12 @@ describe("single sign-on", { timeout: 60_000 }, () => {
   async function oidcSignIn(
     claims: Record<string, unknown>,
     tweak: (nonce: string) => Record<string, unknown> = (n) => ({ nonce: n }),
+    opts: { otherBrowser?: boolean } = {},
   ) {
     const start = await fetch(`${base}/auth/oidc/start`, { redirect: "manual" });
+    const bind = (start.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    expect(bind).toMatch(/^bs_sso_oidc=.+/);
+    expect(start.headers.get("set-cookie")).toMatch(/SameSite=Lax/);
     expect(start.status).toBe(302);
     const auth = new URL(start.headers.get("location") ?? "");
     expect(auth.searchParams.get("code_challenge_method")).toBe("S256");
@@ -207,7 +216,7 @@ describe("single sign-on", { timeout: 60_000 }, () => {
     const state = auth.searchParams.get("state") ?? "";
     const cb = await fetch(
       `${base}/auth/oidc/callback?code=${c}&state=${encodeURIComponent(state)}`,
-      { redirect: "manual" },
+      { redirect: "manual", headers: opts.otherBrowser ? {} : { cookie: bind } },
     );
     return { cb, state, code: c };
   }
@@ -293,7 +302,11 @@ describe("single sign-on", { timeout: 60_000 }, () => {
   /** A SAML Response for the latest AuthnRequest, with the assertion signed by the IdP. */
   async function samlResponse(email: string, opts: { sign?: boolean; tamper?: boolean } = {}) {
     const start = await fetch(`${base}/auth/saml/start`, { redirect: "manual" });
-    const req = new URL(start.headers.get("location") ?? "").searchParams.get("SAMLRequest") ?? "";
+    const loc = new URL(start.headers.get("location") ?? "");
+    const req = loc.searchParams.get("SAMLRequest") ?? "";
+    const relay = loc.searchParams.get("RelayState") ?? "";
+    const bind = (start.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    expect(start.headers.get("set-cookie")).toMatch(/SameSite=None; Secure/);
     const reqId =
       /ID="([^"]+)"/.exec(inflateRawSync(Buffer.from(req, "base64")).toString())?.[1] ?? "";
     const now = new Date();
@@ -323,15 +336,19 @@ describe("single sign-on", { timeout: 60_000 }, () => {
     }
     if (opts.tamper) signed = signed.replaceAll(email, "boss@acme.dev");
     const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_r${randomUUID().replace(/-/g, "")}" Version="2.0" IssueInstant="${now.toISOString()}" Destination="${base}/auth/saml/acs" InResponseTo="${reqId}"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">https://idp.test</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signed}</samlp:Response>`;
-    return Buffer.from(response).toString("base64");
+    return { response: Buffer.from(response).toString("base64"), relay, bind };
   }
-  const acs = (samlResponse: string) =>
+  const acs = (r: { response: string; relay: string; bind: string }) =>
     fetch(`${base}/auth/saml/acs`, {
       method: "POST",
       redirect: "manual",
       // The identity provider posts from its own site: this must not be refused as cross-origin.
-      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://idp.test" },
-      body: new URLSearchParams({ SAMLResponse: samlResponse }).toString(),
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://idp.test",
+        ...(r.bind ? { cookie: r.bind } : {}),
+      },
+      body: new URLSearchParams({ SAMLResponse: r.response, RelayState: r.relay }).toString(),
     });
 
   it("publishes service-provider metadata", async () => {
@@ -360,6 +377,69 @@ describe("single sign-on", { timeout: 60_000 }, () => {
     const unsigned = await acs(await samlResponse("lee@acme.dev", { sign: false }));
     expect(unsigned.headers.get("location")).toMatch(/sso_error/);
     expect(unsigned.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("refuses a sign-in finished in another browser, and an unsolicited SAML response", async () => {
+    const other = await oidcSignIn(
+      { sub: "okta-1", email: "sam@acme.dev", email_verified: true },
+      undefined,
+      { otherBrowser: true },
+    );
+    expect(other.cb.headers.get("location")).toMatch(/sso_error=.*another%20browser/);
+    const r = await samlResponse("lee@acme.dev");
+    const idpInitiated = await acs({ ...r, relay: "", bind: "" });
+    expect(idpInitiated.headers.get("location")).toMatch(/sso_error=.*Bumpsmith%20sign-in%20page/);
+  });
+
+  it("never links an existing account to an unverified email", async () => {
+    // dana@acme.dev is the password Owner; a token without email_verified must not take it over
+    const { cb } = await oidcSignIn({ sub: "evil-1", email: "dana@acme.dev" });
+    expect(cb.headers.get("location")).toMatch(/sso_error=.*not%20verified/);
+    const str = await oidcSignIn({
+      sub: "evil-2",
+      email: "dana@acme.dev",
+      email_verified: "false",
+    });
+    expect(str.cb.headers.get("location")).toMatch(/sso_error=.*not%20verified/);
+  });
+
+  it("keeps the role when the provider leaves the groups out (Entra ID overage)", async () => {
+    const first = await oidcSignIn({
+      sub: "entra-1",
+      email: "ola@acme.dev",
+      email_verified: true,
+      groups: ["eng"],
+    });
+    expect(first.cb.headers.get("location")).toBe("/#/");
+    const again = await oidcSignIn({
+      sub: "entra-1",
+      email: "ola@acme.dev",
+      email_verified: true,
+      _claim_names: { groups: "src1" },
+    });
+    const cookie = (again.cb.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    const s = (await (await fetch(`${base}/auth/session`, { headers: { cookie } })).json()) as {
+      role: { name: string };
+    };
+    expect(s.role.name).toBe("Maintainer");
+  });
+
+  it("sends the client secret the way the app is set up (Basic by default, or Post)", async () => {
+    await oidcSignIn({ sub: "okta-1", email: "sam@acme.dev", email_verified: true });
+    expect(lastAuth).toBe("basic");
+    expect(
+      (
+        await post(
+          "/api/sso",
+          { config: config({ oidc: { ...config().oidc, tokenAuth: "post" } }) },
+          owner,
+        )
+      ).status,
+    ).toBe(200);
+    const { cb } = await oidcSignIn({ sub: "okta-1", email: "sam@acme.dev", email_verified: true });
+    expect(cb.headers.get("location")).toBe("/#/");
+    expect(lastAuth).toBe("post");
+    await post("/api/sso", { config: config() }, owner);
   });
 
   it("when SSO is required, only Owners may still use a password", async () => {

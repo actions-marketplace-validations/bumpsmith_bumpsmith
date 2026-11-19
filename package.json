@@ -90,6 +90,7 @@
     "dist/cli.js",
     "dist/cli.js.LEGAL.txt",
     "dist/dashboard-app.js",
+    "dist/data",
     "sandbox",
     "dashboard",
     "skills",

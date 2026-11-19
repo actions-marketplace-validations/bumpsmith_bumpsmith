@@ -1,5 +1,6 @@
 // Tamper-evident audit log: append-only rows, each hashed together with the previous row's
-// hash. Editing or deleting any row breaks the chain from that point, which verify() reports.
+// hash. Editing or deleting any row breaks the chain from that point, which verify() reports;
+// removing the newest rows can't be seen from the chain alone, so exports anchor the head.
 import { sha256 } from "./crypto.ts";
 import { type Db, now } from "./db.ts";
 

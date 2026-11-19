@@ -16,7 +16,8 @@ import {
  * Production provider on the Claude API (SDK 1.x, API version 2026-10-21).
  * - claude-opus-5-5: thinking is always on (adaptive); effort set explicitly (default would be medium).
  * - No temperature/top_p/top_k (rejected on API version 2026-10-21).
- * - No forced tool_choice (rejected on this model); tools use strict schemas via Zod.
+ * - No forced tool_choice (rejected on this model); every tool input is validated with its Zod
+ *   schema before it runs.
  * - Server-side refusal fallback enabled ("default" routing), refusals surfaced as RefusalError.
  * - Top-level automatic prompt caching; stable system prompt first.
  */
@@ -48,12 +49,30 @@ export class AnthropicProvider implements ModelProvider {
       cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: u.cache_read_input_tokens ?? 0,
     };
+    // The top-level usage covers only the attempt that produced the message; with a server-side
+    // fallback, declined attempts are billed too and appear only in usage.iterations, each with
+    // its own model.
+    const its = (u as { iterations?: Array<Partial<Usage> & { model?: string }> | null })
+      .iterations;
+    const cost = its?.length
+      ? its.reduce(
+          (n, it) =>
+            n +
+            costUsd(it.model ?? model, {
+              input_tokens: it.input_tokens ?? 0,
+              output_tokens: it.output_tokens ?? 0,
+              cache_creation_input_tokens: it.cache_creation_input_tokens ?? 0,
+              cache_read_input_tokens: it.cache_read_input_tokens ?? 0,
+            }),
+          0,
+        )
+      : costUsd(model, usage);
     return {
       role,
       provider: this.name,
       model,
       ...usage,
-      api_equivalent_usd: costUsd(model, usage),
+      api_equivalent_usd: cost,
       duration_ms: Date.now() - started,
     };
   }
@@ -115,7 +134,15 @@ export class AnthropicProvider implements ModelProvider {
         const message = await stream.finalMessage();
         const e = this.entry(req.role, message.model, message.usage, started);
         usage.push(e);
-        spent += Number.isNaN(e.api_equivalent_usd) ? 0 : e.api_equivalent_usd;
+        // An unknown price would make the spend cap meaningless: stop rather than count it as 0.
+        if (Number.isNaN(e.api_equivalent_usd))
+          return {
+            finalText,
+            stop: "budget",
+            usage,
+            error: `no list price for ${message.model}; stopped to keep the spend cap`,
+          };
+        spent += e.api_equivalent_usd;
         started = Date.now();
         turns += 1;
         finalText =

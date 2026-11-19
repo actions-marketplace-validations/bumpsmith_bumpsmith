@@ -29,18 +29,34 @@ export interface Preset {
   keyEnv: string | null;
   /** Local servers need no key. */
   local?: boolean;
+  /** Providers whose chat schema only has the older `max_tokens` (Together, DeepSeek). */
+  maxTokensParam?: "max_tokens";
+  /** Highest `reasoning_effort` the provider accepts (default "high"). */
+  maxEffort?: "high" | "xhigh" | "max";
 }
 
 export const PRESETS: Record<string, Preset> = {
-  openai: { baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY" },
+  openai: { baseURL: "https://api.openai.com/v1", keyEnv: "OPENAI_API_KEY", maxEffort: "max" },
   gemini: {
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     keyEnv: "GEMINI_API_KEY",
   },
-  openrouter: { baseURL: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY" },
-  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY" },
-  together: { baseURL: "https://api.together.xyz/v1", keyEnv: "TOGETHER_API_KEY" },
-  deepseek: { baseURL: "https://api.deepseek.com/v1", keyEnv: "DEEPSEEK_API_KEY" },
+  openrouter: {
+    baseURL: "https://openrouter.ai/api/v1",
+    keyEnv: "OPENROUTER_API_KEY",
+    maxEffort: "xhigh",
+  },
+  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", maxEffort: "max" },
+  together: {
+    baseURL: "https://api.together.ai/v1",
+    keyEnv: "TOGETHER_API_KEY",
+    maxTokensParam: "max_tokens",
+  },
+  deepseek: {
+    baseURL: "https://api.deepseek.com",
+    keyEnv: "DEEPSEEK_API_KEY",
+    maxTokensParam: "max_tokens",
+  },
   ollama: { baseURL: "http://localhost:11434/v1", keyEnv: null, local: true },
   lmstudio: { baseURL: "http://localhost:1234/v1", keyEnv: null, local: true },
 };
@@ -63,13 +79,11 @@ export interface OpenAICompatibleOptions {
   client?: OpenAI;
 }
 
-const EFFORT: Record<Effort, "low" | "medium" | "high"> = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "high",
-  max: "high",
-};
+type WireEffort = "low" | "medium" | "high" | "xhigh" | "max";
+const ORDER: WireEffort[] = ["low", "medium", "high", "xhigh", "max"];
+/** Our effort, capped at the highest level the provider documents. */
+const effortFor = (e: Effort, cap: WireEffort = "high"): WireEffort =>
+  ORDER[Math.min(ORDER.indexOf(e as WireEffort), ORDER.indexOf(cap))] ?? "high";
 
 export class OpenAICompatibleProvider implements ModelProvider {
   readonly name: string;
@@ -77,6 +91,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private readonly client: OpenAI;
   private readonly pricing: { input: number; output: number } | null;
   private reasoningSupported = true;
+  private readonly preset: Preset | undefined;
 
   constructor(opts: OpenAICompatibleOptions) {
     const preset = PRESETS[opts.preset];
@@ -97,6 +112,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (!apiKey && !opts.client)
       throw new Error(`set ${preset?.keyEnv ?? "OPENAI_API_KEY"} for ${opts.preset}`);
     this.name = opts.preset;
+    this.preset = preset;
     this.model = opts.model;
     this.pricing = opts.pricing ?? null;
     this.client =
@@ -127,8 +143,16 @@ export class OpenAICompatibleProvider implements ModelProvider {
     body: Omit<OpenAI.ChatCompletionCreateParamsNonStreaming, "model">,
     effort: Effort,
   ) {
+    // Together and DeepSeek document only max_tokens.
+    if (this.preset?.maxTokensParam === "max_tokens" && body.max_completion_tokens != null) {
+      const { max_completion_tokens, ...rest } = body;
+      body = { ...rest, max_tokens: max_completion_tokens };
+    }
     const withEffort = this.reasoningSupported
-      ? { ...body, reasoning_effort: EFFORT[effort] }
+      ? {
+          ...body,
+          reasoning_effort: effortFor(effort, this.preset?.maxEffort) as "high",
+        }
       : body;
     try {
       return await this.client.chat.completions.create({ model: this.model, ...withEffort });
@@ -240,7 +264,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
       if (msg.refusal) return { finalText: msg.refusal, stop: "refusal", usage };
       const calls = (msg.tool_calls ?? []).filter((c) => c.type === "function");
       if (!calls.length) return { finalText: msg.content ?? "", stop: "completed", usage };
-      messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: calls });
+      // DeepSeek (thinking mode) requires its reasoning_content to be sent back with tool calls,
+      // or the next turn fails with a 400; others ignore the extra field.
+      const reasoning = (msg as { reasoning_content?: string | null }).reasoning_content;
+      messages.push({
+        role: "assistant",
+        content: msg.content ?? null,
+        tool_calls: calls,
+        ...(reasoning != null ? { reasoning_content: reasoning } : {}),
+      } as ChatCompletionMessageParam);
       for (const call of calls) {
         const tool = byName.get(call.function.name);
         let result: string;

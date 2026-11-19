@@ -138,7 +138,7 @@ Give Claude Code, Codex, Cursor, VS Code or any MCP client the tools to upgrade 
 claude mcp add bumpsmith -- npx -y bumpsmith@latest mcp     # or: codex mcp add bumpsmith -- npx -y bumpsmith@latest mcp
 ```
 
-[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bumpsmith&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJ1bXBzbWl0aEBsYXRlc3QiLCJtY3AiXX0=) · [Install in VS Code](https://vscode.dev/redirect/mcp/install?name=bumpsmith&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D) · [Skill file](skills/bumpsmith/SKILL.md) · [All clients, tools, and HTTP access for teams](docs/mcp.md)
+[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bumpsmith&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJ1bXBzbWl0aEBsYXRlc3QiLCJtY3AiXX0=) · [Install in VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22bumpsmith%22%2C%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D) · [Skill file](skills/bumpsmith/SKILL.md) · [All clients, tools, and HTTP access for teams](docs/mcp.md)
 
 A self-hosted Bumpsmith also serves MCP at `/mcp` for your applications, with personal API tokens.
 The access matrix and the audit log apply there too.
@@ -274,7 +274,8 @@ Create a small GitHub App for your organisation:
 
 - **Permissions:** Contents and Pull requests (write), and Checks (read).
 - **Install** it on the repository.
-- **Secrets:** set the `BUMPSMITH_APP_ID` variable and the `BUMPSMITH_APP_PRIVATE_KEY` secret.
+- **Secrets:** set the `BUMPSMITH_APP_CLIENT_ID` variable (the app's client ID) and the
+  `BUMPSMITH_APP_PRIVATE_KEY` secret.
 
 The example workflow then uses [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
 </details>

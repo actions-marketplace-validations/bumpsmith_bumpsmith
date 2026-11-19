@@ -121,8 +121,19 @@ export class ClaudeCodeProvider implements ModelProvider {
     const cwd = await mkdtemp(join(tmpdir(), "bumpsmith-cc-"));
     // Force subscription auth: an API key in the environment would bill the API instead.
     const env = { ...process.env };
-    delete env.ANTHROPIC_API_KEY;
-    delete env.ANTHROPIC_AUTH_TOKEN;
+    // Everything that outranks the /login subscription, or reroutes requests, per the
+    // authentication precedence in the Claude Code docs.
+    for (const k of [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_PROFILE",
+      "ANTHROPIC_FEDERATION_RULE_ID",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CODE_USE_FOUNDRY",
+    ])
+      delete env[k];
     try {
       const r = await run(
         this.bin,
