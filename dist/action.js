@@ -303950,7 +303950,7 @@ function packageRoot() {
 }
 var ROOT = packageRoot();
 var SANDBOX_DIR = join11(ROOT, "sandbox");
-var DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? join11(ROOT, ".data");
+var DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? process.env.BUMPSMITH_DATA ?? join11(ROOT, ".data");
 var NETWORK = "bumpsmith-sbx";
 var SUBNET = "172.31.250.0/24";
 var MIRROR_NAME = "bumpsmith-registry-mirror";

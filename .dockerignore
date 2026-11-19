@@ -6,3 +6,12 @@ test
 examples
 .bumpsmith
 *.log
+deploy/master.key
+deploy/.env
+.env
+.env.*
+!.env.example
+.data
+.demo
+.cache
+.secrets

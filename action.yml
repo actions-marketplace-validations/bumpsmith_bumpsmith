@@ -2,7 +2,7 @@ name: Bumpsmith
 description: Fixes your code when a dependency ships a breaking change, verified in a sandbox and opened as a pull request.
 author: Bumpsmith
 branding:
-  icon: tool
+  icon: package
   color: orange
 inputs:
   provider:

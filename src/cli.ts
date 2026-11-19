@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: bumpsmith/bumpsmith@main   # pin to a release commit SHA once v1 is tagged
+      - uses: bumpsmith/bumpsmith@v1     # pin to a release commit SHA in production
         with:
           provider: anthropic            # or openai, gemini, openrouter, groq, together, deepseek
           api-key: \${{ secrets.ANTHROPIC_API_KEY }}
@@ -530,6 +530,7 @@ async function main() {
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
     case "mcp": {
+      quietSqliteWarning(); // stdout carries JSON-RPC; keep stderr free of Node warnings too
       const { serveLocal } = await import("./mcp/local.ts");
       await serveLocal(resolve(values.repo ?? "."), process.argv[1] ?? "");
       return;

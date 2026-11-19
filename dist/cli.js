@@ -366104,7 +366104,7 @@ function packageRoot() {
 }
 var ROOT = packageRoot();
 var SANDBOX_DIR = join11(ROOT, "sandbox");
-var DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? join11(ROOT, ".data");
+var DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? process.env.BUMPSMITH_DATA ?? join11(ROOT, ".data");
 var NETWORK = "bumpsmith-sbx";
 var SUBNET = "172.31.250.0/24";
 var MIRROR_NAME = "bumpsmith-registry-mirror";
@@ -369222,7 +369222,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: bumpsmith/bumpsmith@main   # pin to a release commit SHA once v1 is tagged
+      - uses: bumpsmith/bumpsmith@v1     # pin to a release commit SHA in production
         with:
           provider: anthropic            # or openai, gemini, openrouter, groq, together, deepseek
           api-key: \${{ secrets.ANTHROPIC_API_KEY }}
@@ -369613,6 +369613,7 @@ wrote .bumpsmith/sbom.cdx.json (CycloneDX 1.7) and .bumpsmith/debt.json`);
       throw new Error("usage: bumpsmith bench mine|run|zoo-mine|zoo");
     }
     case "mcp": {
+      quietSqliteWarning();
       const { serveLocal: serveLocal2 } = await Promise.resolve().then(() => (init_local2(), local_exports));
       await serveLocal2(resolve7(values.repo ?? "."), process.argv[1] ?? "");
       return;

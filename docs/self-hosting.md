@@ -20,7 +20,8 @@ certificate from Let's Encrypt automatically.
 ```sh
 git clone https://github.com/bumpsmith/bumpsmith && cd bumpsmith/deploy
 echo "BUMPSMITH_DOMAIN=bumpsmith.acme.dev" > .env
-openssl rand -base64 32 > master.key && chmod 600 master.key
+openssl rand -base64 32 > master.key
+sudo chown 10001 master.key && chmod 400 master.key   # the container runs as uid 10001
 docker compose up -d
 docker compose logs bumpsmith        # the one-time setup link
 ```

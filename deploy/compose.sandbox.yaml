@@ -12,6 +12,7 @@ services:
   bumpsmith:
     environment:
       BUMPSMITH_DATA: /var/lib/bumpsmith
+      BUMPSMITH_DATA_DIR: /var/lib/bumpsmith
       TMPDIR: /var/lib/bumpsmith/tmp
     volumes:
       - /var/lib/bumpsmith:/var/lib/bumpsmith

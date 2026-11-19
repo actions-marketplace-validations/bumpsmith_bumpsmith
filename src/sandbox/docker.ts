@@ -29,7 +29,8 @@ function packageRoot(): string {
 const ROOT = packageRoot();
 const SANDBOX_DIR = join(ROOT, "sandbox");
 /** Writable state (mirror certificates); defaults inside the package for local use. */
-const DATA_DIR = process.env.BUMPSMITH_DATA_DIR ?? join(ROOT, ".data");
+const DATA_DIR =
+  process.env.BUMPSMITH_DATA_DIR ?? process.env.BUMPSMITH_DATA ?? join(ROOT, ".data");
 
 // Internal network with no route out. The only peer is the read-only registry mirror.
 export const NETWORK = "bumpsmith-sbx";

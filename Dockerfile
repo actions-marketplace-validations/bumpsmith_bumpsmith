@@ -3,14 +3,14 @@
 #   docker run -p 4477:4477 -v bumpsmith-data:/data \
 #     -e BUMPSMITH_PUBLIC_URL=https://bumpsmith.example.com -e BUMPSMITH_BEHIND_PROXY=1 bumpsmith
 
-FROM node:22.22-bookworm-slim AS deps
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS deps
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # Production dependencies only; no package may run install scripts (pnpm-workspace.yaml).
 RUN pnpm install --prod --frozen-lockfile
 
-FROM node:22.22-bookworm-slim
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates tini \
  && rm -rf /var/lib/apt/lists/* \
@@ -18,7 +18,7 @@ RUN apt-get update \
  && mkdir -p /data && chown 10001:0 /data && chmod 700 /data
 WORKDIR /app
 # The docker client only, for upgrade runs when a Docker engine is attached (see compose.sandbox.yaml).
-COPY --from=docker:28.5-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker:29-cli@sha256:34507eb5069d8be82c95dd3b6987d4250fd5fee49b82e2509b7d7a7030740d6d /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json LICENSE NOTICE ./
 COPY dist ./dist
