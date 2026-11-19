@@ -138,7 +138,7 @@ Give Claude Code, Codex, Cursor, VS Code or any MCP client the tools to upgrade 
 claude mcp add bumpsmith -- npx -y bumpsmith@latest mcp     # or: codex mcp add bumpsmith -- npx -y bumpsmith@latest mcp
 ```
 
-[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bumpsmith&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJ1bXBzbWl0aEBsYXRlc3QiLCJtY3AiXX0=) · [Install in VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22bumpsmith%22%2C%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D) · [Skill file](skills/bumpsmith/SKILL.md) · [All clients, tools, and HTTP access for teams](docs/mcp.md)
+[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=bumpsmith&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImJ1bXBzbWl0aEBsYXRlc3QiLCJtY3AiXX0=) · [Install in VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522bumpsmith%2522%252C%2522type%2522%253A%2522stdio%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522bumpsmith%2540latest%2522%252C%2522mcp%2522%255D%257D) · [Skill file](skills/bumpsmith/SKILL.md) · [All clients, tools, and HTTP access for teams](docs/mcp.md)
 
 A self-hosted Bumpsmith also serves MCP at `/mcp` for your applications, with personal API tokens.
 The access matrix and the audit log apply there too.

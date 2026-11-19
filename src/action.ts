@@ -182,6 +182,12 @@ export async function resolveTargets(
           })
         ).data;
         red = combined.state === "failure" || combined.state === "error";
+        // GitHub Actions results are check runs, not commit statuses: with none, this token can't
+        // tell whether the pull request is red.
+        if (combined.total_count === 0)
+          warning(
+            `#${p.number}: this token can't read check runs (fine-grained tokens can't); use a classic token, \`gh auth token\` or a GitHub App token to find red pull requests`,
+          );
       }
       if (red) prNumbers.push(p.number);
     }

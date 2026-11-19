@@ -442,6 +442,61 @@ describe("single sign-on", { timeout: 60_000 }, () => {
     await post("/api/sso", { config: config() }, owner);
   });
 
+  it("validates scopes and the Entra shared issuers when saving", async () => {
+    const blank = await post(
+      "/api/sso",
+      { config: config({ oidc: { ...config().oidc, scopes: "" } }) },
+      owner,
+    );
+    expect(blank.status).toBe(200);
+    const saved = (await (await fetch(`${base}/api/sso`, { headers: owner })).json()) as {
+      config: { oidc: { scopes: string } };
+    };
+    expect(saved.config.oidc.scopes).toBe("openid email profile");
+    const common = await post(
+      "/api/sso",
+      {
+        config: config({
+          domains: [],
+          oidc: { ...config().oidc, issuer: "https://login.microsoftonline.com/common/v2.0" },
+        }),
+      },
+      owner,
+    );
+    expect(common.status).toBe(400);
+    await post("/api/sso", { config: config() }, owner);
+  });
+
+  it("refuses a token with an extra audience, and drops a role when its group is gone", async () => {
+    const extra = await oidcSignIn(
+      { sub: "okta-9", email: "ida@acme.dev", email_verified: true },
+      (n) => ({
+        nonce: n,
+        aud: ["bumpsmith", "another-app"],
+        azp: "bumpsmith",
+      }),
+    );
+    expect(extra.cb.headers.get("location")).toMatch(/sso_error=.*another%20application/);
+    const first = await oidcSignIn({
+      sub: "okta-10",
+      email: "max@acme.dev",
+      email_verified: true,
+      groups: ["eng"],
+    });
+    expect(first.cb.headers.get("location")).toBe("/#/");
+    const left = await oidcSignIn({
+      sub: "okta-10",
+      email: "max@acme.dev",
+      email_verified: true,
+      groups: [],
+    });
+    const cookie = (left.cb.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    const s = (await (await fetch(`${base}/auth/session`, { headers: { cookie } })).json()) as {
+      role: { name: string };
+    };
+    expect(s.role.name).toBe("Viewer");
+  });
+
   it("when SSO is required, only Owners may still use a password", async () => {
     const inv = (await (
       await post("/api/members/invite", { email: "pat@acme.dev", roleId: roles.Reviewer }, owner)

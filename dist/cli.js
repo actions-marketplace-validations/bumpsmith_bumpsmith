@@ -31720,17 +31720,17 @@ async function checkMalicious(ecosystem, name2, version2) {
             version: version2,
             ...pageToken ? { page_token: pageToken } : {}
           }),
-          cacheSeconds: 3600
+          cacheSeconds: 300
+          // short: a new MAL- advisory must take effect quickly
         }
       );
       vulns.push(...res.vulns ?? []);
       pageToken = res.next_page_token;
       if (!pageToken) break;
     }
-    if (pageToken) return { malicious: true, ids: ["OSV answer incomplete"] };
-  } catch (err) {
-    if (err instanceof HttpError) return { malicious: true, ids: ["OSV unavailable"] };
-    throw err;
+    if (pageToken) return { malicious: true, ids: [], unavailable: true };
+  } catch {
+    return { malicious: true, ids: [], unavailable: true };
   }
   const isMal = (id) => id.startsWith("MAL-");
   const mal = vulns.filter((v) => isMal(v.id) || (v.aliases ?? []).some(isMal));
@@ -31744,7 +31744,9 @@ function releaseGate(release, malicious, minAgeDays, now2 = /* @__PURE__ */ new 
     reasons.push(`published ${ageDays.toFixed(1)} days ago; minimum is ${minAgeDays}`);
   if (release.yanked) reasons.push("version is yanked");
   if (release.deprecated) reasons.push(`version is deprecated: ${release.deprecated}`);
-  if (malicious.malicious) reasons.push(`listed as malicious: ${malicious.ids.join(", ")}`);
+  if (malicious.unavailable)
+    reasons.push("could not check OSV for malicious advisories; try again later");
+  else if (malicious.malicious) reasons.push(`listed as malicious: ${malicious.ids.join(", ")}`);
   return { allowed: reasons.length === 0, reasons, ageDays };
 }
 async function latestRelease(ecosystem, name2) {
@@ -299561,7 +299563,8 @@ var init_auth = __esm({
         const email3 = emailRaw.trim().toLowerCase();
         const user = this.db.prepare("SELECT * FROM users WHERE email = ? AND status = 'active'").get(email3);
         const fail = new AuthError(401, "That email and password do not match.");
-        const ghost = user ? void 0 : UNKNOWN_FAILS.get(email3);
+        const ghostKey = sha256(email3.slice(0, 254));
+        const ghost = user ? void 0 : UNKNOWN_FAILS.get(ghostKey);
         if (ghost && ghost.until > Date.now()) {
           await verifyPassword(password, null);
           throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
@@ -299592,9 +299595,18 @@ var init_auth = __esm({
               detail: { attempt: n }
             });
           } else {
-            const n = (UNKNOWN_FAILS.get(email3)?.n ?? 0) + 1;
-            if (UNKNOWN_FAILS.size > 1e4) UNKNOWN_FAILS.clear();
-            UNKNOWN_FAILS.set(email3, { n, until: Date.now() + lockMinutes(n) * 6e4 });
+            const n = (UNKNOWN_FAILS.get(ghostKey)?.n ?? 0) + 1;
+            if (UNKNOWN_FAILS.size >= 1e4) {
+              const t = Date.now();
+              for (const [k, v] of UNKNOWN_FAILS) if (v.until < t && v.n < 5) UNKNOWN_FAILS.delete(k);
+              while (UNKNOWN_FAILS.size >= 1e4) {
+                const oldest = UNKNOWN_FAILS.keys().next().value;
+                if (oldest === void 0) break;
+                UNKNOWN_FAILS.delete(oldest);
+              }
+            }
+            UNKNOWN_FAILS.delete(ghostKey);
+            UNKNOWN_FAILS.set(ghostKey, { n, until: Date.now() + lockMinutes(n) * 6e4 });
             audit(this.db, {
               orgId: null,
               actorId: null,
@@ -333807,7 +333819,8 @@ var init_sso = __esm({
     });
     normScopes = (v) => {
       const list = (v || "").split(/\s+/).filter((x) => /^[\w.:/-]{1,60}$/.test(x));
-      return [.../* @__PURE__ */ new Set(["openid", ...list])].join(" ") || "openid email profile";
+      if (!list.length) return "openid email profile";
+      return [.../* @__PURE__ */ new Set(["openid", ...list])].join(" ");
     };
     TENANT_TEMPLATE = "{tenantid}";
     safeEqual2 = (a, b) => {
@@ -333874,6 +333887,13 @@ var init_sso = __esm({
           throw new AuthError(400, "Check the allowed email domains.");
         if (next.enforce && !o.enabled && !s.enabled)
           throw new AuthError(400, "Turn on OIDC or SAML before requiring SSO.");
+        if (o.enabled && /^https:\/\/login\.microsoftonline\.com\/(common|organizations|consumers)\b/i.test(
+          o.issuer.trim()
+        ) && !domains.length)
+          throw new AuthError(
+            400,
+            "This Entra ID issuer lets any Microsoft account sign in. Use your tenant ID in the issuer, or list your allowed email domains."
+          );
         const clean = {
           oidc: {
             enabled: !!o.enabled,
@@ -334024,7 +334044,8 @@ var init_sso = __esm({
         });
         if (payload.nonce !== p.nonce)
           throw new AuthError(400, "The sign-in response does not match this request.");
-        if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp !== c.clientId)
+        const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+        if (auds.some((a) => a !== c.clientId) || payload.azp != null && payload.azp !== c.clientId)
           throw new AuthError(400, "The token was issued to another application.");
         const verified = payload.email_verified === true || payload.email_verified === "true" || payload.xms_edov === true || payload.xms_edov === "true" || payload.xms_edov === "1";
         const email3 = String(
@@ -334169,9 +334190,10 @@ var init_sso = __esm({
           log2("sso.groups_missing", u.id, {
             reason: "the identity provider left the groups out (Entra ID: more than 200 groups)"
           });
-        if (mapped && u.role_id !== mapped && u.role_id !== owner) {
-          this.db.prepare("UPDATE users SET role_id = ? WHERE id = ?").run(mapped, u.id);
-          log2("member.role_synced", u.id, { to: mapped });
+        const target = mapped ?? (groups2 && cfg.mapping.length ? cfg.defaultRoleId : void 0);
+        if (target && u.role_id !== target && u.role_id !== owner) {
+          this.db.prepare("UPDATE users SET role_id = ? WHERE id = ?").run(target, u.id);
+          log2("member.role_synced", u.id, { to: target });
         }
         return this.db.prepare("SELECT * FROM users WHERE id = ?").get(u.id);
       }
@@ -335037,6 +335059,11 @@ data: ${JSON.stringify(data)}
         if (!orgId) return redirect2(c.res, "/");
         try {
           const kind = c.m[1];
+          if (kind === "saml" && !/^(https:|http:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/])/.test(`${origin(c)}/`))
+            throw new AuthError(
+              400,
+              "SAML sign-in needs an https:// public address (or a loopback address for testing)."
+            );
           const { url: url3, bind: bind2 } = kind === "oidc" ? await sso.oidcStart(orgId, origin(c)) : await sso.samlStart(orgId, origin(c));
           return send(c.res, 302, "", "text/plain", {
             location: url3,
@@ -336196,6 +336223,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       res
     );
   };
+  common();
   const server2 = opts.tls ? https.createServer({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.2" }, handle) : http.createServer(handle);
   server2.requestTimeout = 3e4;
   server2.headersTimeout = 2e4;
@@ -364282,7 +364310,8 @@ var PRESETS = {
     keyEnv: "OPENROUTER_API_KEY",
     maxEffort: "xhigh"
   },
-  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", maxEffort: "max" },
+  // Groq's reasoning models accept low/medium/high (gpt-oss); no model accepts max.
+  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY" },
   together: {
     baseURL: "https://api.together.ai/v1",
     keyEnv: "TOGETHER_API_KEY",
@@ -364291,10 +364320,22 @@ var PRESETS = {
   deepseek: {
     baseURL: "https://api.deepseek.com",
     keyEnv: "DEEPSEEK_API_KEY",
+    maxTokensParam: "max_tokens",
+    noJsonSchema: true
+  },
+  // Ollama and LM Studio document only max_tokens.
+  ollama: {
+    baseURL: "http://localhost:11434/v1",
+    keyEnv: null,
+    local: true,
     maxTokensParam: "max_tokens"
   },
-  ollama: { baseURL: "http://localhost:11434/v1", keyEnv: null, local: true },
-  lmstudio: { baseURL: "http://localhost:1234/v1", keyEnv: null, local: true }
+  lmstudio: {
+    baseURL: "http://localhost:1234/v1",
+    keyEnv: null,
+    local: true,
+    maxTokensParam: "max_tokens"
+  }
 };
 function assertSafeBaseUrl(url2) {
   const u = new URL(url2);
@@ -364385,6 +364426,8 @@ ${JSON.stringify(schema)}`
     for (let attempt = 0; attempt < 2; attempt++) {
       let res;
       try {
+        if (this.preset?.noJsonSchema)
+          throw Object.assign(new Error("no json_schema"), { status: 400 });
         res = await this.complete(
           {
             messages,
@@ -364457,12 +364500,13 @@ ${JSON.stringify(schema)}`
       if (msg.refusal) return { finalText: msg.refusal, stop: "refusal", usage };
       const calls = (msg.tool_calls ?? []).filter((c) => c.type === "function");
       if (!calls.length) return { finalText: msg.content ?? "", stop: "completed", usage };
-      const reasoning = msg.reasoning_content;
+      const extra = msg;
       messages.push({
         role: "assistant",
         content: msg.content ?? null,
         tool_calls: calls,
-        ...reasoning != null ? { reasoning_content: reasoning } : {}
+        ...extra.reasoning_content != null ? { reasoning_content: extra.reasoning_content } : {},
+        ...extra.reasoning_details != null ? { reasoning_details: extra.reasoning_details } : {}
       });
       for (const call of calls) {
         const tool = byName.get(call.function.name);
@@ -367475,10 +367519,23 @@ async function runJob(input3, opts) {
       } else {
         const extras = [];
         for (const extra of input3.alsoUpgrade ?? []) {
-          const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
-          const ok = xrel && releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
-          if (ok) extras.push(extra);
-          else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
+          try {
+            const xrel = await getRelease("pypi", extra.name, extra.to);
+            const xgate = releaseGate(
+              xrel,
+              await checkMalicious("pypi", extra.name, extra.to),
+              minAge
+            );
+            if (xgate.allowed) extras.push(extra);
+            else
+              job.notes.push(
+                `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`
+              );
+          } catch (err) {
+            job.notes.push(
+              `Not upgraded with the group: ${extra.name}@${extra.to} (${err.message.slice(0, 120)}).`
+            );
+          }
         }
         const touched = [];
         for (const m of inv.manifests) {
@@ -368141,6 +368198,10 @@ async function resolveTargets(gh2, owner, repo, event, payload, opts = modeFromI
           ref: p.head.sha
         })).data;
         red = combined.state === "failure" || combined.state === "error";
+        if (combined.total_count === 0)
+          warning(
+            `#${p.number}: this token can't read check runs (fine-grained tokens can't); use a classic token, \`gh auth token\` or a GitHub App token to find red pull requests`
+          );
       }
       if (red) prNumbers.push(p.number);
     }

@@ -33,6 +33,8 @@ export interface Preset {
   maxTokensParam?: "max_tokens";
   /** Highest `reasoning_effort` the provider accepts (default "high"). */
   maxEffort?: "high" | "xhigh" | "max";
+  /** Providers whose response_format takes only text or json_object (DeepSeek). */
+  noJsonSchema?: boolean;
 }
 
 export const PRESETS: Record<string, Preset> = {
@@ -46,7 +48,8 @@ export const PRESETS: Record<string, Preset> = {
     keyEnv: "OPENROUTER_API_KEY",
     maxEffort: "xhigh",
   },
-  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", maxEffort: "max" },
+  // Groq's reasoning models accept low/medium/high (gpt-oss); no model accepts max.
+  groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY" },
   together: {
     baseURL: "https://api.together.ai/v1",
     keyEnv: "TOGETHER_API_KEY",
@@ -56,9 +59,21 @@ export const PRESETS: Record<string, Preset> = {
     baseURL: "https://api.deepseek.com",
     keyEnv: "DEEPSEEK_API_KEY",
     maxTokensParam: "max_tokens",
+    noJsonSchema: true,
   },
-  ollama: { baseURL: "http://localhost:11434/v1", keyEnv: null, local: true },
-  lmstudio: { baseURL: "http://localhost:1234/v1", keyEnv: null, local: true },
+  // Ollama and LM Studio document only max_tokens.
+  ollama: {
+    baseURL: "http://localhost:11434/v1",
+    keyEnv: null,
+    local: true,
+    maxTokensParam: "max_tokens",
+  },
+  lmstudio: {
+    baseURL: "http://localhost:1234/v1",
+    keyEnv: null,
+    local: true,
+    maxTokensParam: "max_tokens",
+  },
 };
 
 /** Only HTTPS, except for servers on this machine (local models). */
@@ -187,6 +202,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: OpenAI.ChatCompletion;
       try {
+        // DeepSeek takes only text or json_object: skip straight to the fallback below.
+        if (this.preset?.noJsonSchema)
+          throw Object.assign(new Error("no json_schema"), { status: 400 });
         res = await this.complete(
           {
             messages,
@@ -266,12 +284,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
       if (!calls.length) return { finalText: msg.content ?? "", stop: "completed", usage };
       // DeepSeek (thinking mode) requires its reasoning_content to be sent back with tool calls,
       // or the next turn fails with a 400; others ignore the extra field.
-      const reasoning = (msg as { reasoning_content?: string | null }).reasoning_content;
+      // OpenRouter asks for its reasoning_details back unmodified, in the same way.
+      const extra = msg as { reasoning_content?: string | null; reasoning_details?: unknown };
       messages.push({
         role: "assistant",
         content: msg.content ?? null,
         tool_calls: calls,
-        ...(reasoning != null ? { reasoning_content: reasoning } : {}),
+        ...(extra.reasoning_content != null ? { reasoning_content: extra.reasoning_content } : {}),
+        ...(extra.reasoning_details != null ? { reasoning_details: extra.reasoning_details } : {}),
       } as ChatCompletionMessageParam);
       for (const call of calls) {
         const tool = byName.get(call.function.name);

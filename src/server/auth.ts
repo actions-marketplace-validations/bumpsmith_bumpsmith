@@ -99,7 +99,7 @@ let COMMON: Set<string> | null = null;
  *  answer never reveals whether an account exists. In memory; cleared on restart. */
 const UNKNOWN_FAILS = new Map<string, { n: number; until: number }>();
 const lockMinutes = (n: number) => (n >= 5 ? Math.min(60, 2 ** (n - 5)) : 0);
-function common(): Set<string> {
+export function common(): Set<string> {
   if (!COMMON) {
     // UK NCSC top-100k list via SecLists (MIT), filtered to 12+ characters.
     const here = dirname(fileURLToPath(import.meta.url));
@@ -325,7 +325,8 @@ export class Auth {
       .prepare("SELECT * FROM users WHERE email = ? AND status = 'active'")
       .get(email) as unknown as User | undefined;
     const fail = new AuthError(401, "That email and password do not match.");
-    const ghost = user ? undefined : UNKNOWN_FAILS.get(email);
+    const ghostKey = sha256(email.slice(0, 254));
+    const ghost = user ? undefined : UNKNOWN_FAILS.get(ghostKey);
     if (ghost && ghost.until > Date.now()) {
       await verifyPassword(password, null); // same timing as a real check
       throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
@@ -360,9 +361,20 @@ export class Auth {
           detail: { attempt: n },
         });
       } else {
-        const n = (UNKNOWN_FAILS.get(email)?.n ?? 0) + 1;
-        if (UNKNOWN_FAILS.size > 10_000) UNKNOWN_FAILS.clear();
-        UNKNOWN_FAILS.set(email, { n, until: Date.now() + lockMinutes(n) * 60_000 });
+        const n = (UNKNOWN_FAILS.get(ghostKey)?.n ?? 0) + 1;
+        // Bounded, without ever unlocking everything at once: drop expired entries, then the
+        // oldest (a Map keeps insertion order).
+        if (UNKNOWN_FAILS.size >= 10_000) {
+          const t = Date.now();
+          for (const [k, v] of UNKNOWN_FAILS) if (v.until < t && v.n < 5) UNKNOWN_FAILS.delete(k);
+          while (UNKNOWN_FAILS.size >= 10_000) {
+            const oldest = UNKNOWN_FAILS.keys().next().value;
+            if (oldest === undefined) break;
+            UNKNOWN_FAILS.delete(oldest);
+          }
+        }
+        UNKNOWN_FAILS.delete(ghostKey);
+        UNKNOWN_FAILS.set(ghostKey, { n, until: Date.now() + lockMinutes(n) * 60_000 });
         audit(this.db, {
           orgId: null,
           actorId: null,

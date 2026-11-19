@@ -57,7 +57,7 @@ tool_timeout_sec = 900
 
 ### VS Code
 
-[Install in VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22bumpsmith%22%2C%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22bumpsmith%40latest%22%2C%22mcp%22%5D%7D), or run:
+[Install in VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522bumpsmith%2522%252C%2522type%2522%253A%2522stdio%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522bumpsmith%2540latest%2522%252C%2522mcp%2522%255D%257D), or run:
 
 ```sh
 code --add-mcp '{"name":"bumpsmith","type":"stdio","command":"npx","args":["-y","bumpsmith@latest","mcp"]}'

@@ -22,6 +22,7 @@ import {
   clearCookie,
   cookieName,
   DEFAULT_POLICY,
+  common as loadPasswordList,
   type Principal,
   readCookie,
   sessionCookie,
@@ -1129,6 +1130,16 @@ export async function startDashboard(opts: DashboardOptions) {
         if (!orgId) return redirect(c.res, "/");
         try {
           const kind = c.m[1] as "oidc" | "saml";
+          // SAML comes back as a cross-site POST, which only carries SameSite=None; Secure cookies:
+          // browsers drop those on plain http except on this machine (and Safari not even there).
+          if (
+            kind === "saml" &&
+            !/^(https:|http:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/])/.test(`${origin(c)}/`)
+          )
+            throw new AuthError(
+              400,
+              "SAML sign-in needs an https:// public address (or a loopback address for testing).",
+            );
           const { url, bind } =
             kind === "oidc"
               ? await sso.oidcStart(orgId, origin(c))
@@ -2372,6 +2383,8 @@ export async function startDashboard(opts: DashboardOptions) {
     );
   };
 
+  // The breached-password list must be present: fail at startup, not on the first password.
+  loadPasswordList();
   const server = opts.tls
     ? https.createServer({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.2" }, handle)
     : http.createServer(handle);

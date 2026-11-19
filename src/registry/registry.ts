@@ -1,5 +1,5 @@
 import type { Ecosystem } from "../schemas/job.ts";
-import { fetchJson, HttpError } from "../util/http.ts";
+import { fetchJson } from "../util/http.ts";
 
 export interface ReleaseInfo {
   ecosystem: Ecosystem;
@@ -132,6 +132,8 @@ export async function npmPeerDependencies(name: string, version: string): Promis
 export interface MaliciousCheck {
   malicious: boolean;
   ids: string[];
+  /** OSV could not be read completely, so the release is refused (fail closed). */
+  unavailable?: boolean;
 }
 
 /** Query OSV for known-malicious advisories on an exact version (CHG-10).
@@ -158,17 +160,17 @@ export async function checkMalicious(
             version,
             ...(pageToken ? { page_token: pageToken } : {}),
           }),
-          cacheSeconds: 3600,
+          cacheSeconds: 300, // short: a new MAL- advisory must take effect quickly
         },
       );
       vulns.push(...(res.vulns ?? []));
       pageToken = res.next_page_token;
       if (!pageToken) break;
     }
-    if (pageToken) return { malicious: true, ids: ["OSV answer incomplete"] };
-  } catch (err) {
-    if (err instanceof HttpError) return { malicious: true, ids: ["OSV unavailable"] };
-    throw err;
+    if (pageToken) return { malicious: true, ids: [], unavailable: true };
+  } catch {
+    // Any failure (HTTP error, network error, timeout, unreadable reply) fails closed.
+    return { malicious: true, ids: [], unavailable: true };
   }
   const isMal = (id: string) => id.startsWith("MAL-");
   const mal = vulns.filter((v) => isMal(v.id) || (v.aliases ?? []).some(isMal));
@@ -197,7 +199,9 @@ export function releaseGate(
     reasons.push(`published ${ageDays.toFixed(1)} days ago; minimum is ${minAgeDays}`);
   if (release.yanked) reasons.push("version is yanked");
   if (release.deprecated) reasons.push(`version is deprecated: ${release.deprecated}`);
-  if (malicious.malicious) reasons.push(`listed as malicious: ${malicious.ids.join(", ")}`);
+  if (malicious.unavailable)
+    reasons.push("could not check OSV for malicious advisories; try again later");
+  else if (malicious.malicious) reasons.push(`listed as malicious: ${malicious.ids.join(", ")}`);
   return { allowed: reasons.length === 0, reasons, ageDays };
 }
 

@@ -87,7 +87,8 @@ export interface Identity {
 /** Scopes always include openid; duplicates and odd characters are dropped. */
 const normScopes = (v: string) => {
   const list = (v || "").split(/\s+/).filter((x) => /^[\w.:/-]{1,60}$/.test(x));
-  return [...new Set(["openid", ...list])].join(" ") || "openid email profile";
+  if (!list.length) return "openid email profile";
+  return [...new Set(["openid", ...list])].join(" ");
 };
 /** Entra ID's multi-tenant endpoints publish an issuer template, not a real issuer. */
 const TENANT_TEMPLATE = "{tenantid}";
@@ -178,6 +179,19 @@ export class Sso {
       throw new AuthError(400, "Check the allowed email domains.");
     if (next.enforce && !o.enabled && !s.enabled)
       throw new AuthError(400, "Turn on OIDC or SAML before requiring SSO.");
+    // Entra ID's shared endpoints accept people from any tenant (or any personal Microsoft
+    // account): only safe with an allow-list of your own email domains.
+    if (
+      o.enabled &&
+      /^https:\/\/login\.microsoftonline\.com\/(common|organizations|consumers)\b/i.test(
+        o.issuer.trim(),
+      ) &&
+      !domains.length
+    )
+      throw new AuthError(
+        400,
+        "This Entra ID issuer lets any Microsoft account sign in. Use your tenant ID in the issuer, or list your allowed email domains.",
+      );
     const clean: SsoConfig = {
       oidc: {
         enabled: !!o.enabled,
@@ -362,7 +376,9 @@ export class Sso {
     });
     if (payload.nonce !== p.nonce)
       throw new AuthError(400, "The sign-in response does not match this request.");
-    if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp !== c.clientId)
+    // OIDC Core 3.1.3.7: no audiences besides this app, and azp (when present) is this app.
+    const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (auds.some((a) => a !== c.clientId) || (payload.azp != null && payload.azp !== c.clientId))
       throw new AuthError(400, "The token was issued to another application.");
     // Only an email the provider marks verified can link an existing account (OIDC Core 5.1).
     // Entra ID never sends email_verified; its optional xms_edov claim says the domain is
@@ -547,10 +563,12 @@ export class Sso {
       log("sso.groups_missing", u.id, {
         reason: "the identity provider left the groups out (Entra ID: more than 200 groups)",
       });
-    // Groups keep roles in sync, except for Owners, who are only ever changed by hand.
-    if (mapped && u.role_id !== mapped && u.role_id !== owner) {
-      this.db.prepare("UPDATE users SET role_id = ? WHERE id = ?").run(mapped, u.id);
-      log("member.role_synced", u.id, { to: mapped });
+    // Groups keep roles in sync, except for Owners, who are only ever changed by hand. Someone
+    // who left every mapped group falls back to the default role.
+    const target = mapped ?? (groups && cfg.mapping.length ? cfg.defaultRoleId : undefined);
+    if (target && u.role_id !== target && u.role_id !== owner) {
+      this.db.prepare("UPDATE users SET role_id = ? WHERE id = ?").run(target, u.id);
+      log("member.role_synced", u.id, { to: target });
     }
     return this.db.prepare("SELECT * FROM users WHERE id = ?").get(u.id) as unknown as User;
   }

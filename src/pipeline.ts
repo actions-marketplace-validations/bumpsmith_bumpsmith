@@ -905,12 +905,23 @@ export async function runJob(input: JobInput, opts: JobOptions): Promise<JobReco
         // requirements*.in, pyproject.toml); one stale file would reinstall the old version.
         const extras: { name: string; to: string }[] = [];
         for (const extra of input.alsoUpgrade ?? []) {
-          const xrel = await getRelease("pypi", extra.name, extra.to).catch(() => null);
-          const ok =
-            xrel &&
-            releaseGate(xrel, await checkMalicious("pypi", extra.name, extra.to), minAge).allowed;
-          if (ok) extras.push(extra);
-          else job.notes.push(`Not upgraded with the group: ${extra.name}@${extra.to}.`);
+          try {
+            const xrel = await getRelease("pypi", extra.name, extra.to);
+            const xgate = releaseGate(
+              xrel,
+              await checkMalicious("pypi", extra.name, extra.to),
+              minAge,
+            );
+            if (xgate.allowed) extras.push(extra);
+            else
+              job.notes.push(
+                `Not upgraded with the group: ${extra.name}@${extra.to} (${xgate.reasons.join("; ")}).`,
+              );
+          } catch (err) {
+            job.notes.push(
+              `Not upgraded with the group: ${extra.name}@${extra.to} (${(err as Error).message.slice(0, 120)}).`,
+            );
+          }
         }
         const touched: string[] = [];
         for (const m of inv.manifests) {
