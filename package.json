@@ -1,6 +1,6 @@
 {
   "name": "bumpsmith",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "description": "Fixes your code when a dependency ships a breaking change: verified, reviewed pull requests from your own CI.",
   "mcpName": "io.github.bumpsmith/bumpsmith",

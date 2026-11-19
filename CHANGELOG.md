@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 — 2026-11-20
+
+- Releases are published by GitHub Actions with npm trusted publishing (OIDC, provenance attached, no stored npm token) and registered in the MCP Registry in the same run.
+- The systemd unit runs the current release.
+
 ## 0.1.1 — 2026-11-19
 
 - Dashboard: the landing page's buttons, one corner radius and one control height everywhere;

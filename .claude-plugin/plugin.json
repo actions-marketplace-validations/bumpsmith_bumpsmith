@@ -1,6 +1,6 @@
 {
   "name": "bumpsmith",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Verified dependency upgrades: the Bumpsmith MCP server (scan, check a release, explain, upgrade and fix in a sandbox, apply) and a skill that teaches the agent when and how to use it.",
   "author": {
     "name": "Bumpsmith",
