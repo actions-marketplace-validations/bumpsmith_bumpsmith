@@ -1,6 +1,7 @@
 // Sign-in, first-run owner setup and session handling for the dashboard. The server holds
 // the session (an HttpOnly cookie the page cannot read); the page only keeps the CSRF token
 // it must send with every change.
+import { startAuthArt } from "./auth-art";
 import { openDialog } from "./dialog.ts";
 import { BRAND_WORDMARK, esc, icon } from "./ui.ts";
 
@@ -93,11 +94,25 @@ const pwField = (id: string, autocomplete: string) => `
     <button type="button" class="pw-eye" data-eye="${id}" aria-label="Show password" title="Show password">${icon("eye")}</button>
   </div>`;
 
+/** The left half of every sign-in screen: the landing page's anvil, drawn in bone on black. */
+const ART = `<aside class="auth-art" aria-hidden="true">
+    <div class="aa-top"><span class="aa-wm">${BRAND_WORDMARK}</span><span class="aa-cap">Fig. 01 — anvil, London pattern</span></div>
+    <figure class="aa-fig">
+      <span class="aa-sun"></span>
+      <img src="/art/anvil-lines.png" alt="" width="760" height="500" />
+      <canvas class="aa-dots"></canvas>
+      <span class="aa-dim"><i class="aa-l"></i><i class="aa-r"></i><b>node-fetch 2.7.0 → 3.3.2</b></span>
+    </figure>
+    <p class="aa-h">Dependabot opens the PR.<br />Bumpsmith makes it pass<span class="aa-cur"></span></p>
+    <ul class="aa-facts"><li>12 of 22 runnable breaking upgrades fixed and verified</li><li>Median 3.3 minutes</li><li>$0.73 per verified fix</li></ul>
+  </aside>`;
+
 function card(inner: string, foot = true) {
-  return `<main class="auth"><div class="auth-card">
-    <div class="auth-brand">${BRAND_WORDMARK}</div>
-    ${inner}
-  </div>${foot ? `<p class="auth-foot">${icon("lock")}<span>Sessions end after 30 minutes without activity. Every sign-in is recorded in the audit log.</span></p>` : ""}</main>`;
+  return `<main class="auth split">${ART}<section class="auth-main">
+    <div class="auth-bar"><span class="auth-brand">${BRAND_WORDMARK}</span><span class="auth-meta">Open source · Apache-2.0</span></div>
+    <div class="auth-card">${inner}</div>
+    ${foot ? `<p class="auth-foot">${icon("lock")}<span>Sessions end after 30 idle minutes · every sign-in is audited</span></p>` : ""}
+  </section></main>`;
 }
 
 function page(
@@ -117,7 +132,7 @@ function page(
     return card(
       `<h1>Password changed</h1>
       <p class="auth-sub">You were signed out everywhere. Sign in with your new password${invite ? ` as ${esc(invite.email)}` : ""}.</p>
-      <a class="btn primary block" href="#/">Go to sign in</a>`,
+      <a class="btn primary block go" href="#/"><span>Go to sign in</span>${icon("arrowR")}</a>`,
       false,
     );
   if (mode === "reset" && invite)
@@ -133,7 +148,7 @@ function page(
           </ul>
         </div>
         <div class="auth-err" role="alert" hidden></div>
-        <button class="btn primary block" type="submit">Change password</button>
+        <button class="btn primary block go" type="submit"><span>Change password</span>${icon("arrowR")}</button>
       </form>`);
   if (mode === "invite-invalid")
     return card(
@@ -160,7 +175,7 @@ function page(
           </ul>
         </div>
         <div class="auth-err" role="alert" hidden></div>
-        <button class="btn primary block" type="submit">Join ${esc(invite.org)}</button>
+        <button class="btn primary block go" type="submit"><span>Join ${esc(invite.org)}</span>${icon("arrowR")}</button>
       </form>`);
   if (mode === "need-setup-link")
     return card(
@@ -185,7 +200,7 @@ function page(
           </ul>
         </div>
         <div class="auth-err" role="alert" hidden></div>
-        <button class="btn primary block" type="submit">Create account</button>
+        <button class="btn primary block go" type="submit"><span>Create account</span>${icon("arrowR")}</button>
       </form>`);
   if (mode === "mfa")
     return card(`<h1>Two-factor authentication</h1>
@@ -193,7 +208,7 @@ function page(
       <form class="auth-form" data-form="mfa" novalidate>
         <div class="field"><label for="a-code" id="code-label">Authentication code</label><input class="input mono otp" id="a-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required spellcheck="false" placeholder="000000" /></div>
         <div class="auth-err" role="alert" hidden></div>
-        <button class="btn primary block" type="submit">Verify</button>
+        <button class="btn primary block go" type="submit"><span>Verify</span>${icon("arrowR")}</button>
         <button class="linkish" type="button" data-recovery>Use a recovery code instead</button>
       </form>`);
   const hasSso = !!(sso?.oidc || sso?.saml);
@@ -206,7 +221,7 @@ function page(
       <div class="field"><label for="a-email">Work email</label><input class="input" id="a-email" name="email" type="email" autocomplete="username" required maxlength="254" /></div>
       <div class="field"><label for="a-pw">Password</label>${pwField("a-pw", "current-password")}</div>
       <div class="auth-err" role="alert" hidden></div>
-      <button class="btn ${enforce ? "" : "primary"} block" type="submit">Sign in</button>
+      <button class="btn ${enforce ? "" : "primary"} block go" type="submit"><span>Sign in</span>${icon("arrowR")}</button>
     </form>${enforce ? "</details>" : ""}`);
 }
 
@@ -254,6 +269,7 @@ export async function showAuth(
   if (ssoError) history.replaceState(null, "", `/${location.hash}`);
   root.className = "shell auth-shell";
   root.innerHTML = page(mode, invite, sso, ssoError);
+  startAuthArt(root);
   document.title = mode === "setup" ? "Set up Bumpsmith" : "Sign in · Bumpsmith";
   const form = root.querySelector<HTMLFormElement>("form");
   (form?.querySelector<HTMLInputElement>("input") ?? null)?.focus();
@@ -300,10 +316,12 @@ export async function showAuth(
       const btn = form.querySelector<HTMLButtonElement>("button[type=submit]");
       const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
       if (["setup", "invite", "reset"].includes(form.dataset.form ?? "")) data.token = setupToken;
-      if (btn) {
+      // the label lives in a <span> so the arrow stays put while the button says what it is doing
+      const label = btn?.querySelector("span") ?? btn;
+      if (btn && label) {
         btn.disabled = true;
-        btn.dataset.label = btn.textContent ?? "";
-        btn.textContent =
+        btn.dataset.label = label.textContent ?? "";
+        label.textContent =
           form.dataset.form === "login" || form.dataset.form === "mfa"
             ? "Signing in…"
             : form.dataset.form === "reset"
@@ -337,6 +355,7 @@ export async function showAuth(
         if (form.dataset.form === "reset") {
           history.replaceState(null, "", "#/");
           root.innerHTML = page("reset-done", invite);
+          startAuthArt(root);
           root.querySelector("a.btn")?.addEventListener("click", (ev) => {
             ev.preventDefault();
             void showAuth(root, "signin").then(done);
@@ -356,7 +375,7 @@ export async function showAuth(
         }
         if (btn) {
           btn.disabled = false;
-          btn.textContent = btn.dataset.label ?? "Continue";
+          if (label) label.textContent = btn.dataset.label ?? "Continue";
         }
       }
     });
@@ -425,7 +444,7 @@ export async function mountMfaEnrollment(el: HTMLElement): Promise<boolean> {
     </div>
     <div class="field"><label for="mfa-code">Enter the 6-digit code it shows</label><input class="input mono otp" id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></div>
     <div class="auth-err" role="alert" hidden></div>
-    <button type="button" class="btn primary block" data-mfa-verify>Turn on two-factor authentication</button>`;
+    <button type="button" class="btn primary block go" data-mfa-verify><span>Turn on two-factor authentication</span>${icon("arrowR")}</button>`;
     el.querySelector("[data-copy-key]")?.addEventListener("click", () =>
       navigator.clipboard.writeText(start.secret).catch(() => {}),
     );
@@ -441,7 +460,7 @@ export async function mountMfaEnrollment(el: HTMLElement): Promise<boolean> {
           session.info.user.mfa = true;
           session.info.mustEnrollMfa = false;
         }
-        el.innerHTML = `${recoveryCodesHtml(r.recoveryCodes)}<button type="button" class="btn primary block" data-done disabled>Continue</button>`;
+        el.innerHTML = `${recoveryCodesHtml(r.recoveryCodes)}<button type="button" class="btn primary block go" data-done disabled><span>Continue</span>${icon("arrowR")}</button>`;
         const doneBtn = el.querySelector<HTMLButtonElement>("[data-done]") as HTMLButtonElement;
         wireRecoveryCodes(el, r.recoveryCodes, (ok) => {
           doneBtn.disabled = !ok;
@@ -465,6 +484,7 @@ export async function mountMfaEnrollment(el: HTMLElement): Promise<boolean> {
 /** Full-page enrolment when the organisation requires MFA before anything else. */
 export async function showEnroll(root: HTMLElement): Promise<void> {
   root.className = "shell auth-shell";
+  queueMicrotask(() => startAuthArt(root));
   root.innerHTML = card(`<h1>Set up two-factor authentication</h1>
     <p class="auth-sub">${esc(session.info?.org?.name ?? "Your organisation")} requires a second step at sign-in for your role. It takes a minute.</p>
     <div id="enroll"></div>

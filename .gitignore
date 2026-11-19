@@ -17,3 +17,4 @@ bench/zoo-results-*.json
 bench/zoo-final-*.json
 deploy/.env
 deploy/master.key
+.demo/

@@ -73,6 +73,8 @@ bumpsmith server --public-url https://bumpsmith.acme.dev
                  [--tls-cert cert.pem --tls-key key.pem | --behind-proxy [--trusted-proxy 10.0.0.5,10.0.0.6]]
 ```
 
+Every variable, with model keys and optional ones, is listed in [`.env.example`](../.env.example).
+
 | Flag                      | Environment variable                      | Meaning                                                                                                                                                                                                                               |
 | ------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--public-url`            | `BUMPSMITH_PUBLIC_URL`                    | **Required.** The address people open. It is the only `Host` and `Origin` the server accepts, and the base of every link it hands out (invitations, SSO callbacks, GitHub App). It must be `https://`, except for `http://localhost`. |

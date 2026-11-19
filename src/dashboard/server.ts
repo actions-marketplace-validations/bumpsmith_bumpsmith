@@ -333,6 +333,7 @@ const MIME: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".woff2": "font/woff2",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
 };
 
 export interface DashboardOptions {
@@ -2148,7 +2149,7 @@ export async function startDashboard(opts: DashboardOptions) {
       if (req.method === "GET" && path === "/app.js") return send(res, 200, appJs, MIME[".js"]);
       if (
         req.method === "GET" &&
-        /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg)$/.test(path)
+        /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg|art\/[\w-]+\.png)$/.test(path)
       ) {
         const file = join(root, "dashboard", path);
         const body = await readFile(file).catch(() => null);

@@ -68,7 +68,10 @@ export const state = {
   me: null as Me | null,
   security: null as OrgSecurity | null,
   sso: null as SsoState | null,
+  /** API tokens list: the page shown (5 per page). */
+  tokPage: 0,
 };
+const TOKENS_PER_PAGE = 5;
 let ctx = { render: () => {}, toast: (_m: string, _bad?: boolean) => {} };
 export const setup = (c: typeof ctx) => {
   ctx = c;
@@ -242,18 +245,25 @@ export function accountPage(): string {
         <td class="r">${s.current ? "" : `<button class="btn sm" data-act="sess-revoke" data-id="${esc(s.id)}">Sign out</button>`}</td></tr>`,
     )
     .join("");
-  const tokens = me.tokens.length
-    ? `<div class="tw"><table class="t"><thead><tr><th>Name</th><th>Scopes</th><th>Expires</th><th>Last used</th><th></th></tr></thead><tbody>${me.tokens
+  const nTok = me.tokens.length;
+  const pages = Math.max(1, Math.ceil(nTok / TOKENS_PER_PAGE));
+  const pg = Math.min(Math.max(0, state.tokPage), pages - 1);
+  const from = pg * TOKENS_PER_PAGE;
+  const shown = me.tokens.slice(from, from + TOKENS_PER_PAGE);
+  const tokens = nTok
+    ? `<div class="tw"><table class="t"><thead><tr><th>Name</th><th>Expires</th><th>Last used</th><th></th></tr></thead><tbody>${shown
         .map(
           (
             t,
-          ) => `<tr style="cursor:default"><td><b>${esc(t.name)}</b><div class="mono faint" style="font-size:12px">${esc(t.prefix)}…</div></td>
-          <td title="${esc(t.scopes.join(", "))}">${t.scopes.length} permission${t.scopes.length === 1 ? "" : "s"}</td>
+          ) => `<tr style="cursor:default"><td><b>${esc(t.name)}</b><div class="mono faint" style="font-size:12px" title="${esc(t.scopes.join(", "))}">${esc(t.prefix)}… · ${t.scopes.length} permission${t.scopes.length === 1 ? "" : "s"}</div></td>
           <td class="${Date.parse(t.expires_at) < Date.now() ? "bad-t" : "muted"}">${esc(new Date(t.expires_at).toLocaleDateString())}</td>
           <td class="muted">${t.last_used_at ? esc(agoLong(t.last_used_at)) : "never"}</td>
           <td class="r"><button class="btn sm" data-act="token-revoke" data-id="${esc(t.id)}">Revoke</button></td></tr>`,
         )
-        .join("")}</tbody></table></div>`
+        .join("")}</tbody></table></div>
+      <div class="pager"><span>${from + 1}–${from + shown.length} of ${nTok}</span>
+        <div class="pager-b"><button class="btn icon sm" data-act="tok-page" data-p="${pg - 1}" aria-label="Previous page" title="Previous page"${pg === 0 ? " disabled" : ""}>${icon("arrowL")}</button>
+        <button class="btn icon sm" data-act="tok-page" data-p="${pg + 1}" aria-label="Next page" title="Next page"${pg >= pages - 1 ? " disabled" : ""}>${icon("arrowR")}</button></div></div>`
     : `<div class="panel-b"><p class="empty-line">${icon("key")}No tokens. Create one to use the API from the CLI or CI.</p></div>`;
   return `<div class="page">
     <div class="ph"><div><h1>Your account</h1><p>${esc(u.email)} · ${esc(role)} · ${esc(session.info?.org?.name ?? "")}</p></div></div>
@@ -272,7 +282,8 @@ export function accountPage(): string {
             <div><button class="btn" data-act="pw-change">Change password</button></div>
           </div></div>
       </div>
-      <div class="panel" style="align-self:start"><div class="panel-h"><h2>Two-factor authentication</h2><div class="r">${me.mfa.enabled ? `<span class="badge ok"><span class="dot ok"></span>on</span>` : `<span class="badge ${me.mfa.required ? "bad" : ""}">off</span>`}</div></div>
+      <div class="grid" style="align-content:start">
+      <div class="panel"><div class="panel-h"><h2>Two-factor authentication</h2><div class="r">${me.mfa.enabled ? `<span class="badge ok"><span class="dot ok"></span>on</span>` : `<span class="badge ${me.mfa.required ? "bad" : ""}">off</span>`}</div></div>
         <div class="panel-b">
           ${
             me.mfa.enabled
@@ -282,10 +293,11 @@ export function accountPage(): string {
                  <button class="btn primary" data-act="mfa-setup">${icon("shield")}Set up two-factor authentication</button>`
           }
         </div></div>
+      <div class="panel"><div class="panel-h"><h2>API tokens</h2><span class="sub">for the CLI, scripts and CI</span><div class="r"><button class="btn sm" data-act="token-new">${icon("plus")}New token</button></div></div>${tokens}</div>
+      </div>
     </div>
     <div class="panel mt"><div class="panel-h"><h2>Sessions</h2><span class="sub">where you are signed in</span>${me.sessions.length > 1 ? `<div class="r"><button class="btn sm" data-act="sess-revoke-others">Sign out other sessions</button></div>` : ""}</div>
       <div class="tw"><table class="t"><thead><tr><th>Device</th><th>IP address</th><th>Last active</th><th>Signed in</th><th></th></tr></thead><tbody>${sessions}</tbody></table></div></div>
-    <div class="panel mt"><div class="panel-h"><h2>API tokens</h2><span class="sub">for the CLI, scripts and CI</span><div class="r"><button class="btn sm" data-act="token-new">${icon("plus")}New token</button></div></div>${tokens}</div>
   </div>`;
 }
 
@@ -516,6 +528,10 @@ export async function accountAction(act: string, t: HTMLElement): Promise<boolea
         await post(`/api/me/tokens/${encodeURIComponent(t.dataset.id ?? "")}/revoke`);
         await loadMe();
       }, "Token revoked");
+      return true;
+    case "tok-page":
+      state.tokPage = Number(t.dataset.p ?? 0);
+      ctx.render();
       return true;
     case "sec-set":
       if (state.security)

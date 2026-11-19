@@ -334858,7 +334858,7 @@ data: ${JSON.stringify({ exitCode: lr.exitCode, jobId: lr.jobId })}
       if (req.method === "GET" && (path5 === "/" || path5 === "/index.html"))
         return send(res, 200, html, MIME[".html"]);
       if (req.method === "GET" && path5 === "/app.js") return send(res, 200, appJs, MIME[".js"]);
-      if (req.method === "GET" && /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg)$/.test(path5)) {
+      if (req.method === "GET" && /^\/(app\.css|fonts\/[\w-]+\.woff2|brand\/[\w-]+\.svg|art\/[\w-]+\.png)$/.test(path5)) {
         const file2 = join26(root, "dashboard", path5);
         const body2 = await readFile18(file2).catch(() => null);
         return body2 ? send(res, 200, body2, MIME[extname2(file2)]) : send(res, 404, { error: "not found" });
@@ -335097,7 +335097,8 @@ var init_server = __esm({
       ".js": "text/javascript; charset=utf-8",
       ".css": "text/css; charset=utf-8",
       ".woff2": "font/woff2",
-      ".svg": "image/svg+xml"
+      ".svg": "image/svg+xml",
+      ".png": "image/png"
     };
   }
 });

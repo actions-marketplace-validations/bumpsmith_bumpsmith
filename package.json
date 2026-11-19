@@ -43,7 +43,8 @@
     "test:docker": "BUMPSMITH_DOCKER_TESTS=1 vitest run test/sandbox",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "test:all": "BUMPSMITH_DOCKER_TESTS=1 vitest run",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "demo:workspace": "tsx scripts/demo/workspace.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",

@@ -29,7 +29,11 @@ act on, not with charts.
 - warm off-white canvas, near-white panels, hairline separators;
 - the sidebar with its context card and grouped navigation;
 - 3D buttons: a soft vertical gradient, an inner top highlight and a 1px bottom edge, which
-  press down on click.
+  press down on click. Since the landing page they are the landing page's button: 4px corners,
+  Geist Mono caps labels, and the hero's ember gradient (`#ff7a3d` to `#e8501a`) for the
+  primary; `.go` puts a trailing arrow at the far edge. The selected sidebar page and the search field
+  (which opens the command menu) are built the same way: button face, edge and lift; the
+  search field also presses down on click.
 
 ## Dropped (consumer patterns that do not fit this audience)
 
@@ -68,7 +72,17 @@ The wordmark is drawn, not typed (`dashboard/brand/`, chosen from four direction
   Log and Report; the diff has a file tree, and the agent's edits are marked apart from the
   lockfile.
 - **Dark mode** follows the system setting, with a toggle; many developers live in it.
-- **8pt grid**: spacing in 4/8 steps, controls 32/40px, radii 8/12.
+- **8pt grid**: spacing in 4/8 steps. **One control height**: every default button, input, select,
+  search field and segmented control is 32px, so a row of them lines up; small ones in dense
+  table rows are 28px; the sign-in form uses 48px for both fields and buttons.
+- **One corner radius**: every component (buttons, inputs, cards, panels, menus, badges, tabs,
+  dialogs) uses `--r` (4px), the landing page's button. Only true circles (avatars, status
+  dots) and 1–2px marks (ticks, legend squares) differ.
+- **Sign-in**: the landing page's sheet. A dark ruled half with the anvil drawing (the same SDF
+  render, `dashboard/art/anvil-dark.png`), the ember sun, the node-fetch dimension line and the
+  hero headline with a blinking ember cursor; the form on the paper half with mono labels and
+  the hero button. Every auth screen (sign in, setup, two-factor, invite, reset) shares it; the
+  art stacks above the form under 1080px and is hidden under 640px.
 
 ## Files changed, Log and Report (GitHub conventions, on purpose)
 
