@@ -1,10 +1,16 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-11-19
 
 First public release.
 
 - CLI: `bumpsmith fix`, `explain`, `scan`.
+- MCP server:
+  - `bumpsmith mcp` (stdio) for local agents and editors;
+  - `/mcp` on a Bumpsmith server, over HTTP with personal API tokens;
+  - tools to scan, check a release, diff an API, explain, and start, poll and apply an upgrade;
+  - listed in the official MCP Registry as `io.github.bumpsmith/bumpsmith`.
+- Agent skill in `skills/bumpsmith`, also installable as a plugin from this repository.
 - GitHub Action: rescues red Dependabot/Renovate pull requests with a verified companion PR.
 - Sandbox with a read-only registry mirror (GET/HEAD only); install scripts off; 3-day release-age gate.
 - Publishing path re-checks the reviewed patch hash and diff rules, applies the patch strictly, never overwrites human commits or reopens closed PRs.
