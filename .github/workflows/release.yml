@@ -1,0 +1,53 @@
+# Release: push a version tag (git tag -a v0.1.2 && git push origin v0.1.2) and this publishes
+# the npm package with provenance through npm trusted publishing (OIDC, no stored npm token),
+# then registers the same version in the MCP Registry (GitHub OIDC). The tag must match
+# package.json and server.json, and the version must have a CHANGELOG entry.
+name: release
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+permissions:
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and MCP Registry login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - name: Tag, package.json, server.json and CHANGELOG agree
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          test "$(node -p "require('./package.json').version")" = "$v"
+          test "$(node -p "require('./server.json').version")" = "$v"
+          grep -q "^## $v " CHANGELOG.md
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm typecheck && pnpm lint && pnpm test
+      - name: Bundles are up to date
+        run: pnpm build && test -z "$(git status --porcelain -- dist/)"
+      # Trusted publishing needs npm 11.5.1 or later; provenance is attached automatically.
+      - run: npm install -g npm@^11.5.1
+      - run: npm publish --access public
+      - name: Register the version in the MCP Registry
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          for i in 1 2 3 4 5 6; do
+            npm view "bumpsmith@${GITHUB_REF_NAME#v}" version && break
+            sleep 20
+          done
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
