@@ -31495,8 +31495,16 @@ async function fetchText(url2, opts = {}) {
     if (!limited || attempt === 3) break;
     const retryAfter = Number(res.headers.get("retry-after"));
     const reset = Number(res.headers.get("x-ratelimit-reset"));
-    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1e3 : Number.isFinite(reset) && reset > 0 ? Math.max(1e3, reset * 1e3 - Date.now()) : 6e4 * (attempt + 1);
-    await new Promise((r) => setTimeout(r, Math.min(waitMs, 5 * 6e4)));
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1e3 : Number.isFinite(reset) && reset > 0 ? Math.max(1e3, reset * 1e3 - Date.now()) : 3e4 * (attempt + 1);
+    if (waitMs > (opts.maxRateLimitWaitMs ?? 6e4)) {
+      const hint = /api\.github\.com/.test(url2) ? " Set GITHUB_TOKEN to raise GitHub's rate limit." : "";
+      throw new HttpError(
+        url2,
+        res.status,
+        `rate limited for ${Math.round(waitMs / 1e3)}s.${hint}`
+      );
+    }
+    await new Promise((r) => setTimeout(r, waitMs));
   }
   if (!res?.ok) throw new HttpError(url2, res?.status ?? 0, body);
   if (opts.cacheSeconds) {

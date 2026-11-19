@@ -23,6 +23,8 @@ interface FetchOptions {
   method?: "GET" | "POST";
   body?: string;
   timeoutMs?: number;
+  /** Longest rate-limit wait worth sitting through before giving up (default 60 s). */
+  maxRateLimitWaitMs?: number;
 }
 
 /**
@@ -74,8 +76,20 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
         ? retryAfter * 1000
         : Number.isFinite(reset) && reset > 0
           ? Math.max(1000, reset * 1000 - Date.now())
-          : 60_000 * (attempt + 1);
-    await new Promise((r) => setTimeout(r, Math.min(waitMs, 5 * 60_000)));
+          : 30_000 * (attempt + 1);
+    // Wait out short limits only. A long one (GitHub's unauthenticated hourly quota) would stall
+    // the whole run for many minutes, so fail now; callers treat these sources as optional.
+    if (waitMs > (opts.maxRateLimitWaitMs ?? 60_000)) {
+      const hint = /api\.github\.com/.test(url)
+        ? " Set GITHUB_TOKEN to raise GitHub's rate limit."
+        : "";
+      throw new HttpError(
+        url,
+        res.status,
+        `rate limited for ${Math.round(waitMs / 1000)}s.${hint}`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, waitMs));
   }
   if (!res?.ok) throw new HttpError(url, res?.status ?? 0, body);
   if (opts.cacheSeconds) {

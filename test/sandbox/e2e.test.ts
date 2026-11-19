@@ -102,7 +102,8 @@ describe.skipIf(!enabled)(
         const evidence = await readFile(join(dir, "evidence.md"), "utf8");
         expect(evidence).toContain("REMOVED ENTRY POINT");
       },
-      20 * 60_000,
+      // Below the CI step limit, so a stall fails with this test named.
+      6 * 60_000,
     );
 
     it(
@@ -181,7 +182,8 @@ describe.skipIf(!enabled)(
         expect(patch).toContain("a/packages/app/src/ids.ts");
         expect(patch).not.toMatch(/^diff --git a\/package\.json/m); // the root manifest is untouched
       },
-      20 * 60_000,
+      // Below the CI step limit, so a stall fails with this test named.
+      6 * 60_000,
     );
 
     it(
@@ -267,7 +269,8 @@ describe.skipIf(!enabled)(
         expect(patch).toContain("+pydantic-settings==2.7.1");
         expect(patch).toContain("+from pydantic_settings import BaseSettings");
       },
-      20 * 60_000,
+      // Below the CI step limit, so a stall fails with this test named.
+      6 * 60_000,
     );
   },
 );
