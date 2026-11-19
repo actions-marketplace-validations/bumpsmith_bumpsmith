@@ -45,9 +45,15 @@ jobs:
       - name: Register the version in the MCP Registry
         run: |
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
-          for i in 1 2 3 4 5 6; do
-            npm view "bumpsmith@${GITHUB_REF_NAME#v}" version && break
+          v="${GITHUB_REF_NAME#v}"
+          # npm can take several minutes to show a new version; the MCP Registry checks npm.
+          for i in $(seq 1 30); do
+            npm view "bumpsmith@$v" version >/dev/null 2>&1 && break
             sleep 20
           done
           ./mcp-publisher login github-oidc
-          ./mcp-publisher publish
+          for i in 1 2 3 4 5; do
+            ./mcp-publisher publish && exit 0
+            sleep 30
+          done
+          exit 1
