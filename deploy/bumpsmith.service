@@ -24,7 +24,7 @@ Environment=BUMPSMITH_TRUSTED_PROXIES=127.0.0.1,::1
 # 32 random bytes, base64 (openssl rand -base64 32), readable only by root; systemd passes it in.
 LoadCredential=master_key:/etc/bumpsmith/master.key
 Environment=BUMPSMITH_MASTER_KEY_FILE=%d/master_key
-ExecStart=/usr/bin/env npx --yes bumpsmith@0.1.0 server
+ExecStart=/usr/bin/env npx --yes bumpsmith@0.1.1 server
 Restart=on-failure
 UMask=0077
 
